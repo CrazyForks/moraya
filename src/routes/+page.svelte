@@ -1136,8 +1136,9 @@ ${tr('welcome.tip')}
       publishProgress = [...publishProgress];
     }
 
-    // Auto-dismiss after 3s
-    setTimeout(() => { publishProgress = []; }, 3000);
+    // Auto-dismiss: 3s for success, 8s if any errors (so user can read the message)
+    const hasError = publishProgress.some(p => p.status === 'error');
+    setTimeout(() => { publishProgress = []; }, hasError ? 8000 : 3000);
   }
 
   // Split mode scroll sync — block-level anchor mapping
@@ -1871,7 +1872,7 @@ ${tr('welcome.tip')}
     position: fixed;
     top: 40px;
     right: 1rem;
-    width: 280px;
+    width: 340px;
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: 8px;
@@ -1889,7 +1890,7 @@ ${tr('welcome.tip')}
 
   .progress-item {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
     padding: 4px 0;
     font-size: var(--font-size-xs);
@@ -1935,9 +1936,8 @@ ${tr('welcome.tip')}
   .progress-status {
     flex: 1;
     text-align: right;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    word-break: break-word;
+    overflow-wrap: break-word;
   }
 
   /* RTL overrides */
