@@ -19,6 +19,7 @@ import type { SupportedLocale } from '$lib/i18n';
 import { getAllTools, callTool } from '$lib/services/mcp';
 import { mcpToolsToToolDefs } from './tool-bridge';
 import { INTERNAL_TOOLS, isInternalTool, executeInternalTool } from './internal-tools';
+import { loadRules, buildRulesPrompt, type RulesResult } from './rules-engine';
 import { editorStore } from '$lib/stores/editor-store';
 import { settingsStore } from '$lib/stores/settings-store';
 import { filesStore } from '$lib/stores/files-store';
@@ -439,22 +440,6 @@ export async function executeAICommand(
   }
 }
 
-/** Read MORAYA.md rules file from knowledge base root. Returns null if not found. */
-async function readMorayaMd(folderPath: string | null): Promise<{ content: string; truncated: boolean } | null> {
-  if (!folderPath) return null;
-  const maxChars = settingsStore.getState().aiRulesMaxChars || 16000;
-  try {
-    const content = await invoke<string>('read_file', {
-      path: `${folderPath}/MORAYA.md`,
-    });
-    if (!content?.trim()) return null;
-    const truncated = content.length > maxChars;
-    return { content: content.slice(0, maxChars), truncated };
-  } catch {
-    return null;
-  }
-}
-
 function buildSystemPrompt(
   config: AIProviderConfig,
   toolCount: number,
@@ -463,41 +448,29 @@ function buildSystemPrompt(
   sidebarDir: string | null,
   fallbackDir: string | null,
   documentContext?: string,
-  morayaMdResult?: { content: string; truncated: boolean } | null,
+  rulesResult?: RulesResult | null,
 ): string {
   let prompt = `You are Moraya AI, a helpful writing assistant integrated into a Markdown editor. You are powered by ${config.model} (${config.provider}). Help the user with writing, editing, and content creation. Always respond in Markdown format when producing content.`;
 
-  const morayaMdContent = morayaMdResult?.content;
-  if (morayaMdContent) {
-    prompt += '\n\n=== MANDATORY — Knowledge Base Rules (MORAYA.md) ===\n' +
-      'The user has defined the following rules for ALL content in this knowledge base.\n' +
-      'You MUST follow EVERY rule below precisely when generating content, including:\n' +
-      '- File naming format (if specified)\n' +
-      '- Content structure and template format (if specified)\n' +
-      '- Image prompt format and code block syntax (e.g. ```image-prompts blocks, if specified)\n' +
-      '- Character/style/tone requirements (if specified)\n' +
-      'Do NOT call content-generation tools until you have read and incorporated ALL rules below.\n' +
-      (morayaMdResult.truncated
-        ? 'WARNING: Rules were truncated due to length. You MUST call `read_text_file` or `read_file` on the MORAYA.md file to read the FULL rules before generating any content.\n\n'
-        : '\n') +
-      morayaMdContent +
-      (morayaMdResult.truncated ? '\n\n[TRUNCATED — call read_text_file("' + sidebarDir + '/MORAYA.md") to read the remaining rules before generating content]' : '') +
-      '\n=== END MANDATORY RULES ===';
+  // Inject rules from MORAYA.md (auto-split by rules engine)
+  if (rulesResult?.active) {
+    prompt += '\n\n' + buildRulesPrompt(rulesResult, sidebarDir!);
   }
 
   // MORAYA.md convention instructions (always present when sidebar is open)
   if (sidebarDir) {
     prompt += '\n\n--- MORAYA.md Convention ---\n' +
       'This editor supports a per-knowledge-base AI rules file called `MORAYA.md`. ' +
-      'When the user asks to create, set up, or modify rules/conventions/guidelines for the current knowledge base:\n' +
-      `- The file MUST be named exactly \`MORAYA.md\` (not .rules.md, rules.md, or any other name)\n` +
-      `- It MUST be placed at the root of the current knowledge base directory: ${sidebarDir}/MORAYA.md\n` +
+      'Rules are automatically split into indexed sections stored in `.moraya/rules/`.\n' +
+      `- The file MUST be named exactly \`MORAYA.md\` at: ${sidebarDir}/MORAYA.md\n` +
       (currentFilePath && currentFilePath.endsWith('/MORAYA.md')
-        ? '- MORAYA.md is the currently open file — use `update_editor_content` to modify it (do NOT use `write_file`)\n'
+        ? '- MORAYA.md is the currently open file — use `update_editor_content` to modify it\n'
         : '- Use `write_file` to create or update it\n') +
-      '- The content of MORAYA.md is automatically loaded into the AI system prompt on every message, so changes take effect immediately in subsequent conversations\n' +
-      (morayaMdContent
-        ? '- A MORAYA.md file is currently active for this knowledge base (see rules above)\n'
+      '- Changes to MORAYA.md are automatically detected and re-indexed on the next message\n' +
+      '- Use `## Heading <!-- globs: **/*.ts -->` to auto-inject that section only for matching files\n' +
+      '- Use `##` headings to organize rules into sections for optimal rule loading\n' +
+      (rulesResult?.active
+        ? `- MORAYA.md is active with ${rulesResult.sectionCount} indexed rule sections\n`
         : '- No MORAYA.md file exists yet in this knowledge base\n') +
       '--- End MORAYA.md Convention ---';
   }
@@ -555,8 +528,8 @@ function buildSystemPrompt(
           : '');
 
     // Remind about MORAYA.md rules if they exist
-    if (morayaMdContent) {
-      prompt += '\n\nREMINDER: Before using any tools, ensure you follow the Knowledge Base Rules (MORAYA.md) defined above.';
+    if (rulesResult?.active) {
+      prompt += '\n\nREMINDER: Before using any tools, ensure you follow the Knowledge Base Rules (MORAYA.md). Read relevant rule sections with read_file if you haven\'t already.';
     }
   }
 
@@ -629,8 +602,8 @@ export async function sendChatMessage(message: string, documentContext?: string,
     const sidebarDir = filesStore.getState().openFolderPath;
     const fallbackDir = await documentDir().catch(() => null);
 
-    // Read MORAYA.md rules from knowledge base root
-    const morayaMdResult = await readMorayaMd(sidebarDir);
+    // Load rules from MORAYA.md (auto-split into indexed segments)
+    const rulesResult = await loadRules(sidebarDir, currentFilePath);
 
     // Trim old tool results in chat history to prevent context overflow.
     // Keep the most recent tool result intact; older ones get truncated.
@@ -702,7 +675,7 @@ export async function sendChatMessage(message: string, documentContext?: string,
     const messages: ChatMessage[] = [
       {
         role: 'system',
-        content: buildSystemPrompt(activeConfig, toolDefs.length, currentDir, currentFilePath, sidebarDir, fallbackDir, documentContext, morayaMdResult),
+        content: buildSystemPrompt(activeConfig, toolDefs.length, currentDir, currentFilePath, sidebarDir, fallbackDir, documentContext, rulesResult),
         timestamp: Date.now(),
       },
       // Include recent chat history for context (preserve tool call/result pairs)

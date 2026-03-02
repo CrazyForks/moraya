@@ -240,9 +240,52 @@ jobs:
   #         rm -f $RUNNER_TEMP/certificate.p12 $RUNNER_TEMP/profile.mobileprovision
 
 
-  # Update Homebrew Cask after release assets are uploaded
-  update-homebrew:
+  # Rename release assets to include OS label (mac/win/linux)
+  rename-assets:
     needs: [release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Rename assets with OS label
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          RELEASE_ID=$(gh api "repos/${{ github.repository }}/releases/tags/${TAG}" --jq '.id')
+
+          gh api "repos/${{ github.repository }}/releases/${RELEASE_ID}/assets" \
+            --paginate --jq '.[] | "\(.id)\t\(.name)"' | \
+          while IFS=$'\t' read -r ASSET_ID ASSET_NAME; do
+            # Skip if already renamed (re-run safe)
+            if echo "$ASSET_NAME" | grep -qEi '^moraya_[0-9.]+_(mac|win|linux)_'; then
+              continue
+            fi
+
+            OS_LABEL=""
+            case "$ASSET_NAME" in
+              *.dmg|*.dmg.tar.gz|*.dmg.tar.gz.sig)
+                OS_LABEL="mac" ;;
+              *.msi|*.msi.zip|*.msi.zip.sig|*-setup.exe|*.nsis.zip|*.nsis.zip.sig)
+                OS_LABEL="win" ;;
+              *.deb|*.AppImage|*.AppImage.tar.gz|*.AppImage.tar.gz.sig|*.rpm)
+                OS_LABEL="linux" ;;
+            esac
+
+            if [ -n "$OS_LABEL" ]; then
+              NEW_NAME=$(echo "$ASSET_NAME" | sed -E "s/^([Mm]oraya_[0-9.]+)_/\1_${OS_LABEL}_/")
+              if [ "$NEW_NAME" != "$ASSET_NAME" ]; then
+                echo "Renaming: $ASSET_NAME -> $NEW_NAME"
+                gh api --method PATCH \
+                  "repos/${{ github.repository }}/releases/assets/${ASSET_ID}" \
+                  -f name="${NEW_NAME}"
+              fi
+            fi
+          done
+
+  # Update Homebrew Cask after release assets are renamed
+  update-homebrew:
+    needs: [rename-assets]
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Homebrew tap update
@@ -257,7 +300,7 @@ jobs:
 
   # Wait for all builds before triggering deploy
   trigger-deploy:
-    needs: [release, update-homebrew]
+    needs: [rename-assets, update-homebrew]
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Cloudflare Pages Deploy

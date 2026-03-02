@@ -45,7 +45,6 @@ interface Settings {
   lastOpenedFolder: string | null;
   mcpAutoApprove: boolean;
   aiMaxTokens: number;
-  aiRulesMaxChars: number;
   aiToolResultMaxChars: number;
   aiMaxToolRounds: number;
   speechProviderConfigs: SpeechProviderConfig[];
@@ -54,6 +53,7 @@ interface Settings {
   recordingBackupDir: string | null;   // null = disabled
   voiceSyncDir: string | null;         // null = use AppData default
   showOutline: boolean;
+  rulesHistoryCount: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -83,7 +83,6 @@ const DEFAULT_SETTINGS: Settings = {
   lastOpenedFolder: null,
   mcpAutoApprove: false,
   aiMaxTokens: 16384,
-  aiRulesMaxChars: 16000,
   aiToolResultMaxChars: 10000,
   aiMaxToolRounds: 20,
   speechProviderConfigs: [],
@@ -92,6 +91,7 @@ const DEFAULT_SETTINGS: Settings = {
   recordingBackupDir: null,
   voiceSyncDir: null,
   showOutline: false,
+  rulesHistoryCount: 10,
 };
 
 function resolveLocale(selection: LocaleSelection): SupportedLocale {

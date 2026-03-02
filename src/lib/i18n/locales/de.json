@@ -16,6 +16,7 @@
     "clear": "Zurücksetzen",
     "play": "Abspielen",
     "stop": "Stoppen",
+    "start": "Starten",
     "untitled": "Unbenannt"
   },
   "settings": {
@@ -58,6 +59,8 @@
       "interval": "Automatisches Speicherintervall"
     },
     "rememberLastFolder": "Zuletzt geöffneten Ordner merken",
+    "rulesHistoryCount": "MORAYA.md Versionsverlauf",
+    "rulesHistoryCountHint": "Anzahl der gespeicherten Verlaufsversionen pro Regeldatei (Standard: 10)",
     "editor": {
       "lineWidth": "Editor-Zeilenbreite",
       "tabSize": "Tabulatorgröße",
@@ -69,8 +72,6 @@
       "aiTitle": "KI-Einstellungen",
       "aiMaxTokens": "Maximale Ausgabe-Token",
       "aiMaxTokensHint": "Maximale Anzahl von Token, die die KI pro Antwort generieren kann. Höhere Werte ermöglichen längere Antworten und Tool-Aufrufe, kosten aber mehr.",
-      "aiRulesMaxChars": "Max. Zeichen der Regeldatei",
-      "aiRulesMaxCharsHint": "Maximale Zeichenanzahl, die aus der MORAYA.md-Regeldatei gelesen wird. Erhöhen Sie den Wert für große Regeldateien. Mehr Zeichen = mehr Token pro Anfrage.",
       "aiToolResultMaxChars": "Max. Zeichen des Tool-Ergebnisses",
       "aiToolResultMaxCharsHint": "Maximale Zeichenanzahl, die von jedem MCP-Tool-Ergebnis beibehalten wird. Größere Werte bewahren mehr Details, verbrauchen aber mehr Kontext.",
       "aiMaxToolRounds": "Max. Tool-Aufruf-Runden",
@@ -144,7 +145,15 @@
       "duplicate": "Kopie erstellen",
       "delete": "Löschen",
       "copyPath": "Pfad kopieren",
-      "revealInFinder": "Im Finder anzeigen"
+      "revealInFinder": "Im Finder anzeigen",
+      "revealInExplorer": "Im Explorer anzeigen",
+      "historyVersions": "Versionsverlauf"
+    },
+    "history": {
+      "title": "Versionsverlauf",
+      "empty": "Keine gespeicherten Versionen",
+      "restore": "Wiederherstellen",
+      "restoreConfirm": "Diese Version wiederherstellen? Der aktuelle Inhalt von MORAYA.md wird ersetzt."
     },
     "newFilePrompt": "Dateinamen eingeben",
     "renamePrompt": "Neuen Namen eingeben",
@@ -195,7 +204,7 @@
   },
   "ai": {
     "title": "KI-Assistent",
-    "morayaMdActive": "MORAYA.md-Regeln für diese Wissensbasis aktiv",
+    "rulesActive": "MORAYA.md-Regeln aktiv ({count} Abschnitte)",
     "clearChat": "Chat löschen",
     "unconfigured": "KI ist nicht konfiguriert.",
     "unconfiguredHint": "Öffnen Sie die Einstellungen ({shortcut}) und konfigurieren Sie Ihren API-Schlüssel, um KI-Funktionen zu aktivieren.",

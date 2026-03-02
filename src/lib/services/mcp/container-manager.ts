@@ -289,6 +289,36 @@ export function listServices(): DynamicService[] {
   return containerStore.getState().services;
 }
 
+/// Stop a running service (disconnect + mark stopped). Does NOT delete files.
+export async function stopService(serviceId: string): Promise<void> {
+  const state = containerStore.getState();
+  const service = state.services.find((s) => s.id === serviceId);
+  if (!service) return;
+
+  try {
+    await disconnectServer(service.mcpServerId);
+  } catch {
+    /* already disconnected */
+  }
+  containerStore.updateService(serviceId, { status: 'stopped', error: undefined });
+}
+
+/// Restart a stopped/errored saved service by reconnecting it.
+export async function startService(serviceId: string): Promise<void> {
+  const state = containerStore.getState();
+  const service = state.services.find((s) => s.id === serviceId);
+  if (!service || service.lifecycle !== 'saved') return;
+
+  containerStore.updateService(serviceId, { status: 'starting', error: undefined });
+  try {
+    await reconnectSavedService(service);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    containerStore.updateService(serviceId, { status: 'error', error: msg });
+    throw e;
+  }
+}
+
 export async function cleanupTempServices(): Promise<void> {
   const state = containerStore.getState();
   const tempServices = state.services.filter((s) => s.lifecycle === 'temp');

@@ -16,6 +16,7 @@
     "clear": "Réinitialiser",
     "play": "Lecture",
     "stop": "Arrêter",
+    "start": "Démarrer",
     "untitled": "Sans titre"
   },
   "settings": {
@@ -58,6 +59,8 @@
       "interval": "Intervalle d'enregistrement automatique"
     },
     "rememberLastFolder": "Se souvenir du dernier dossier ouvert",
+    "rulesHistoryCount": "Versions d'historique MORAYA.md",
+    "rulesHistoryCountHint": "Nombre de versions historiques à conserver par fichier de règles (défaut : 10)",
     "editor": {
       "lineWidth": "Largeur de ligne de l'éditeur",
       "tabSize": "Taille de tabulation",
@@ -69,8 +72,6 @@
       "aiTitle": "Paramètres IA",
       "aiMaxTokens": "Tokens de sortie maximum",
       "aiMaxTokensHint": "Nombre maximum de tokens que l'IA peut générer par réponse. Des valeurs plus élevées permettent des réponses plus longues et des appels d'outils, mais coûtent plus cher.",
-      "aiRulesMaxChars": "Caractères max du fichier de règles",
-      "aiRulesMaxCharsHint": "Nombre maximum de caractères lus depuis le fichier de règles MORAYA.md. Augmentez pour les fichiers de règles volumineux. Plus de caractères = plus de tokens par requête.",
       "aiToolResultMaxChars": "Caractères max des résultats d'outils",
       "aiToolResultMaxCharsHint": "Nombre maximum de caractères conservés pour chaque résultat d'outil MCP. Des valeurs plus grandes préservent plus de détails mais consomment plus de contexte.",
       "aiMaxToolRounds": "Tours d'appels d'outils maximum",
@@ -144,7 +145,15 @@
       "duplicate": "Créer une copie",
       "delete": "Supprimer",
       "copyPath": "Copier le chemin",
-      "revealInFinder": "Révéler dans le Finder"
+      "revealInFinder": "Révéler dans le Finder",
+      "revealInExplorer": "Afficher dans l'Explorateur",
+      "historyVersions": "Versions historiques"
+    },
+    "history": {
+      "title": "Historique des versions",
+      "empty": "Aucune version sauvegardée",
+      "restore": "Restaurer",
+      "restoreConfirm": "Restaurer cette version ? Le contenu actuel de MORAYA.md sera remplacé."
     },
     "newFilePrompt": "Entrez le nom du fichier",
     "renamePrompt": "Entrez le nouveau nom",
@@ -195,7 +204,7 @@
   },
   "ai": {
     "title": "Assistant IA",
-    "morayaMdActive": "Règles MORAYA.md actives pour cette base de connaissances",
+    "rulesActive": "Règles MORAYA.md actives ({count} sections)",
     "clearChat": "Effacer la conversation",
     "unconfigured": "L'IA n'est pas configurée.",
     "unconfiguredHint": "Ouvrez les Paramètres ({shortcut}) et configurez votre clé API pour activer les fonctionnalités IA.",

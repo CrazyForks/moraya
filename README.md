@@ -1,4 +1,4 @@
-# Moraya — The Local AI-Era Minimalist Markdown Editor
+# Moraya — The Elegantly Minimal Markdown AI Agent for the Local AI Era
 
 **Moraya** is a free, open-source, ultra-lightweight (\~10MB) WYSIWYG Markdown editor built with Rust + Tauri v2. Inspired by minimalist seamless editing, it delivers an elegant writing experience while integrating **the most advanced local AI ecosystem and MCP (Model Context Protocol) capabilities** — turning your editor into a powerful, privacy-first AI agent platform.
 
@@ -218,11 +218,11 @@ Download the latest release from [GitHub Releases](https://github.com/zouwei/mor
 
 | Platform | File | Install |
 |----------|------|---------|
-| macOS (Apple Silicon) | `Moraya_x.x.x_aarch64.dmg` | Open DMG, drag to Applications |
-| macOS (Intel) | `Moraya_x.x.x_x64.dmg` | Open DMG, drag to Applications |
-| Windows | `Moraya_x.x.x_x64_en-US.msi` | Run the MSI installer |
-| Linux (Debian) | `moraya_x.x.x_amd64.deb` | `sudo dpkg -i moraya_*.deb` |
-| Linux (AppImage) | `Moraya_x.x.x_amd64.AppImage` | `chmod +x` then run |
+| macOS (Apple Silicon) | `Moraya_x.x.x_mac_aarch64.dmg` | Open DMG, drag to Applications |
+| macOS (Intel) | `Moraya_x.x.x_mac_x64.dmg` | Open DMG, drag to Applications |
+| Windows | `Moraya_x.x.x_win_x64_en-US.msi` | Run the MSI installer |
+| Linux (Debian) | `moraya_x.x.x_linux_amd64.deb` | `sudo dpkg -i moraya_*.deb` |
+| Linux (AppImage) | `Moraya_x.x.x_linux_amd64.AppImage` | `chmod +x` then run |
 
 > **macOS note**: The app is not code-signed. If you see *"Moraya is damaged and can't be opened"*, run this in Terminal:
 >
@@ -364,6 +364,7 @@ All API keys are stored exclusively in your OS Keychain — never in plaintext. 
 | v0.18.0 | Document Outline, Table Keys, Freeze Fix | Complete |
 | v0.19.0 | Rendering Pipeline v2 (Doc Cache, hljs Cache, Async Parse) | Complete |
 | v0.20.0 | Multi-Language Support (12 locales, RTL) | Complete |
+| v0.21.0 | AI-powered rule file automatic splitting engine | Complete |
 
 ## License
 

@@ -16,6 +16,7 @@
     "clear": "रीसेट करें",
     "play": "चलाएँ",
     "stop": "रोकें",
+    "start": "शुरू करें",
     "untitled": "बिना शीर्षक"
   },
   "settings": {
@@ -58,6 +59,8 @@
       "interval": "ऑटो सेव अंतराल"
     },
     "rememberLastFolder": "पिछला खोला हुआ फ़ोल्डर याद रखें",
+    "rulesHistoryCount": "MORAYA.md इतिहास संस्करण",
+    "rulesHistoryCountHint": "प्रति नियम फ़ाइल सहेजे जाने वाले इतिहास संस्करणों की संख्या (डिफ़ॉल्ट: 10)",
     "editor": {
       "lineWidth": "एडिटर पंक्ति चौड़ाई",
       "tabSize": "Tab आकार",
@@ -69,8 +72,6 @@
       "aiTitle": "AI सेटिंग्स",
       "aiMaxTokens": "अधिकतम आउटपुट Token",
       "aiMaxTokensHint": "AI प्रति उत्तर अधिकतम कितने Token उत्पन्न कर सकता है। अधिक मान लंबे उत्तर और टूल कॉल की अनुमति देता है, लेकिन अधिक खर्च होता है।",
-      "aiRulesMaxChars": "नियम फ़ाइल अधिकतम अक्षर",
-      "aiRulesMaxCharsHint": "MORAYA.md नियम फ़ाइल से पढ़े जाने वाले अधिकतम अक्षर। बड़ी नियम फ़ाइलों के लिए बढ़ाएँ। अधिक अक्षर = प्रति अनुरोध अधिक Token।",
       "aiToolResultMaxChars": "टूल परिणाम अधिकतम अक्षर",
       "aiToolResultMaxCharsHint": "प्रत्येक MCP टूल परिणाम से रखे जाने वाले अधिकतम अक्षर। बड़े मान अधिक विवरण बनाए रखते हैं लेकिन अधिक संदर्भ का उपभोग करते हैं।",
       "aiMaxToolRounds": "अधिकतम टूल कॉलिंग राउंड",
@@ -144,7 +145,15 @@
       "duplicate": "प्रतिलिपि बनाएँ",
       "delete": "हटाएँ",
       "copyPath": "पथ कॉपी करें",
-      "revealInFinder": "Finder में दिखाएँ"
+      "revealInFinder": "Finder में दिखाएँ",
+      "revealInExplorer": "Explorer में दिखाएँ",
+      "historyVersions": "इतिहास संस्करण"
+    },
+    "history": {
+      "title": "संस्करण इतिहास",
+      "empty": "कोई सहेजा हुआ संस्करण नहीं",
+      "restore": "पुनर्स्थापित करें",
+      "restoreConfirm": "इस संस्करण को पुनर्स्थापित करें? MORAYA.md की वर्तमान सामग्री बदल दी जाएगी।"
     },
     "newFilePrompt": "फ़ाइल का नाम दर्ज करें",
     "renamePrompt": "नया नाम दर्ज करें",
@@ -195,7 +204,7 @@
   },
   "ai": {
     "title": "AI सहायक",
-    "morayaMdActive": "इस ज्ञान आधार के लिए MORAYA.md नियम सक्रिय हैं",
+    "rulesActive": "MORAYA.md नियम सक्रिय ({count} अनुभाग)",
     "clearChat": "चैट साफ़ करें",
     "unconfigured": "AI कॉन्फ़िगर नहीं है।",
     "unconfiguredHint": "AI सुविधाएँ सक्षम करने के लिए सेटिंग्स ({shortcut}) खोलें और अपनी API key कॉन्फ़िगर करें।",

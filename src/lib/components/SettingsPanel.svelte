@@ -33,6 +33,7 @@
   let autoSave = $state(true);
   let autoSaveInterval = $state(30);
   let rememberLastFolder = $state(true);
+  let rulesHistoryCount = $state(10);
   let currentLocale = $state<LocaleSelection>('system');
   let editorLineWidth = $state(800);
   let editorTabSize = $state(4);
@@ -58,6 +59,7 @@
     autoSave = state.autoSave;
     autoSaveInterval = state.autoSaveInterval / 1000;
     rememberLastFolder = state.rememberLastFolder;
+    rulesHistoryCount = state.rulesHistoryCount ?? 10;
     currentLocale = state.localeSelection;
     editorLineWidth = state.editorLineWidth;
     editorTabSize = state.editorTabSize;
@@ -256,6 +258,27 @@
             </label>
           </div>
 
+          <div class="setting-group">
+            <label class="setting-label" for="settings-rules-history-count">{$t('settings.rulesHistoryCount')}</label>
+            <div class="setting-row">
+              <input
+                id="settings-rules-history-count"
+                type="number"
+                min="1"
+                max="100"
+                value={rulesHistoryCount}
+                oninput={(e: Event) => {
+                  const val = parseInt((e.target as HTMLInputElement).value, 10);
+                  if (val >= 1 && val <= 100) {
+                    settingsStore.update({ rulesHistoryCount: val });
+                  }
+                }}
+                class="setting-input setting-input-narrow"
+              />
+            </div>
+            <div class="setting-hint">{$t('settings.rulesHistoryCountHint')}</div>
+          </div>
+
           <div class="setting-section">
             <div class="section-header">{$t('knowledgeBase.title')}</div>
             <div class="setting-group">
@@ -397,23 +420,6 @@
                 }}
               />
               <p class="perm-hint">{$t('settings.permissions.aiMaxTokensHint')}</p>
-            </div>
-            <div class="setting-group">
-              <label class="setting-label" for="settings-ai-rules-max-chars">{$t('settings.permissions.aiRulesMaxChars')}</label>
-              <input
-                id="settings-ai-rules-max-chars"
-                type="number"
-                class="setting-input"
-                value={$settingsStore.aiRulesMaxChars}
-                min={2000}
-                max={64000}
-                step={2000}
-                onchange={(e) => {
-                  const v = parseInt((e.target as HTMLInputElement).value);
-                  if (v >= 2000 && v <= 64000) settingsStore.update({ aiRulesMaxChars: v });
-                }}
-              />
-              <p class="perm-hint">{$t('settings.permissions.aiRulesMaxCharsHint')}</p>
             </div>
             <div class="setting-group">
               <label class="setting-label" for="settings-ai-tool-result-max-chars">{$t('settings.permissions.aiToolResultMaxChars')}</label>
@@ -669,6 +675,16 @@
     color: var(--text-primary);
     font-size: var(--font-size-sm);
     max-width: 280px;
+  }
+
+  .setting-input-narrow {
+    max-width: 80px;
+  }
+
+  .setting-hint {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    margin-top: 0.25rem;
   }
 
   .setting-row {

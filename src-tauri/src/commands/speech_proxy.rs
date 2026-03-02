@@ -444,7 +444,7 @@ pub async fn speech_proxy_start(
     region: Option<String>,
 ) -> Result<String, String> {
     // Resolve API key from OS Keychain cache
-    key_state.ensure_secrets_loaded();
+    key_state.ensure_secrets_loaded().await;
     let api_key = {
         let cache = key_state
             .key_cache

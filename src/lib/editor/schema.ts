@@ -5,9 +5,9 @@
  * Node names and attributes replicate Milkdown's definitions exactly
  * to maintain CSS selector compatibility.
  *
- * Nodes (21): doc, text, paragraph, heading, blockquote, code_block,
+ * Nodes (22): doc, text, paragraph, heading, blockquote, code_block,
  *   horizontal_rule, bullet_list, ordered_list, list_item, image,
- *   hardbreak, html_block, table, table_header_row, table_row,
+ *   hardbreak, html_block, html_inline, table, table_header_row, table_row,
  *   table_header, table_cell, math_inline, math_block,
  *   defList, defListTerm, defListDescription
  *
@@ -228,6 +228,36 @@ const html_block: NodeSpec = {
   }],
   toDOM() {
     return ['div', { 'data-type': 'html' }, ['pre', 0]];
+  },
+};
+
+/**
+ * Inline HTML preserved as an opaque leaf atom (e.g. <br>, <span>, <!-- comments -->).
+ * markdown-it emits `html_inline` tokens for these; without this node the
+ * parser throws "Token type `html_inline` not supported", causing silently
+ * blank editor content for any document that contains inline HTML tags.
+ *
+ * Implemented as a TRUE LEAF (no content) to avoid ProseMirror position
+ * arithmetic issues with non-leaf atoms, and to ensure heading.textContent
+ * is clean (no raw HTML injected into the document outline text).
+ * The raw HTML is stored in the `value` attribute for lossless round-trip.
+ */
+const html_inline: NodeSpec = {
+  group: 'inline',
+  inline: true,
+  atom: true,
+  attrs: {
+    value: { default: '' },
+  },
+  parseDOM: [{
+    tag: 'span[data-type="html-inline"]',
+    getAttrs(dom: HTMLElement) {
+      return { value: dom.dataset.value ?? '' };
+    },
+  }],
+  toDOM(node) {
+    // Render as an empty invisible span; raw HTML stored in data-value for round-trip.
+    return ['span', { 'data-type': 'html-inline', 'data-value': node.attrs.value as string }];
   },
 };
 
@@ -499,6 +529,7 @@ export const schema = new Schema({
     image,
     hardbreak,
     html_block,
+    html_inline,
     table,
     table_header_row,
     table_row,

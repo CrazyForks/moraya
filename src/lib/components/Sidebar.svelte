@@ -57,12 +57,37 @@
 
   // Top-level store subscription — do NOT wrap in $effect().
   // Svelte 5 $effect tracks reads in subscribe callbacks, causing infinite loops.
+  //
+  // CRITICAL: Svelte 5's safe_equals() ALWAYS returns false for object/array
+  // assignments (by design: `typeof value === 'object'` triggers unconditional
+  // update). This means writing an array $state var with the SAME reference
+  // STILL marks the signal dirty and re-triggers any $effect that reads it.
+  //
+  // The $effect on fileTree calls loadFilePreviews → setFilePreviews →
+  // store update → subscribe → fileTree = state.fileTree (same ref, but safe_equals
+  // returns false) → $effect re-runs → INFINITE LOOP pegging CPU at 100%+.
+  //
+  // Fix: guard array/object writes with reference equality so we only update
+  // the signal when the underlying data genuinely changed.
+  let _prevFileTree: FileEntry[] | null = null;
+  let _prevFilePreviews: FilePreview[] | null = null;
+  let _prevKnowledgeBases: KnowledgeBase[] | null = null;
+
   const unsubFiles = filesStore.subscribe(state => {
-    fileTree = state.fileTree;
+    if (state.fileTree !== _prevFileTree) {
+      _prevFileTree = state.fileTree;
+      fileTree = state.fileTree;
+    }
     folderPath = state.openFolderPath;
     viewMode = state.sidebarViewMode;
-    filePreviews = state.filePreviews;
-    knowledgeBases = state.knowledgeBases;
+    if (state.filePreviews !== _prevFilePreviews) {
+      _prevFilePreviews = state.filePreviews;
+      filePreviews = state.filePreviews;
+    }
+    if (state.knowledgeBases !== _prevKnowledgeBases) {
+      _prevKnowledgeBases = state.knowledgeBases;
+      knowledgeBases = state.knowledgeBases;
+    }
     activeKBId = state.activeKnowledgeBaseId;
   });
   onDestroy(() => { unsubFiles(); });
@@ -291,6 +316,13 @@
       targetPath: path,
       targetName: name,
     };
+    // Pre-load history versions so the submenu is ready on first hover
+    if (type === 'file' && name === 'MORAYA.md') {
+      contextMenuHistoryVersions = [];
+      loadHistoryVersions(path);
+    } else {
+      contextMenuHistoryVersions = [];
+    }
   }
 
   function closeContextMenu() {
@@ -425,6 +457,56 @@
       await revealItemInDir(contextMenu.targetPath);
     } catch {
       // May fail on some platforms
+    }
+  }
+
+  // ---- History versions (inline submenu in context menu) ----
+  interface HistoryVersion {
+    name: string;
+    path: string;
+    timestamp: string;
+  }
+  /** Versions pre-loaded when MORAYA.md is right-clicked; passed directly to FileContextMenu. */
+  let contextMenuHistoryVersions = $state<HistoryVersion[]>([]);
+
+  function formatHistoryTimestamp(filename: string): string {
+    // Convert "2026-03-02_14-30-45.md" → "2026-03-02 14:30:45"
+    const base = filename.replace(/\.md$/, '');
+    return base.replace('_', ' ').replace(/-(\d{2})-(\d{2})$/, ':$1:$2');
+  }
+
+  async function loadHistoryVersions(filePath: string) {
+    const dir = filePath.substring(0, filePath.lastIndexOf('/'));
+    const historyDir = `${dir}/.moraya/history`;
+    try {
+      const entries = await invoke<FileEntry[]>('read_dir_recursive', { path: historyDir, depth: 1 });
+      contextMenuHistoryVersions = entries
+        .filter((e) => !e.is_dir && e.name?.endsWith('.md'))
+        .sort((a, b) => b.name.localeCompare(a.name))
+        .map((e) => ({
+          name: e.name,
+          path: e.path,
+          timestamp: formatHistoryTimestamp(e.name),
+        }));
+    } catch {
+      contextMenuHistoryVersions = [];
+    }
+  }
+
+  async function restoreHistoryVersion(versionPath: string) {
+    // Capture the MORAYA.md path synchronously before any await
+    const morayaPath = contextMenu.targetPath;
+    const confirmed = await ask(
+      $t('sidebar.history.restoreConfirm'),
+      { title: $t('sidebar.history.restore'), kind: 'warning' }
+    );
+    if (!confirmed) return;
+
+    try {
+      const content = await invoke<string>('read_file', { path: versionPath });
+      await invoke('write_file', { path: morayaPath, content });
+    } catch (e) {
+      console.warn('Failed to restore history version:', e);
     }
   }
 </script>
@@ -620,6 +702,8 @@
     onDelete={handleDelete}
     onCopyPath={handleCopyPath}
     onRevealInFinder={handleRevealInFinder}
+    historyVersions={contextMenu.targetName === 'MORAYA.md' ? contextMenuHistoryVersions : undefined}
+    onRestoreVersion={restoreHistoryVersion}
     onClose={closeContextMenu}
   />
 {/if}
@@ -1018,4 +1102,5 @@
   :global([dir="rtl"]) .kb-dropdown-item {
     text-align: right;
   }
+
 </style>

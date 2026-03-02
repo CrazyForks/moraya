@@ -89,7 +89,10 @@ export async function openFolder(): Promise<void> {
 
 export async function loadFile(path: string): Promise<string> {
   const content = await invoke<string>('read_file', { path });
-  editorStore.setCurrentFile(path);
+  // NOTE: setCurrentFile intentionally omitted here.
+  // Callers must call editorStore.setCurrentFile(path) themselves AFTER their
+  // own serial/race guards, so the title never updates when a stale IPC
+  // response loses the race against a newer click.
   editorStore.setContent(content);
   filesStore.addRecentFile(path);
   return content;

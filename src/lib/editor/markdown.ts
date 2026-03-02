@@ -103,6 +103,15 @@ const parserTokens: Record<string, import('prosemirror-markdown').ParseSpec> = {
     block: 'html_block',
     noCloseToken: true,
   },
+  html_inline: {
+    // markdown-it emits this token for inline HTML like <br>, <span>, <sup>,
+    // and HTML comments <!-- ... -->. Store raw HTML in the `value` attr.
+    node: 'html_inline',
+    noCloseToken: true,
+    getAttrs(token) {
+      return { value: token.content };
+    },
+  },
 
   // ── Table tokens ──
   table: { block: 'table' },
@@ -331,6 +340,10 @@ const serializer = new MarkdownSerializer(
     html_block(state, node) {
       state.text(node.textContent, false);
       state.closeBlock(node);
+    },
+    html_inline(state, node) {
+      // Write the raw HTML back verbatim (no escaping); value attr holds the original HTML.
+      state.text(node.attrs.value as string, false);
     },
 
     // ── Table nodes ──

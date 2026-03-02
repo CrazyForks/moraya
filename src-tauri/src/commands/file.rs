@@ -43,13 +43,38 @@ fn strip_unc_prefix(p: PathBuf) -> PathBuf {
 fn validate_path(path: &str) -> Result<PathBuf, String> {
     let canonical = std::fs::canonicalize(path)
         .or_else(|_| {
-            // File may not exist yet (write scenario) — validate parent directory
-            let parent = Path::new(path)
-                .parent()
-                .ok_or_else(|| "Invalid path".to_string())?;
-            let canonical_parent =
-                std::fs::canonicalize(parent).map_err(|_| "Invalid path".to_string())?;
-            Ok(canonical_parent.join(Path::new(path).file_name().unwrap_or_default()))
+            // File/directory may not exist yet (write scenario).
+            // Walk up ancestor directories until we find one that exists,
+            // then reconstruct the canonical path with the remaining suffix.
+            let p = Path::new(path);
+            let mut ancestor = p.parent();
+            let mut suffix_parts: Vec<&std::ffi::OsStr> = Vec::new();
+
+            // Collect the filename itself
+            if let Some(fname) = p.file_name() {
+                suffix_parts.push(fname);
+            }
+
+            // Walk up until we find an existing ancestor
+            while let Some(dir) = ancestor {
+                if dir.exists() {
+                    let canonical_ancestor =
+                        std::fs::canonicalize(dir).map_err(|_| "Invalid path".to_string())?;
+                    // Reconstruct path by appending suffix parts in reverse order
+                    let mut result = canonical_ancestor;
+                    for part in suffix_parts.iter().rev() {
+                        result = result.join(part);
+                    }
+                    return Ok(result);
+                }
+                // Push this directory's name and continue upward
+                if let Some(name) = dir.file_name() {
+                    suffix_parts.push(name);
+                }
+                ancestor = dir.parent();
+            }
+
+            Err("Invalid path".to_string())
         })
         .map_err(|e: String| e)?;
 

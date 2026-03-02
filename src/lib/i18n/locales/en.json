@@ -16,6 +16,7 @@
     "clear": "Reset",
     "play": "Play",
     "stop": "Stop",
+    "start": "Start",
     "untitled": "Untitled"
   },
   "settings": {
@@ -58,6 +59,8 @@
       "interval": "Auto Save Interval"
     },
     "rememberLastFolder": "Remember last opened folder",
+    "rulesHistoryCount": "MORAYA.md History Versions",
+    "rulesHistoryCountHint": "Number of history versions to keep per rules file (default: 10)",
     "editor": {
       "lineWidth": "Editor Line Width",
       "tabSize": "Tab Size",
@@ -69,8 +72,6 @@
       "aiTitle": "AI Settings",
       "aiMaxTokens": "Max Output Tokens",
       "aiMaxTokensHint": "Maximum number of tokens the AI can generate per response. Higher values allow longer responses and tool calls, but cost more.",
-      "aiRulesMaxChars": "Rules File Max Chars",
-      "aiRulesMaxCharsHint": "Maximum characters read from MORAYA.md rules file. Increase for large rules files. More chars = more tokens per request.",
       "aiToolResultMaxChars": "Tool Result Max Chars",
       "aiToolResultMaxCharsHint": "Maximum characters kept from each MCP tool result. Larger values preserve more detail but consume more context.",
       "aiMaxToolRounds": "Max Tool Calling Rounds",
@@ -144,7 +145,15 @@
       "duplicate": "Create Copy",
       "delete": "Delete",
       "copyPath": "Copy Path",
-      "revealInFinder": "Reveal in Finder"
+      "revealInFinder": "Reveal in Finder",
+      "revealInExplorer": "Reveal in Explorer",
+      "historyVersions": "History Versions"
+    },
+    "history": {
+      "title": "Version History",
+      "empty": "No saved versions",
+      "restore": "Restore",
+      "restoreConfirm": "Restore this version? Current MORAYA.md will be replaced."
     },
     "newFilePrompt": "Enter file name",
     "renamePrompt": "Enter new name",
@@ -195,7 +204,7 @@
   },
   "ai": {
     "title": "AI Assistant",
-    "morayaMdActive": "MORAYA.md rules active for this knowledge base",
+    "rulesActive": "MORAYA.md rules active ({count} sections)",
     "clearChat": "Clear chat",
     "unconfigured": "AI is not configured.",
     "unconfiguredHint": "Open Settings ({shortcut}) and configure your API key to enable AI features.",

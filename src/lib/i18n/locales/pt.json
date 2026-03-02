@@ -16,6 +16,7 @@
     "clear": "Redefinir",
     "play": "Reproduzir",
     "stop": "Parar",
+    "start": "Iniciar",
     "untitled": "Sem título"
   },
   "settings": {
@@ -58,6 +59,8 @@
       "interval": "Intervalo de salvamento automático"
     },
     "rememberLastFolder": "Lembrar última pasta aberta",
+    "rulesHistoryCount": "Versões de histórico MORAYA.md",
+    "rulesHistoryCountHint": "Número de versões históricas a manter por arquivo de regras (padrão: 10)",
     "editor": {
       "lineWidth": "Largura da linha do editor",
       "tabSize": "Tamanho da tabulação",
@@ -69,8 +72,6 @@
       "aiTitle": "Configurações de IA",
       "aiMaxTokens": "Máximo de tokens de saída",
       "aiMaxTokensHint": "Número máximo de tokens que a IA pode gerar por resposta. Valores maiores permitem respostas mais longas e chamadas de ferramentas, mas custam mais.",
-      "aiRulesMaxChars": "Máximo de caracteres do arquivo de regras",
-      "aiRulesMaxCharsHint": "Máximo de caracteres lidos do arquivo de regras MORAYA.md. Aumente para arquivos de regras grandes. Mais caracteres = mais tokens por requisição.",
       "aiToolResultMaxChars": "Máximo de caracteres do resultado da ferramenta",
       "aiToolResultMaxCharsHint": "Máximo de caracteres mantidos de cada resultado de ferramenta MCP. Valores maiores preservam mais detalhes, mas consomem mais contexto.",
       "aiMaxToolRounds": "Máximo de rodadas de chamada de ferramentas",
@@ -144,7 +145,15 @@
       "duplicate": "Criar cópia",
       "delete": "Excluir",
       "copyPath": "Copiar caminho",
-      "revealInFinder": "Revelar no Finder"
+      "revealInFinder": "Revelar no Finder",
+      "revealInExplorer": "Mostrar no Explorador",
+      "historyVersions": "Versões históricas"
+    },
+    "history": {
+      "title": "Histórico de versões",
+      "empty": "Nenhuma versão salva",
+      "restore": "Restaurar",
+      "restoreConfirm": "Restaurar esta versão? O conteúdo atual do MORAYA.md será substituído."
     },
     "newFilePrompt": "Digite o nome do arquivo",
     "renamePrompt": "Digite o novo nome",
@@ -195,7 +204,7 @@
   },
   "ai": {
     "title": "Assistente de IA",
-    "morayaMdActive": "Regras MORAYA.md ativas para esta base de conhecimento",
+    "rulesActive": "Regras MORAYA.md ativas ({count} seções)",
     "clearChat": "Limpar conversa",
     "unconfigured": "A IA não está configurada.",
     "unconfiguredHint": "Abra as Configurações ({shortcut}) e configure sua chave de API para habilitar os recursos de IA.",

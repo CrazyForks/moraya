@@ -71,6 +71,10 @@ const POPULAR_LANGUAGES: LanguageEntry[] = [
   { id: 'html', label: 'HTML', aliases: ['xml'] },
   { id: 'css', label: 'CSS', aliases: [] },
   { id: 'markdown', label: 'Markdown', aliases: ['md'] },
+  // AI-editor first-class labels
+  { id: 'text', label: 'Plain Text', aliases: ['plaintext', 'txt'] },
+  { id: 'prompt', label: 'Prompt', aliases: ['image-prompts', 'image-prompt'] },
+  { id: 'system', label: 'System Prompt', aliases: ['system-prompt'] },
 ];
 
 const ALL_LANGUAGES: LanguageEntry[] = [
@@ -78,9 +82,7 @@ const ALL_LANGUAGES: LanguageEntry[] = [
   { id: 'scss', label: 'SCSS', aliases: [] },
   { id: 'lua', label: 'Lua', aliases: [] },
   { id: 'diff', label: 'Diff', aliases: [] },
-  { id: 'text', label: 'Plain Text', aliases: ['plaintext', 'txt'] },
   { id: 'mermaid', label: 'Mermaid', aliases: [] },
-  { id: 'image-prompts', label: 'Image Prompts', aliases: ['image-prompt'] },
 ].sort((a, b) => a.label.localeCompare(b.label));
 
 const POPULAR_IDS = new Set(POPULAR_LANGUAGES.map(l => l.id));

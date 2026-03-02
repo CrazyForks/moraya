@@ -307,6 +307,29 @@ ${tr('welcome.tip')}
     }
   }
 
+  /** Create a versioned backup in .moraya/history/ when saving MORAYA.md. */
+  async function createMorayaHistory(filePath: string, content: string) {
+    const dir = filePath.substring(0, filePath.lastIndexOf('/'));
+    const historyDir = `${dir}/.moraya/history`;
+    const timestamp = new Date().toISOString().replace(/:/g, '-').replace('T', '_').slice(0, 19);
+    try {
+      await invoke('write_file', { path: `${historyDir}/${timestamp}.md`, content });
+      // Prune old versions
+      const maxVersions = settingsStore.getState().rulesHistoryCount ?? 10;
+      const entries = await invoke<FileEntry[]>('read_dir_recursive', { path: historyDir, depth: 1 });
+      const historyFiles = entries
+        .filter(e => !e.is_dir && e.name?.endsWith('.md'))
+        .sort((a, b) => b.name.localeCompare(a.name)); // newest first
+      if (historyFiles.length > maxVersions) {
+        for (const old of historyFiles.slice(maxVersions)) {
+          await invoke('delete_file', { path: old.path }).catch(() => {});
+        }
+      }
+    } catch {
+      // Ignore — history is a best-effort feature
+    }
+  }
+
   /** Save with tab sync on iPad */
   async function handleSave(asNew = false): Promise<boolean> {
     const latestContent = getCurrentContent();
@@ -315,6 +338,12 @@ ${tr('welcome.tip')}
       const state = editorStore.getState();
       if (state.currentFilePath) {
         tabsStore.updateActiveFile(state.currentFilePath, getFileNameFromPath(state.currentFilePath));
+      }
+    }
+    if (saved && !asNew) {
+      const filePath = editorStore.getState().currentFilePath;
+      if (filePath && getFileNameFromPath(filePath) === 'MORAYA.md') {
+        createMorayaHistory(filePath, latestContent);
       }
     }
     return saved;
@@ -856,6 +885,9 @@ ${tr('welcome.tip')}
     if (mySerial !== fileSelectSerial) return; // Superseded by a newer click
     const fileContent = await loadFile(path);
     if (mySerial !== fileSelectSerial) return; // Superseded while IPC was in-flight
+    // Title update is intentionally deferred to here — after the serial check —
+    // so a stale IPC response never causes title/content to desync.
+    editorStore.setCurrentFile(path);
     if (isIPadOS) {
       const fileName = getFileNameFromPath(path);
       tabsStore.openFileTab(path, fileName, fileContent);
@@ -865,8 +897,6 @@ ${tr('welcome.tip')}
       return;
     }
     content = fileContent;
-    // Note: loadFile() already calls editorStore.setCurrentFile + setContent,
-    // so no duplicate setContent call here.
     resetWorkflowState();
     await replaceContentAndScrollToTop(content);
   }
@@ -1056,8 +1086,8 @@ ${tr('welcome.tip')}
       syncVisualEditor(content);
     }
 
-    // Remove image-prompt(s) code block(s) after insertion
-    content = content.replace(/\n*```\s*image-prompts?\s*\n[\s\S]*?```\n*/g, '\n');
+    // Remove prompt / image-prompt(s) code blocks after insertion
+    content = content.replace(/\n*```\s*(?:prompt|image-prompts?)\s*\n[\s\S]*?```\n*/g, '\n');
     syncVisualEditor(content);
 
     imageGenCompleted = true;
@@ -1532,6 +1562,7 @@ ${tr('welcome.tip')}
       // Helper: load a file by path and sync to all editor modes
       async function openFileByPath(filePath: string) {
         const fileContent = await loadFile(filePath);
+        editorStore.setCurrentFile(filePath);
         content = fileContent;
         resetWorkflowState();
         await replaceContentAndScrollToTop(content);

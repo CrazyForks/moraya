@@ -16,6 +16,7 @@
     "clear": "초기화",
     "play": "재생",
     "stop": "중지",
+    "start": "시작",
     "untitled": "제목 없음"
   },
   "settings": {
@@ -58,6 +59,8 @@
       "interval": "자동 저장 간격"
     },
     "rememberLastFolder": "마지막 열었던 폴더 기억",
+    "rulesHistoryCount": "MORAYA.md 히스토리 버전 수",
+    "rulesHistoryCountHint": "규칙 파일당 유지할 히스토리 버전 수 (기본값: 10)",
     "editor": {
       "lineWidth": "편집기 줄 너비",
       "tabSize": "탭 크기",
@@ -69,8 +72,6 @@
       "aiTitle": "AI 설정",
       "aiMaxTokens": "최대 출력 토큰 수",
       "aiMaxTokensHint": "AI가 한 번의 응답에서 생성할 수 있는 최대 토큰 수입니다. 값이 클수록 더 긴 응답과 도구 호출이 가능하지만, 비용이 더 많이 듭니다.",
-      "aiRulesMaxChars": "규칙 파일 최대 문자 수",
-      "aiRulesMaxCharsHint": "MORAYA.md 규칙 파일에서 읽을 최대 문자 수입니다. 규칙 파일이 큰 경우 이 값을 늘리세요. 문자가 많을수록 요청당 더 많은 토큰을 소비합니다.",
       "aiToolResultMaxChars": "도구 결과 최대 문자 수",
       "aiToolResultMaxCharsHint": "각 MCP 도구 결과에서 보존할 최대 문자 수입니다. 값이 클수록 더 많은 세부 정보를 유지하지만, 더 많은 컨텍스트를 소비합니다.",
       "aiMaxToolRounds": "최대 도구 호출 라운드",
@@ -144,7 +145,15 @@
       "duplicate": "사본 만들기",
       "delete": "삭제",
       "copyPath": "경로 복사",
-      "revealInFinder": "Finder에서 보기"
+      "revealInFinder": "Finder에서 보기",
+      "revealInExplorer": "탐색기에서 보기",
+      "historyVersions": "히스토리 버전"
+    },
+    "history": {
+      "title": "버전 기록",
+      "empty": "저장된 버전 없음",
+      "restore": "복원",
+      "restoreConfirm": "이 버전으로 복원하시겠습니까? 현재 MORAYA.md 내용이 대체됩니다."
     },
     "newFilePrompt": "파일 이름을 입력하세요",
     "renamePrompt": "새 이름을 입력하세요",
@@ -195,7 +204,7 @@
   },
   "ai": {
     "title": "AI 어시스턴트",
-    "morayaMdActive": "이 지식 베이스에 MORAYA.md 규칙이 적용되었습니다",
+    "rulesActive": "MORAYA.md 규칙 활성화 ({count}개 섹션)",
     "clearChat": "대화 지우기",
     "unconfigured": "AI가 구성되지 않았습니다.",
     "unconfiguredHint": "설정({shortcut})을 열고 API 키를 구성하여 AI 기능을 활성화하세요.",

@@ -142,10 +142,15 @@
     if (idx < 0 || idx >= cachedHeadingTops.length) return;
     const wrapper = editorEl?.closest('.editor-wrapper') as HTMLElement | null;
     if (!wrapper) return;
+    // Immediately mark the clicked item as active so the UI reflects the click
+    // even before the scroll event fires (scroll-based updateActiveHeading may
+    // not fire if the target is already near the current scroll position).
+    activeHeadingId = h.id;
     wrapper.scrollTo({ top: cachedHeadingTops[idx] - 60, behavior: 'smooth' });
   }
 
   let isReady = $state(false);
+  let pendingSyncMd: string | null = null; // content requested before editor was ready
   let isMounted = false; // tracks whether component is still alive (guards async gaps)
   let internalChange = false; // flag to avoid re-sync loop on editor's own onChange
   let syncingFromExternal = false; // flag to suppress onChange during sync from source editor
@@ -892,6 +897,13 @@
     onEditorReady?.(editor);
     if (showOutline) extractHeadings();
 
+    // Apply any content that was requested while the editor was still initializing
+    if (pendingSyncMd !== null) {
+      const md = pendingSyncMd;
+      pendingSyncMd = null;
+      syncContent(md);
+    }
+
     // Restore cursor position from store and focus (delay for DOM readiness)
     const proseMirrorEl = editorEl.querySelector('.ProseMirror') as HTMLElement | null;
     const savedOffset = editorStore.getState().cursorOffset;
@@ -1296,9 +1308,14 @@
    * applySyncToEditor() 150ms later.
    */
   export function syncContent(md: string) {
-    if (!editor || !isReady) return;
+    if (!editor || !isReady) {
+      pendingSyncMd = md; // Save for when editor finishes initializing
+      return;
+    }
     const myGen = ++syncGeneration;
-    externalSyncDone = true; // Tell $effect to skip redundant applySyncToEditor
+    // NOTE: externalSyncDone is set AFTER applySyncDoc succeeds (not here at the top).
+    // If parsing or applying fails silently (caught by try/catch), externalSyncDone stays
+    // false so the $effect's 150ms fallback timer can still run and recover.
     const { frontmatter, body } = extractFrontmatter(md);
     storedFrontmatter = frontmatter;
 
@@ -1310,7 +1327,10 @@
     // Check LRU doc cache first
     const cached = docCache.get(filePath, visualContent);
     if (cached) {
-      try { applySyncDoc(cached); } catch { /* ignore during init */ }
+      try {
+        applySyncDoc(cached);
+        externalSyncDone = true; // Tell $effect to skip redundant applySyncToEditor
+      } catch { /* ignore during init */ }
       return;
     }
 
@@ -1321,11 +1341,14 @@
         if (!doc) return;
         if (filePath) docCache.set(filePath, visualContent, doc);
         applySyncDoc(doc);
+        externalSyncDone = true; // Tell $effect to skip redundant applySyncToEditor
       } catch { /* ignore during init */ }
       return;
     }
 
-    // Large file (≥50KB): async parse to avoid blocking the event loop
+    // Large file (≥50KB): async parse to avoid blocking the event loop.
+    // externalSyncDone is NOT set synchronously here — the $effect's 150ms timer
+    // acts as a fallback while parsing is in progress.
     parseMarkdownAsync(visualContent).then(doc => {
       if (myGen !== syncGeneration) return; // Superseded by a newer switch
       if (!editor || !isReady) return;
@@ -1333,6 +1356,7 @@
       try {
         if (filePath) docCache.set(filePath, visualContent, doc);
         applySyncDoc(doc);
+        externalSyncDone = true; // Prevent $effect timer from re-applying on next content change
       } catch { /* ignore during init */ }
     });
   }

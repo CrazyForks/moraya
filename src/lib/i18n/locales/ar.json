@@ -16,6 +16,7 @@
     "clear": "إعادة تعيين",
     "play": "تشغيل",
     "stop": "إيقاف",
+    "start": "تشغيل",
     "untitled": "بدون عنوان"
   },
   "settings": {
@@ -58,6 +59,8 @@
       "interval": "فترة الحفظ التلقائي"
     },
     "rememberLastFolder": "تذكر آخر مجلد مفتوح",
+    "rulesHistoryCount": "إصدارات تاريخ MORAYA.md",
+    "rulesHistoryCountHint": "عدد الإصدارات التاريخية المحفوظة لكل ملف قواعد (الافتراضي: 10)",
     "editor": {
       "lineWidth": "عرض سطر المحرر",
       "tabSize": "حجم المسافة البادئة",
@@ -69,8 +72,6 @@
       "aiTitle": "إعدادات AI",
       "aiMaxTokens": "الحد الأقصى لرموز الإخراج",
       "aiMaxTokensHint": "الحد الأقصى لعدد الرموز التي يمكن أن يولدها AI لكل استجابة. القيم الأعلى تسمح باستجابات أطول واستدعاءات أدوات أكثر، لكنها تكلف أكثر.",
-      "aiRulesMaxChars": "الحد الأقصى لأحرف ملف القواعد",
-      "aiRulesMaxCharsHint": "الحد الأقصى للأحرف المقروءة من ملف قواعد MORAYA.md. قم بزيادته لملفات القواعد الكبيرة. المزيد من الأحرف = المزيد من الرموز لكل طلب.",
       "aiToolResultMaxChars": "الحد الأقصى لأحرف نتيجة الأداة",
       "aiToolResultMaxCharsHint": "الحد الأقصى للأحرف المحتفظ بها من كل نتيجة أداة MCP. القيم الأكبر تحافظ على تفاصيل أكثر لكنها تستهلك سياقاً أكثر.",
       "aiMaxToolRounds": "الحد الأقصى لجولات استدعاء الأدوات",
@@ -144,7 +145,15 @@
       "duplicate": "إنشاء نسخة",
       "delete": "حذف",
       "copyPath": "نسخ المسار",
-      "revealInFinder": "عرض في Finder"
+      "revealInFinder": "عرض في Finder",
+      "revealInExplorer": "عرض في Explorer",
+      "historyVersions": "الإصدارات السابقة"
+    },
+    "history": {
+      "title": "سجل الإصدارات",
+      "empty": "لا توجد إصدارات محفوظة",
+      "restore": "استعادة",
+      "restoreConfirm": "هل تريد استعادة هذا الإصدار؟ سيتم استبدال محتوى MORAYA.md الحالي."
     },
     "newFilePrompt": "أدخل اسم الملف",
     "renamePrompt": "أدخل الاسم الجديد",
@@ -195,7 +204,7 @@
   },
   "ai": {
     "title": "مساعد AI",
-    "morayaMdActive": "قواعد MORAYA.md مفعلة لقاعدة المعرفة هذه",
+    "rulesActive": "قواعد MORAYA.md نشطة ({count} أقسام)",
     "clearChat": "مسح المحادثة",
     "unconfigured": "لم يتم تكوين AI.",
     "unconfiguredHint": "افتح الإعدادات ({shortcut}) وقم بتكوين مفتاح API لتفعيل ميزات AI.",

@@ -668,6 +668,14 @@
   border-radius: 4px;
 }
 
+/* Preserved inline HTML atoms (<br>, <span>, <sup>, etc.) */
+.moraya-editor span[data-type="html-inline"] {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+
 /* Inline HTML tags — display in gray */
 .moraya-editor span[data-type="html"] {
   color: var(--text-muted);

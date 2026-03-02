@@ -81,6 +81,7 @@
 
   // MORAYA.md indicator
   let morayaMdActive = $state(false);
+  let rulesSectionCount = $state(0);
   let folderPath = $state<string | null>(null);
 
   // Top-level store subscriptions — do NOT wrap in $effect().
@@ -94,11 +95,27 @@
     const path = folderPath;
     if (!path) {
       morayaMdActive = false;
+      rulesSectionCount = 0;
       return;
     }
     invoke<string>('read_file', { path: `${path}/MORAYA.md` })
-      .then(content => { morayaMdActive = !!content?.trim(); })
-      .catch(() => { morayaMdActive = false; });
+      .then(content => {
+        morayaMdActive = !!content?.trim();
+        if (!morayaMdActive) { rulesSectionCount = 0; return; }
+        return invoke<string>('read_file', { path: `${path}/.moraya/rules/_index.json` });
+      })
+      .then(indexJson => {
+        if (indexJson) {
+          try {
+            const idx = JSON.parse(indexJson);
+            rulesSectionCount = idx.count || 0;
+          } catch { rulesSectionCount = 0; }
+        }
+      })
+      .catch(() => {
+        morayaMdActive = false;
+        rulesSectionCount = 0;
+      });
   });
 
   const unsubMcp = mcpStore.subscribe(state => {
@@ -578,7 +595,9 @@
         <span class="mcp-badge" title="{mcpToolCount} MCP tools available">{mcpToolCount} tools</span>
       {/if}
       {#if morayaMdActive}
-        <span class="moraya-md-badge" title={$t('ai.morayaMdActive')}>MORAYA.md</span>
+        <span class="moraya-md-badge" title={$t('ai.rulesActive')}>
+          {rulesSectionCount > 0 ? `${rulesSectionCount} rules` : 'MORAYA.md'}
+        </span>
       {/if}
     </div>
     {#if chatMessages.length > 0}

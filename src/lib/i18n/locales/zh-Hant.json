@@ -16,6 +16,7 @@
     "clear": "恢復預設",
     "play": "試聽",
     "stop": "停止",
+    "start": "啟動",
     "untitled": "未命名"
   },
   "settings": {
@@ -58,6 +59,8 @@
       "interval": "自動儲存間隔"
     },
     "rememberLastFolder": "記住上次開啟的資料夾",
+    "rulesHistoryCount": "MORAYA.md 歷史版本數量",
+    "rulesHistoryCountHint": "每個規則檔案保留的歷史版本數量（預設：10）",
     "editor": {
       "lineWidth": "編輯器行寬",
       "tabSize": "定位字元大小",
@@ -69,8 +72,6 @@
       "aiTitle": "AI 設定",
       "aiMaxTokens": "最大輸出 Token 數",
       "aiMaxTokensHint": "AI 單次回應可產生的最大 Token 數量。較大的值允許更長的回覆和工具呼叫，但會消耗更多額度。",
-      "aiRulesMaxChars": "規則檔案最大字元數",
-      "aiRulesMaxCharsHint": "從 MORAYA.md 規則檔案讀取的最大字元數。規則檔案較大時請調高此值。字元越多，每次請求消耗的 Token 越多。",
       "aiToolResultMaxChars": "工具結果最大字元數",
       "aiToolResultMaxCharsHint": "MCP 工具回傳結果保留的最大字元數。較大的值保留更多細節，但會佔用更多上下文。",
       "aiMaxToolRounds": "最大工具呼叫輪次",
@@ -144,7 +145,15 @@
       "duplicate": "建立副本",
       "delete": "刪除",
       "copyPath": "複製路徑",
-      "revealInFinder": "在 Finder 中顯示"
+      "revealInFinder": "在 Finder 中顯示",
+      "revealInExplorer": "在檔案總管中顯示",
+      "historyVersions": "歷史版本"
+    },
+    "history": {
+      "title": "版本記錄",
+      "empty": "目前沒有歷史版本",
+      "restore": "恢復",
+      "restoreConfirm": "確認恢復此版本？目前 MORAYA.md 內容將被替換。"
     },
     "newFilePrompt": "輸入檔案名稱",
     "renamePrompt": "輸入新名稱",
@@ -195,7 +204,7 @@
   },
   "ai": {
     "title": "AI 助手",
-    "morayaMdActive": "MORAYA.md 規則已對此知識庫生效",
+    "rulesActive": "MORAYA.md 規則已啟用（{count} 個段落）",
     "clearChat": "清空對話",
     "unconfigured": "AI 未設定。",
     "unconfiguredHint": "開啟設定（{shortcut}）並設定 API 金鑰以啟用 AI 功能。",

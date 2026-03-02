@@ -16,6 +16,7 @@
     "clear": "リセット",
     "play": "再生",
     "stop": "停止",
+    "start": "起動",
     "untitled": "無題"
   },
   "settings": {
@@ -58,6 +59,8 @@
       "interval": "自動保存の間隔"
     },
     "rememberLastFolder": "最後に開いたフォルダーを記憶する",
+    "rulesHistoryCount": "MORAYA.md 履歴バージョン数",
+    "rulesHistoryCountHint": "ルールファイルごとに保持する履歴バージョンの数（デフォルト：10）",
     "editor": {
       "lineWidth": "エディターの行幅",
       "tabSize": "タブサイズ",
@@ -69,8 +72,6 @@
       "aiTitle": "AI 設定",
       "aiMaxTokens": "最大出力トークン数",
       "aiMaxTokensHint": "AIが1回の応答で生成できるトークンの最大数です。値を大きくすると長い応答やツール呼び出しが可能になりますが、コストが増加します。",
-      "aiRulesMaxChars": "ルールファイルの最大文字数",
-      "aiRulesMaxCharsHint": "MORAYA.md ルールファイルから読み取る最大文字数です。大きなルールファイルの場合は増やしてください。文字数が多いほど、リクエストあたりのトークン数が増えます。",
       "aiToolResultMaxChars": "ツール結果の最大文字数",
       "aiToolResultMaxCharsHint": "各MCPツール結果から保持する最大文字数です。値を大きくすると詳細が保持されますが、コンテキストの消費が増えます。",
       "aiMaxToolRounds": "ツール呼び出しの最大ラウンド数",
@@ -144,7 +145,15 @@
       "duplicate": "コピーを作成",
       "delete": "削除",
       "copyPath": "パスをコピー",
-      "revealInFinder": "Finder で表示"
+      "revealInFinder": "Finder で表示",
+      "revealInExplorer": "エクスプローラーで表示",
+      "historyVersions": "履歴バージョン"
+    },
+    "history": {
+      "title": "バージョン履歴",
+      "empty": "保存されたバージョンはありません",
+      "restore": "復元",
+      "restoreConfirm": "このバージョンに復元しますか？現在の MORAYA.md の内容が置き換えられます。"
     },
     "newFilePrompt": "ファイル名を入力",
     "renamePrompt": "新しい名前を入力",
@@ -195,7 +204,7 @@
   },
   "ai": {
     "title": "AI アシスタント",
-    "morayaMdActive": "このナレッジベースで MORAYA.md ルールが有効です",
+    "rulesActive": "MORAYA.md ルール有効（{count} セクション）",
     "clearChat": "チャットをクリア",
     "unconfigured": "AI が設定されていません。",
     "unconfiguredHint": "設定（{shortcut}）を開いて API キーを構成し、AI 機能を有効にしてください。",

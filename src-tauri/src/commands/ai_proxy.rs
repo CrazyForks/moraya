@@ -118,7 +118,11 @@ impl AIProxyState {
     }
 
     /// Load all secrets on first access. Subsequent calls are no-ops.
-    pub(crate) fn ensure_secrets_loaded(&self) {
+    /// The OS keychain read runs in a blocking thread so it never stalls
+    /// the Tauri async runtime (macOS `security` CLI / Windows keyring can
+    /// block for hundreds of milliseconds on cold start or when the keychain
+    /// daemon is initializing after a system reboot).
+    pub(crate) async fn ensure_secrets_loaded(&self) {
         if self
             .secrets_loaded
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -133,7 +137,9 @@ impl AIProxyState {
                 .and_then(|p| std::fs::read_to_string(p).ok())
                 .unwrap_or_default()
         } else {
-            read_os_secrets()
+            tokio::task::spawn_blocking(read_os_secrets)
+                .await
+                .unwrap_or_default()
         };
 
         if !json.is_empty() {
@@ -148,7 +154,9 @@ impl AIProxyState {
     }
 
     /// Persist the entire key cache.
-    pub(crate) fn persist_secrets(&self) -> Result<(), String> {
+    /// The OS keychain write runs in a blocking thread for the same reason
+    /// as `ensure_secrets_loaded`.
+    pub(crate) async fn persist_secrets(&self) -> Result<(), String> {
         let json = {
             let cache = self
                 .key_cache
@@ -168,7 +176,9 @@ impl AIProxyState {
                     .map_err(|_| "Failed to write dev secrets file".to_string())?;
             }
         } else {
-            write_os_secrets(&json)?;
+            tokio::task::spawn_blocking(move || write_os_secrets(&json))
+                .await
+                .unwrap_or_else(|_| Err("Keychain task failed".to_string()))?;
         }
         Ok(())
     }
@@ -238,7 +248,7 @@ fn build_request(
 
 /// Resolve the API key: use override if provided, otherwise read from the
 /// in-memory secrets cache (populated from the single keychain entry).
-fn resolve_api_key(
+async fn resolve_api_key(
     state: &AIProxyState,
     config_id: &str,
     key_prefix: Option<&str>,
@@ -250,7 +260,7 @@ fn resolve_api_key(
         }
     }
 
-    state.ensure_secrets_loaded();
+    state.ensure_secrets_loaded().await;
 
     let prefix = key_prefix.unwrap_or(AI_KEY_PREFIX);
     let cache_key = format!("{}{}", prefix, config_id);
@@ -286,7 +296,7 @@ pub async fn ai_proxy_fetch(
         &config_id,
         key_prefix.as_deref(),
         api_key_override.as_deref(),
-    )?;
+    ).await?;
     let client = build_client()?;
     let hdrs = headers.unwrap_or_default();
     let m = method.as_deref().unwrap_or("POST");
@@ -367,7 +377,7 @@ pub async fn ai_proxy_stream(
     body: String,
     headers: Option<HashMap<String, String>>,
 ) -> Result<(), String> {
-    let api_key = resolve_api_key(&state, &config_id, None, api_key_override.as_deref())?;
+    let api_key = resolve_api_key(&state, &config_id, None, api_key_override.as_deref()).await?;
     let client = build_client()?;
     let hdrs = headers.unwrap_or_default();
     let req = build_request(&client, &provider, &api_key, &url, &body, &hdrs, "POST");

@@ -33,3 +33,7 @@ export {
 // Template system
 export type { AITemplate, AITemplateCategory, TemplateContext, TemplateParam, FlowType } from './templates';
 export { getCategories, getTemplatesByCategory, resolveContent, buildTemplateMessages, getAllTemplates } from './templates';
+
+// Rules engine
+export { loadRules, buildRulesPrompt } from './rules-engine';
+export type { RulesResult, RulesIndex, RuleSection } from './rules-engine';

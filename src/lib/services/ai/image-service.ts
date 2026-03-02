@@ -317,10 +317,10 @@ export type ImageGenMode = 'article' | 'design' | 'storyboard' | 'product' | 'mo
  * Returns null if no valid blocks are found.
  */
 export function extractImagePrompts(content: string): ImagePrompt[] | null {
-  // Match both ```image-prompt and ```image-prompts (with or without trailing 's')
-  // Allow optional spaces between ``` and language name (``` image-prompts)
+  // Match ```prompt (new standard) and legacy ```image-prompt(s) for backward compat.
+  // Allow optional spaces between ``` and language name.
   // Use multiline flag: ^/$ match line boundaries so fences must be at line start.
-  const blockRegex = /^```\s*image-prompts?\s*\n([\s\S]*?)^```\s*$/gm;
+  const blockRegex = /^```\s*(?:prompt|image-prompts?)\s*\n([\s\S]*?)^```\s*$/gm;
   const prompts: ImagePrompt[] = [];
   let match: RegExpExecArray | null;
 

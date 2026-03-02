@@ -47,16 +47,19 @@
     outlineHeadings = heads;
   }
 
+  /** Estimate single-line height from scrollHeight / totalLines */
+  function getLineHeight(outer: HTMLElement): number {
+    const totalLines = content.split('\n').length;
+    return totalLines > 0 ? outer.scrollHeight / totalLines : 20;
+  }
+
   function updateActiveHeadingSource() {
     if (outlineHeadings.length === 0 || !textareaEl) { activeHeadingId = null; return; }
     const outer = textareaEl.closest('.source-editor-outer') as HTMLElement | null;
     if (!outer) return;
-    // Estimate visible line based on scroll fraction
-    const totalLines = content.split('\n').length;
-    const scrollFrac = outer.scrollHeight > outer.clientHeight
-      ? outer.scrollTop / (outer.scrollHeight - outer.clientHeight)
-      : 0;
-    const visibleLine = Math.floor(scrollFrac * totalLines);
+    const lineH = getLineHeight(outer);
+    // The line at the top of the visible area
+    const visibleLine = Math.floor(outer.scrollTop / lineH);
     let lastId: string | null = null;
     for (const h of outlineHeadings) {
       const line = parseInt(h.id.slice(2));
@@ -71,11 +74,8 @@
     const outer = textareaEl.closest('.source-editor-outer') as HTMLElement | null;
     if (!outer) return;
     const line = parseInt(h.id.slice(2));
-    const totalLines = content.split('\n').length;
-    if (totalLines <= 1) return;
-    const frac = line / totalLines;
-    const maxScroll = outer.scrollHeight - outer.clientHeight;
-    outer.scrollTo({ top: Math.round(frac * maxScroll), behavior: 'smooth' });
+    const lineH = getLineHeight(outer);
+    outer.scrollTo({ top: Math.round(line * lineH), behavior: 'smooth' });
   }
 
   // Only compute line count when line numbers are visible

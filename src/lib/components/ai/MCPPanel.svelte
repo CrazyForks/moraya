@@ -26,7 +26,7 @@
   import { ask } from '@tauri-apps/plugin-dialog';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { containerStore, type DynamicService } from '$lib/services/mcp/container-store';
-  import { saveService, removeService } from '$lib/services/mcp/container-manager';
+  import { saveService, removeService, stopService, startService } from '$lib/services/mcp/container-manager';
   import { invoke } from '@tauri-apps/api/core';
   import { settingsStore } from '$lib/stores/settings-store';
 
@@ -545,6 +545,14 @@
       if (expandedServiceId === serviceId) expandedServiceId = null;
     } catch { /* handled by store */ }
   }
+
+  async function handleStopService(serviceId: string) {
+    try { await stopService(serviceId); } catch { /* ignore */ }
+  }
+
+  async function handleStartService(serviceId: string) {
+    try { await startService(serviceId); } catch { /* handled by store */ }
+  }
 </script>
 
 <div class="mcp-panel">
@@ -789,6 +797,15 @@
                 {#if service.lifecycle === 'temp'}
                   <button class="btn-sm primary" onclick={() => handleSaveService(service.id)}>
                     {$t('common.save')}
+                  </button>
+                {/if}
+                {#if service.status === 'running' || service.status === 'starting'}
+                  <button class="btn-sm" onclick={() => handleStopService(service.id)}>
+                    {$t('common.stop')}
+                  </button>
+                {:else if service.lifecycle === 'saved'}
+                  <button class="btn-sm primary" onclick={() => handleStartService(service.id)}>
+                    {$t('common.start')}
                   </button>
                 {/if}
                 <button class="btn-sm danger" onclick={() => handleRemoveService(service.id)}>
