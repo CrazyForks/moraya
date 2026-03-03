@@ -41,7 +41,6 @@
   import { checkForUpdate, shouldCheckToday, getTodayDateString } from '$lib/services/update-service';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
-  import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { ask } from '@tauri-apps/plugin-dialog';
   import { t } from '$lib/i18n';
@@ -260,14 +259,10 @@ ${tr('welcome.tip')}
   function getCurrentContent(): string {
     const mode = editorStore.getState().editorMode;
     if (mode === 'visual' && visualEditorRef) {
-      const md = visualEditorRef.getFullMarkdown();
-      content = md; // Sync the local binding for subsequent reads
-      return md;
+      return visualEditorRef.getFullMarkdown();
     }
     if (mode === 'split' && splitVisualRef) {
-      const md = splitVisualRef.getFullMarkdown();
-      content = md;
-      return md;
+      return splitVisualRef.getFullMarkdown();
     }
     // Source mode or no editor ref: content binding is already up-to-date
     return content;
@@ -484,8 +479,19 @@ ${tr('welcome.tip')}
     // during Svelte's render flush (e.g., when Editor.onDestroy calls setContent,
     // which triggers this subscriber while the component tree is being updated).
     if (state.editorMode !== prevEditorMode) {
+      const prevMode = prevEditorMode;
       prevEditorMode = state.editorMode;
       editorMode = state.editorMode;
+      // When leaving visual/split mode, sync content so SourceEditor gets fresh markdown.
+      // We do this here instead of getCurrentContent() to avoid triggering the $effect
+      // in Editor.svelte during normal autosave / AI read operations.
+      if (state.editorMode === 'source' || state.editorMode === 'split') {
+        if (prevMode === 'visual' && visualEditorRef) {
+          content = visualEditorRef.getFullMarkdown();
+        } else if (prevMode === 'split' && splitVisualRef) {
+          content = splitVisualRef.getFullMarkdown();
+        }
+      }
       // Clear editor reference when switching to source-only mode
       if (state.editorMode === 'source') {
         morayaEditor = null;
@@ -1601,12 +1607,14 @@ ${tr('welcome.tip')}
         }
       });
 
-      // Drag-drop: open MD files each in a new window
+      // Drag-drop: open MD files each in a new window.
+      // Use listen() with no target (defaults to Any) instead of
+      // getCurrentWebview().onDragDropEvent() which scopes to {kind:'Webview'}
+      // and misses events that Tauri 2.9 emits at the Window level.
       const MD_EXTENSIONS = new Set(['md', 'markdown', 'mdown', 'mkd', 'mkdn', 'mdwn', 'mdx', 'txt']);
       if (!isIPadOS) {
-        getCurrentWebview().onDragDropEvent(async (event) => {
-          if (event.payload.type !== 'drop') return;
-          const { paths } = event.payload;
+        listen<{ paths: string[] }>('tauri://drag-drop', async (event) => {
+          const paths = event.payload?.paths ?? [];
           const mdPaths = paths.filter(p => MD_EXTENSIONS.has(p.split('.').pop()?.toLowerCase() ?? ''));
           if (mdPaths.length === 0) return;
           for (const p of mdPaths) {

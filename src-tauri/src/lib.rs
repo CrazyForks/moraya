@@ -182,6 +182,9 @@ pub(crate) fn create_editor_window(
         .build()
         .map_err(|e| format!("Failed to create window: {}", e))?;
 
+    // Bring new window to front so the user can see it immediately.
+    let _ = _window.set_focus();
+
     // Runtime fallback: ensure overlay is set even if the builder didn't apply it
     #[cfg(target_os = "macos")]
     {
@@ -521,9 +524,13 @@ pub fn run() {
                                         }
                                         let _ = _app.emit("open-file", &path);
                                     } else {
-                                        // Runtime: create a new window for the file
+                                        // Runtime: create a new window for the file.
+                                        // Also emit open-file to all windows so an existing
+                                        // window can pick it up if window creation fails.
                                         if let Some(pending) = _app.try_state::<PendingFiles>() {
-                                            let _ = create_editor_window(_app, &pending, Some(path));
+                                            if create_editor_window(_app, &pending, Some(path.clone())).is_err() {
+                                                let _ = _app.emit("open-file", &path);
+                                            }
                                         }
                                     }
                                 }

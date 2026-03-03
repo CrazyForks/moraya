@@ -1,3 +1,16 @@
+<script module lang="ts">
+  // Persists across dialog open/close (module scope, lives for the lifetime of the app).
+  // Typed as strings to avoid importing type duplication with the instance <script>.
+  // null means "not yet set — use provider default on first open".
+  export const _lastSettings = {
+    imageCount: 6,
+    imageStyle: 'auto' as string,
+    imageMode: 'article' as string,
+    imgRatio: null as string | null,
+    imgSizeLevel: null as string | null,
+  };
+</script>
+
 <script lang="ts">
   import { t } from '$lib/i18n';
   import { aiStore } from '$lib/services/ai';
@@ -8,6 +21,7 @@
     generateImage,
     extractImagePrompts,
     MODE_STYLES,
+    STYLE_PROMPT_SUFFIXES,
     type ImagePrompt,
     type ImageStyle,
     type ImageGenerationResult,
@@ -38,18 +52,27 @@
 
   // Step 1 state
   let prompts = $state<ImagePrompt[]>([]);
-  let imageCount = $state(6);
-  let imageStyle = $state<ImageStyle>('auto');
-  let imageMode = $state<ImageGenMode>('article');
+  let imageCount = $state(_lastSettings.imageCount);
+  let imageStyle = $state<ImageStyle>(_lastSettings.imageStyle as ImageStyle);
+  let imageMode = $state<ImageGenMode>(_lastSettings.imageMode as ImageGenMode);
   let isGeneratingPrompts = $state(false);
   let promptError = $state<string | null>(null);
   const MODE_OPTIONS: ImageGenMode[] = ['article', 'design', 'storyboard', 'product', 'moodboard', 'portrait'];
 
   // Image size overrides (default from settings, user can change per-session)
-  let imgRatio = $state<ImageAspectRatio>('16:9');
-  let imgSizeLevel = $state<ImageSizeLevel>('medium');
+  let imgRatio = $state<ImageAspectRatio>((_lastSettings.imgRatio as ImageAspectRatio) ?? '16:9');
+  let imgSizeLevel = $state<ImageSizeLevel>((_lastSettings.imgSizeLevel as ImageSizeLevel) ?? 'medium');
   const RATIO_OPTIONS: ImageAspectRatio[] = ['16:9', '4:3', '3:2', '1:1', '2:3', '3:4', '9:16'];
   const SIZE_LEVEL_OPTIONS: ImageSizeLevel[] = ['large', 'medium', 'small'];
+
+  // Persist settings across dialog open/close
+  $effect(() => {
+    _lastSettings.imageCount = imageCount;
+    _lastSettings.imageStyle = imageStyle;
+    _lastSettings.imageMode = imageMode;
+    _lastSettings.imgRatio = imgRatio;
+    _lastSettings.imgSizeLevel = imgSizeLevel;
+  });
   let imgResolvedSize = $derived(
     imageConfig?.provider === 'doubao'
       ? (DOUBAO_SIZE_MAP[imgRatio]?.[imgSizeLevel] ?? '2048x2048')
@@ -74,8 +97,9 @@
     const activeImg = state.imageProviderConfigs.find(c => c.id === state.activeImageConfigId) || null;
     imageConfig = activeImg;
     if (activeImg) {
-      imgRatio = activeImg.defaultRatio;
-      imgSizeLevel = activeImg.defaultSizeLevel;
+      // Prefer user's last-used values; fall back to provider defaults on first open.
+      imgRatio = (_lastSettings.imgRatio as ImageAspectRatio) ?? activeImg.defaultRatio;
+      imgSizeLevel = (_lastSettings.imgSizeLevel as ImageSizeLevel) ?? activeImg.defaultSizeLevel;
     }
   });
 
@@ -139,10 +163,15 @@
     }));
     isGeneratingImages = true;
 
+    // Append style suffix directly to prompts so the image API receives style keywords,
+    // independent of whether the text AI embedded them during prompt generation.
+    const styleSuffix = imageStyle !== 'auto' ? STYLE_PROMPT_SUFFIXES[imageStyle] : undefined;
+
     // Generate images sequentially to avoid API rate limiting
     for (let i = 0; i < prompts.length; i++) {
       try {
-        const result = await generateImage(imageConfig!, prompts[i].prompt, imgResolvedSize);
+        const finalPrompt = styleSuffix ? `${prompts[i].prompt}, ${styleSuffix}` : prompts[i].prompt;
+        const result = await generateImage(imageConfig!, finalPrompt, imgResolvedSize);
         generatedImages[i] = {
           ...generatedImages[i],
           url: result.url,
@@ -170,7 +199,9 @@
     generatedImages = [...generatedImages];
 
     try {
-      const result = await generateImage(imageConfig, prompts[idx].prompt, imgResolvedSize);
+      const styleSuffix = imageStyle !== 'auto' ? STYLE_PROMPT_SUFFIXES[imageStyle] : undefined;
+      const finalPrompt = styleSuffix ? `${prompts[idx].prompt}, ${styleSuffix}` : prompts[idx].prompt;
+      const result = await generateImage(imageConfig, finalPrompt, imgResolvedSize);
       generatedImages[idx] = {
         ...generatedImages[idx],
         url: result.url,

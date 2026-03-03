@@ -494,7 +494,7 @@ export function createCodeBlockNodeView(node: PmNode, view: EditorView, getPos: 
         view.dispatch(
           view.state.tr.setNodeMarkup(pos, undefined, {
             ...node.attrs,
-            language: newLang === 'text' ? '' : newLang,
+            language: newLang,
           }),
         );
         view.focus();

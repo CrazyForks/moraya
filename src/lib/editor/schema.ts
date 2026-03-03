@@ -67,13 +67,13 @@ const code_block: NodeSpec = {
   defining: true,
   code: true,
   attrs: {
-    language: { default: '' },
+    language: { default: 'text' },
   },
   parseDOM: [{
     tag: 'pre',
     preserveWhitespace: 'full' as const,
     getAttrs(dom: HTMLElement) {
-      return { language: dom.dataset.language || '' };
+      return { language: dom.dataset.language || 'text' };
     },
   }],
   toDOM(node) {

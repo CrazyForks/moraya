@@ -90,12 +90,15 @@ const parserTokens: Record<string, import('prosemirror-markdown').ParseSpec> = {
   },
   code_block: {
     block: 'code_block',
+    getAttrs() {
+      return { language: 'text' };
+    },
     noCloseToken: true,
   },
   fence: {
     block: 'code_block',
     getAttrs(token) {
-      return { language: token.info || '' };
+      return { language: token.info || 'text' };
     },
     noCloseToken: true,
   },

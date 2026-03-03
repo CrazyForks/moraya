@@ -420,6 +420,71 @@ function addParagraphMarkers(content: string): string {
   return result.join('\n');
 }
 
+/**
+ * Concise visual style keywords appended directly to image generation prompts.
+ * These ensure the style is applied at the image API level, not just during
+ * prompt generation by the text AI.
+ */
+export const STYLE_PROMPT_SUFFIXES: Partial<Record<ImageStyle, string>> = {
+  // Article
+  photo:        'photorealistic photography, professional camera, natural lighting',
+  illustration: 'digital illustration, detailed artwork, vibrant colors',
+  flat:         'flat design style, minimal vector illustration, clean shapes, solid colors',
+  ink:          'ink drawing, black and white line art, pen and ink, crosshatching',
+  watercolor:   'watercolor painting, soft translucent washes, painterly texture',
+  isometric:    'isometric 3D illustration, geometric shapes, clean precise lines',
+  infographic:  'infographic style, data visualization, clean diagrams, informative layout',
+  editorial:    'editorial photography, journalistic documentary style, candid reportage',
+  cartoon:      'cartoon illustration, bold outlines, vibrant flat colors, fun style',
+  // Design
+  render:       '3D product render, studio lighting, photorealistic materials, clean background',
+  sketch:       'pencil sketch, hand-drawn rough lines, graphite shading',
+  blueprint:    'technical blueprint, white lines on dark blue, architectural drawing style',
+  clay:         'clay render, soft matte 3D material, pastel tones, rounded shapes',
+  wireframe:    'wireframe diagram, line-based technical illustration, structural',
+  exploded:     'exploded view technical diagram, components separated in space',
+  section:      'cross-section cutaway diagram, interior view, technical illustration',
+  cad:          'CAD technical drawing, precise engineering lines, dimensional view',
+  prototype:    'product prototype render, development stage model, rough 3D form',
+  // Storyboard
+  anime:        'anime illustration style, Japanese animation, vibrant cel-shading, expressive',
+  comic:        'comic book style, bold ink outlines, halftone dots, dynamic action composition',
+  cinematic:    'cinematic style, dramatic film lighting, movie color grading, widescreen',
+  pixel:        'pixel art, retro 8-bit or 16-bit game aesthetic, chunky pixels',
+  noir:         'film noir style, high-contrast black and white, dramatic deep shadows',
+  manga:        'manga illustration, Japanese comic art, expressive black and white linework',
+  realistic:    'photorealistic rendering, highly detailed, lifelike, accurate materials',
+  // Product
+  studio:       'professional studio product photography, white or neutral background, controlled soft-box lighting',
+  lifestyle:    'lifestyle product photography, product in everyday use, natural setting, warm atmosphere',
+  flatlay:      'flat lay photography, overhead top-down view, styled props arrangement',
+  macro:        'macro close-up photography, extreme detail, very shallow depth of field',
+  minimalist:   'minimalist photography, simple clean composition, generous negative space',
+  packaging:    'product packaging photography, commercial presentation, brand-focused',
+  outdoor:      'outdoor lifestyle photography, natural environment, golden hour warm light',
+  mood:         'mood photography, atmospheric lighting, strong visual narrative, evocative',
+  // Moodboard
+  abstract:     'abstract art, non-representational, bold color fields, expressive forms',
+  texture:      'texture close-up, surface material detail, tactile abstract photography',
+  gradient:     'smooth color gradient art, soft transitions, clean minimal aesthetic',
+  collage:      'collage art, mixed media layered composition, combined images and textures',
+  vintage:      'vintage retro aesthetic, aged look, film grain, desaturated warm tones',
+  botanical:    'botanical illustration, detailed scientific plant drawing, elegant linework',
+  geometric:    'geometric abstract art, precise mathematical shapes, tessellation patterns',
+  ethereal:     'ethereal dreamy aesthetic, soft luminous glow, mist, otherworldly atmosphere',
+  brutalist:    'brutalist aesthetic, raw industrial materials, stark stark contrast, unconventional',
+  // Portrait
+  portrait:     'portrait photography, face and shoulders framed, shallow depth of field, soft diffused lighting',
+  headshot:     'professional headshot, tight crop below shoulders, neutral gradient background, sharp focus, clean',
+  fullbody:     'full body portrait, head to toe framing, dynamic pose, environmental background',
+  fashion:      'fashion editorial photography, high-fashion clothing, dramatic editorial lighting, magazine quality',
+  street:       'street photography portrait, candid or semi-candid, urban environment, natural available light',
+  glamour:      'glamour photography, beauty lighting setup, dramatic makeup, luxurious styling, Hollywood',
+  environmental:'environmental portrait, person photographed in their natural setting or workplace, storytelling',
+  candid:       'candid documentary portrait, genuine natural expression, unposed, photojournalistic style',
+  group:        'group portrait photography, multiple subjects, arranged balanced composition, cohesive look',
+};
+
 export const MODE_STYLES: Record<ImageGenMode, ImageStyle[]> = {
   article:    ['auto', 'photo', 'illustration', 'flat', 'ink', 'watercolor', 'isometric', 'infographic', 'editorial', 'cartoon'],
   design:     ['auto', 'render', 'sketch', 'blueprint', 'clay', 'wireframe', 'exploded', 'section', 'cad', 'prototype'],
@@ -503,9 +568,10 @@ export async function generateImagePrompts(
   const idealTargets = computeEvenTargets(count, totalParagraphs);
   const markedContent = addParagraphMarkers(truncated);
 
+  const styleDesc = style !== 'auto' ? STYLE_PROMPT_SUFFIXES[style] : undefined;
   const styleHint = style === 'auto'
-    ? 'Choose the most appropriate style for each image.'
-    : `Use ${style} style for all images.`;
+    ? 'Choose the most appropriate style for each image based on the content.'
+    : `Use "${style}" style for all image prompts. Visual characteristics: ${styleDesc ?? style}. Include these style keywords explicitly in every prompt you generate.`;
 
   // Build distribution guidance so AI generates prompts for different parts of the article
   let distributionHint = '';
