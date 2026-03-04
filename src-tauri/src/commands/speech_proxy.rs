@@ -640,10 +640,10 @@ pub async fn speech_proxy_start(
                     });
                     break;
                 }
-                Ok(Message::Binary(data)) => {
+                Ok(Message::Binary(_data)) => {
                     // AssemblyAI should not send binary frames — log if this happens
                     #[cfg(debug_assertions)]
-                    eprintln!("[speech_proxy:{}] ← binary frame {} bytes", provider_r, data.len());
+                    eprintln!("[speech_proxy:{}] ← binary frame {} bytes", provider_r, _data.len());
                 }
                 _ => {}
             }

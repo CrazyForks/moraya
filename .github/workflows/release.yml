@@ -49,6 +49,33 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf \
             libayatana-appindicator3-dev
 
+      - name: Install WiX Toolset
+        if: matrix.platform == 'windows-latest'
+        run: |
+          $wixDir = "$env:LOCALAPPDATA\tauri\WixTools314"
+          if (Test-Path "$wixDir\candle.exe") {
+            Write-Host "WiX already cached at $wixDir"
+          } else {
+            New-Item -ItemType Directory -Force -Path $wixDir | Out-Null
+            $url = "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip"
+            $zip = "$env:TEMP\wix314.zip"
+            $maxRetries = 3
+            for ($i = 1; $i -le $maxRetries; $i++) {
+              try {
+                Write-Host "Downloading WiX (attempt $i/$maxRetries)..."
+                Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+                break
+              } catch {
+                if ($i -eq $maxRetries) { throw }
+                Start-Sleep -Seconds 5
+              }
+            }
+            Expand-Archive -Path $zip -DestinationPath $wixDir -Force
+            Remove-Item $zip
+            Write-Host "WiX installed to $wixDir"
+          }
+        shell: pwsh
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:

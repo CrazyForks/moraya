@@ -197,10 +197,14 @@ fn current_platform() -> &'static str {
     return "darwin-aarch64";
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
     return "darwin-x86_64";
-    #[cfg(target_os = "windows")]
+    #[cfg(all(target_os = "windows", target_arch = "aarch64"))]
+    return "win32-arm64";
+    #[cfg(all(target_os = "windows", not(target_arch = "aarch64")))]
     return "win32";
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     return "linux-x86_64";
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    return "linux-aarch64";
     #[cfg(not(any(
         target_os = "macos",
         target_os = "windows",
