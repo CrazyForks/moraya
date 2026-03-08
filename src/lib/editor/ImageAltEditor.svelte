@@ -14,8 +14,8 @@
   } = $props();
 
   const tr = $t;
-  // eslint-disable-next-line svelte/state-referenced-locally -- intentional initial capture
-  let value = $state(initialValue);
+  const initial = initialValue;
+  let value = $state(initial);
   let inputEl: HTMLInputElement | undefined = $state();
 
   function handleKeydown(e: KeyboardEvent) {
@@ -45,8 +45,9 @@
     style="top: {position.top}px; left: {position.left}px"
     onclick={(e) => e.stopPropagation()}
   >
-    <label class="alt-label">{tr('imageMenu.editAlt')}</label>
+    <label class="alt-label" for="alt-input">{tr('imageMenu.editAlt')}</label>
     <input
+      id="alt-input"
       bind:this={inputEl}
       bind:value
       type="text"
