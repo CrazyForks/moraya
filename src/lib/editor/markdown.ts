@@ -131,12 +131,17 @@ const parserTokens: Record<string, import('prosemirror-markdown').ParseSpec> = {
   dd: { block: 'defListDescription' },
 
   // ── Math tokens (from markdown-it-texmath) ──
+  // Use block: spec (not node:) so token.content is added as text children,
+  // correctly filling math_inline's `content: 'text*'`.
   math_inline: {
-    node: 'math_inline',
+    block: 'math_inline',
     noCloseToken: true,
-    getAttrs(token) {
-      return { __text: token.content };
-    },
+  },
+  // markdown-it-texmath emits math_inline_double for $$...$$ in inline context.
+  // Map to math_inline to prevent "Token type not supported" crash.
+  math_inline_double: {
+    block: 'math_inline',
+    noCloseToken: true,
   },
   math_block: {
     node: 'math_block',
@@ -242,6 +247,22 @@ class MorayaMarkdownParser extends MarkdownParser {
       state.closeNode(); // close paragraph
       state.closeNode(); // close table_cell
     };
+
+    // ── HTML <img> tag: block → inline promotion ──────────────────
+    // markdown-it tokenizes standalone <img> as html_block (renders as code block).
+    // Promote to paragraph(html_inline) so the toDOM can render it as an image.
+    // Source format is preserved: html_inline serializes attrs.value (original HTML).
+    const defaultHtmlBlock = h['html_block'];
+    h['html_block'] = (state, tok, tokens, i) => {
+      const content = tok.content.trim();
+      if (/^<img\s/i.test(content)) {
+        state.openNode(schema.nodes.paragraph, null);
+        state.addNode(schema.nodes.html_inline, { value: content });
+        state.closeNode();
+      } else {
+        defaultHtmlBlock(state, tok, tokens, i);
+      }
+    };
   }
 
 }
@@ -262,7 +283,9 @@ const serializer = new MarkdownSerializer(
     },
     heading(state, node) {
       state.write(`${'#'.repeat(node.attrs.level)} `);
-      state.renderInline(node);
+      // fromBlockStart=false: the `## ` prefix already prevents text from being
+      // parsed as list markers / blockquote, so don't escape `1.`, `-`, `>` etc.
+      state.renderInline(node, false);
       state.closeBlock(node);
     },
     blockquote(state, node) {
@@ -503,10 +526,63 @@ function isPlainURL(mark: Mark, parent: PmNode, index: number, side: number): bo
 // ── Public API ──────────────────────────────────────────────────
 
 /**
+ * Ensure display math blocks ($$…$$) are surrounded by blank lines so
+ * markdown-it-texmath parses them as math_block, not math_inline_double.
+ * Without blank lines, they get absorbed into the preceding paragraph as
+ * inline tokens, causing wrong rendering and roundtrip corruption.
+ */
+function normalizeMathBlocks(text: string): string {
+  if (!text.includes('$$')) return text;
+
+  const lines = text.split('\n');
+  const result: string[] = [];
+  let inFence = false;
+  let inMathBlock = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+
+    // Skip fenced code blocks
+    if (!inMathBlock && /^(`{3,}|~{3,})/.test(trimmed)) {
+      inFence = !inFence;
+      result.push(lines[i]);
+      continue;
+    }
+    if (inFence) {
+      result.push(lines[i]);
+      continue;
+    }
+
+    if (trimmed === '$$') {
+      if (!inMathBlock) {
+        // Opening $$: ensure blank line before
+        if (result.length > 0 && result[result.length - 1].trim() !== '') {
+          result.push('');
+        }
+        result.push(lines[i]);
+        inMathBlock = true;
+      } else {
+        // Closing $$
+        result.push(lines[i]);
+        inMathBlock = false;
+        // Ensure blank line after if next line is non-empty
+        if (i + 1 < lines.length && lines[i + 1].trim() !== '') {
+          result.push('');
+        }
+      }
+    } else {
+      result.push(lines[i]);
+    }
+  }
+
+  return result.join('\n');
+}
+
+/**
  * Parse a markdown string into a ProseMirror document node.
  */
 export function parseMarkdown(markdown: string): PmNode {
-  return parser.parse(markdown);
+  return parser.parse(normalizeMathBlocks(markdown));
 }
 
 const ASYNC_PARSE_THRESHOLD = 50_000;
@@ -516,10 +592,11 @@ const ASYNC_PARSE_THRESHOLD = 50_000;
  * event loop via setTimeout(0) so the main thread stays responsive.
  */
 export function parseMarkdownAsync(markdown: string): Promise<PmNode> {
-  if (markdown.length < ASYNC_PARSE_THRESHOLD) {
-    return Promise.resolve(parser.parse(markdown));
+  const normalized = normalizeMathBlocks(markdown);
+  if (normalized.length < ASYNC_PARSE_THRESHOLD) {
+    return Promise.resolve(parser.parse(normalized));
   }
-  return new Promise(resolve => setTimeout(() => resolve(parser.parse(markdown)), 0));
+  return new Promise(resolve => setTimeout(() => resolve(parser.parse(normalized)), 0));
 }
 
 /**

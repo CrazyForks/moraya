@@ -151,13 +151,61 @@ export function shouldCheckToday(lastCheckDate: string | null): boolean {
 
 // --- Core Functions ---
 
+/** Extract a human-readable message from any error type (Error, string, Tauri IPC object, DOMException, etc.) */
+function extractErrorMessage(err: unknown): string {
+  if (!err) return 'Unknown error';
+  if (err instanceof Error) return err.message || err.name || 'Unknown error';
+  if (typeof err === 'string') return err;
+  if (err && typeof err === 'object') {
+    const obj = err as Record<string, unknown>;
+    if (typeof obj.message === 'string' && obj.message) return obj.message;
+    if (typeof obj.error === 'string' && obj.error) return obj.error;
+    if (typeof obj.name === 'string' && obj.name) return obj.name;
+    // Tauri plugin-http may throw plain objects
+    try { return JSON.stringify(obj); } catch { /* ignore */ }
+  }
+  return String(err);
+}
+
+/** Fetch GitHub releases API with timeout and User-Agent header */
+async function fetchReleasesAPI(): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20_000);
+  try {
+    return await tauriFetch(RELEASES_API, {
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'Moraya-Updater/1.0',
+      },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/** Retry fetchReleasesAPI with exponential backoff (up to 3 attempts). */
+async function fetchWithRetry(): Promise<Response> {
+  const delays = [0, 1500, 3000]; // instant, 1.5s, 3s
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (delays[attempt] > 0) {
+      await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+    }
+    try {
+      return await fetchReleasesAPI();
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
 export async function checkForUpdate(): Promise<UpdateInfo> {
   update(s => ({ ...s, checkStatus: 'checking', downloadStatus: 'idle', downloadProgress: 0, error: null }));
 
   try {
-    const res = await tauriFetch(RELEASES_API, {
-      headers: { Accept: 'application/vnd.github.v3+json' },
-    });
+    const res = await fetchWithRetry();
 
     if (res.status === 403 || res.status === 429) {
       throw new Error('GitHub API rate limit exceeded. Please try again later.');
@@ -194,7 +242,7 @@ export async function checkForUpdate(): Promise<UpdateInfo> {
 
     return info;
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
+    const message = extractErrorMessage(err);
     update(s => ({ ...s, checkStatus: 'error', error: message }));
     throw err;
   }

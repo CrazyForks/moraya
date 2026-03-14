@@ -250,7 +250,13 @@ function buildKeymap() {
 
     // List items
     'Enter': splitListItem(listItemType),
-    'Tab': sinkListItem(listItemType),
+    'Tab': (state, dispatch) => {
+      // In a list → indent list item
+      if (sinkListItem(listItemType)(state)) return sinkListItem(listItemType)(state, dispatch);
+      // Otherwise → insert tab (4 spaces)
+      if (dispatch) dispatch(state.tr.insertText('    '));
+      return true;
+    },
     'Mod-]': sinkListItem(listItemType),
     'Shift-Tab': liftListItem(listItemType),
     'Mod-[': liftListItem(listItemType),

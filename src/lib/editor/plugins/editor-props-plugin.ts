@@ -2,6 +2,7 @@
  * Unified editor props plugin — merges 5 separate ProseMirror plugins into one.
  *
  * Consolidated props:
+ *  - clipboardTextParser: parse pasted plain text as Markdown (render instead of escape)
  *  - transformPastedHTML: paste language fix (copy class="language-xxx" → data-language)
  *  - handleClickOn: image click → TextSelection (prevent NodeSelection blue highlight)
  *  - handleKeyDown: macOS Cmd+A / Ctrl+A → AllSelection fix
@@ -13,6 +14,8 @@
 
 import { AllSelection, Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
+import { Slice } from 'prosemirror-model';
+import { parseMarkdown } from '../markdown';
 
 const editorPropsKey = new PluginKey('moraya-editor-props');
 
@@ -27,6 +30,21 @@ export function createEditorPropsPlugin(): Plugin {
     key: editorPropsKey,
 
     props: {
+      /**
+       * Parse pasted plain text as Markdown so that syntax renders
+       * instead of being inserted as escaped literal text.
+       */
+      clipboardTextParser(text, $context, plain) {
+        if (plain || $context.parent.type.spec.code) return undefined!;
+        const doc = parseMarkdown(text);
+        const content = doc.content;
+        // Single paragraph → extract inline content so it merges into current text
+        if (content.childCount === 1 && content.firstChild!.type.name === 'paragraph') {
+          return new Slice(content.firstChild!.content, 0, 0);
+        }
+        return new Slice(content, 0, 0);
+      },
+
       /**
        * Paste language normalization:
        * Copy class="language-xxx" from <code> to data-language on parent <pre>,

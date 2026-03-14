@@ -39,7 +39,7 @@
   import { openFile, saveFile, saveFileAs, loadFile, getFileNameFromPath, readImageAsBlobUrl, migrateTempImages } from '$lib/services/file-service';
   import { exportDocument, type ExportFormat } from '$lib/services/export-service';
   import { checkForUpdate, shouldCheckToday, getTodayDateString } from '$lib/services/update-service';
-  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+  import { listen, emitTo, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { openUrl } from '@tauri-apps/plugin-opener';
@@ -168,6 +168,15 @@ ${tr('welcome.tip')}
   }
 
   let content = $state('');
+  // DEBUG: track content becoming empty (possible blank-content regression)
+  let _prevContentLen = 0;
+  $effect(() => {
+    const len = content.length;
+    if (len === 0 && _prevContentLen > 0) {
+      console.warn('[Content$effect] content became EMPTY! was:', _prevContentLen, 'chars. Stack:', new Error().stack);
+    }
+    _prevContentLen = len;
+  });
   let showSidebar = $state(false);
   let showSettings = $state(false);
   let settingsInitialTab = $state<'general' | 'ai' | 'voice'>('general');
@@ -191,6 +200,8 @@ ${tr('welcome.tip')}
   // Tab state for TitleBar and TabBar rendering
   let tabs = $state<import('$lib/stores/tabs-store').TabItem[]>([]);
   let activeTabId = $state('');
+  // Index where external tab would be inserted (-1 = hidden, >=0 = show indicator at that position)
+  let externalDropIndex = $state(-1);
 
   // AI store state for sparkle indicator
   let aiConfigured = $state(false);
@@ -537,14 +548,22 @@ ${tr('welcome.tip')}
       const prevMode = prevEditorMode;
       prevEditorMode = state.editorMode;
       editorMode = state.editorMode;
-      // When leaving visual/split mode, sync content so SourceEditor gets fresh markdown.
-      // We do this here instead of getCurrentContent() to avoid triggering the $effect
-      // in Editor.svelte during normal autosave / AI read operations.
-      if (state.editorMode === 'source' || state.editorMode === 'split') {
-        if (prevMode === 'visual' && visualEditorRef) {
-          content = visualEditorRef.getFullMarkdown();
-        } else if (prevMode === 'split' && splitVisualRef) {
-          content = splitVisualRef.getFullMarkdown();
+      console.log('[EditorSub] mode change:', prevMode, '->', state.editorMode, 'content length:', content.length);
+      // Sync content when leaving any mode to ensure the incoming editor gets fresh data.
+      if (prevMode === 'visual' && visualEditorRef) {
+        content = visualEditorRef.getFullMarkdown();
+        console.log('[EditorSub] synced from visual, content length:', content.length);
+      } else if (prevMode === 'split' && splitVisualRef) {
+        content = splitVisualRef.getFullMarkdown();
+      }
+      // When leaving source mode, editorStore.content should be up-to-date
+      // (SourceEditor flushes via bind:value and onDestroy).
+      // But as a safety net, also sync from editorStore if content is empty but store has content.
+      if (prevMode === 'source' && content.length === 0) {
+        const storeContent = state.content;
+        if (storeContent.length > 0) {
+          console.warn('[EditorSub] content was empty after source→visual, recovering from editorStore:', storeContent.length);
+          content = storeContent;
         }
       }
       // Clear editor reference when switching to source-only mode
@@ -565,9 +584,16 @@ ${tr('welcome.tip')}
       prevActiveTabId = state.activeTabId;
       const tab = state.tabs.find(t => t.id === state.activeTabId);
       if (tab) {
+        console.log('[TabsSub] activeTab changed, setting content length:', tab.content.length, 'preview:', JSON.stringify(tab.content.slice(0, 80)));
         content = tab.content;
         currentFileName = tab.fileName;
         replaceContentAndScrollToTop(tab.content);
+        // Re-run search on new tab's content if search bar is open
+        if (showSearch && lastSearchText) {
+          requestAnimationFrame(() => {
+            handleSearch(lastSearchText, lastSearchCS, lastSearchRegex);
+          });
+        }
       }
     }
   });
@@ -779,6 +805,7 @@ ${tr('welcome.tip')}
     if (slashMod && !event.shiftKey && (event.key === '/' || event.code === 'Slash')) {
       event.preventDefault();
       const newMode: EditorMode = editorMode === 'visual' ? 'source' : 'visual';
+      console.log('[ModeSwitch]', editorMode, '->', newMode, 'content length:', content.length, 'preview:', JSON.stringify(content.slice(0, 100)));
       editorMode = newMode;
       editorStore.setEditorMode(newMode);
       return;
@@ -1005,7 +1032,153 @@ ${tr('welcome.tip')}
         await handleSave();
       }
     }
+
+    // If this is the last tab, close the window instead of creating an empty tab
+    const state = tabsStore.getState();
+    if (state.tabs.length <= 1) {
+      getCurrentWindow().close();
+      return;
+    }
+
     tabsStore.closeTab(tab.id);
+  }
+
+  // ── Tab Detach / Attach (Chrome-like cross-window tab transfer) ──
+
+  /** Phase 1: Create the detached window immediately (called during drag).
+   *  Returns the new window label. Does NOT remove the tab from source. */
+  async function performTabDetachStart(tabIndex: number, screenX: number, screenY: number, offsetX?: number, offsetY?: number): Promise<string | undefined> {
+    const state = tabsStore.getState();
+    const tab = state.tabs[tabIndex];
+    if (!tab || state.tabs.length <= 1) return undefined;
+
+    if (tab.id === state.activeTabId) {
+      // In visual-only mode, editorStore.content is stale — update it first
+      const freshContent = getCurrentContent();
+      editorStore.setContent(freshContent);
+      tabsStore.syncFromEditor();
+    }
+
+    // Re-read after sync
+    const freshState = tabsStore.getState();
+    const freshTab = freshState.tabs[tabIndex];
+    if (!freshTab) return undefined;
+
+    const tabData = {
+      file_path: freshTab.filePath,
+      file_name: freshTab.fileName,
+      content: freshTab.content,
+      is_dirty: freshTab.isDirty,
+      cursor_offset: freshTab.cursorOffset,
+      scroll_fraction: freshTab.scrollFraction,
+      last_mtime: freshTab.lastMtime,
+    };
+
+    // Use exact offsets from TitleBar/TabBar (click position within tab + layout padding).
+    // These match the dragOffsetX/Y used by move_window, so no visible jump occurs.
+    const tabOffsetX = offsetX ?? (isMacOS ? 108 : 30);
+    const tabOffsetY = offsetY ?? (isMacOS ? 14 : 54);
+    try {
+      return await invoke<string>('detach_tab_to_window', {
+        tabData,
+        x: Math.max(0, screenX - tabOffsetX),
+        y: Math.max(0, screenY - tabOffsetY),
+      });
+    } catch (err) {
+      showToast(String(err instanceof Error ? err.message : err), 'error');
+      return undefined;
+    }
+  }
+
+  /** Phase 2: Finalize detach on pointer up. Removes source tab.
+   *  If reattachTarget is set, closes the detached window and transfers to target instead. */
+  async function performTabDetachEnd(tabIndex: number, detachedLabel: string | null, reattachTarget: string | null) {
+    const state = tabsStore.getState();
+    const tab = state.tabs[tabIndex];
+    if (!tab) return;
+
+    if (reattachTarget) {
+      // Re-attach: transfer tab data to target window, close the detached window
+      if (tab.id === state.activeTabId) {
+        // In visual-only mode, editorStore.content is stale — update it first
+        const freshContent = getCurrentContent();
+        editorStore.setContent(freshContent);
+        tabsStore.syncFromEditor();
+      }
+      const freshState = tabsStore.getState();
+      const freshTab = freshState.tabs[tabIndex];
+      if (freshTab) {
+        const tabData = {
+          file_path: freshTab.filePath,
+          file_name: freshTab.fileName,
+          content: freshTab.content,
+          is_dirty: freshTab.isDirty,
+          cursor_offset: freshTab.cursorOffset,
+          scroll_fraction: freshTab.scrollFraction,
+          last_mtime: freshTab.lastMtime,
+        };
+        try {
+          await emitTo(reattachTarget, 'tab-transfer', { tabData });
+          // Clear drop indicator AFTER transfer is processed (avoids race with tab-drag-end)
+          emitTo(reattachTarget, 'tab-drag-end', {}).catch(() => {});
+        } catch { /* ignore */ }
+      }
+      // Close the detached window
+      if (detachedLabel) {
+        try { await invoke('close_window_by_label', { label: detachedLabel }); } catch { /* ignore */ }
+      }
+    }
+
+    // Remove tab from source window (re-read state — it may have changed during the awaits above)
+    const currentState = tabsStore.getState();
+    if (currentState.tabs.length > 1) {
+      tabsStore.removeTab(tab.id);
+    } else {
+      tabsStore.closeTab(tab.id);
+    }
+  }
+
+  async function performTabAttach(tabIndex: number, targetLabel: string) {
+    const state = tabsStore.getState();
+    const tab = state.tabs[tabIndex];
+    if (!tab) return;
+
+    if (tab.id === state.activeTabId) {
+      // In visual-only mode, editorStore.content is stale — update it first
+      const freshContent = getCurrentContent();
+      editorStore.setContent(freshContent);
+      tabsStore.syncFromEditor();
+    }
+
+    // Re-read tab after sync to get up-to-date content
+    const freshState = tabsStore.getState();
+    const freshTab = freshState.tabs[tabIndex];
+    if (!freshTab) return;
+
+    const tabData = {
+      file_path: freshTab.filePath,
+      file_name: freshTab.fileName,
+      content: freshTab.content,
+      is_dirty: freshTab.isDirty,
+      cursor_offset: freshTab.cursorOffset,
+      scroll_fraction: freshTab.scrollFraction,
+      last_mtime: freshTab.lastMtime,
+    };
+
+    try {
+      await emitTo(targetLabel, 'tab-transfer', { tabData });
+      // Clear drop indicator AFTER transfer is processed
+      emitTo(targetLabel, 'tab-drag-end', {}).catch(() => {});
+
+      if (state.tabs.length <= 1) {
+        // Last tab — close window directly (don't go through closeTab which creates empty replacement)
+        getCurrentWindow().close();
+      } else {
+        tabsStore.removeTab(tab.id);
+      }
+    } catch (err) {
+      showToast(String(err instanceof Error ? err.message : err), 'error');
+    }
   }
 
   // External file change detection: check on window focus
@@ -1640,6 +1813,9 @@ ${tr('welcome.tip')}
     const menuUnlisteners: UnlistenFn[] = [];
     let openFileUnlisten: UnlistenFn | undefined;
     let dragDropUnlisten: UnlistenFn | undefined;
+    let tabTransferUnlisten: UnlistenFn | undefined;
+    let tabDragHoverUnlisten: UnlistenFn | undefined;
+    let tabDragEndUnlisten: UnlistenFn | undefined;
 
     if (isTauri) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1776,11 +1952,103 @@ ${tr('welcome.tip')}
       }).then(unlisten => { openFileUnlisten = unlisten; });
 
       // Check if a file was passed via OS file association on startup
+      // Use initWithContent to replace the initial empty Untitled tab (not openFileByPath which adds a new tab)
       invoke<string | null>('get_opened_file').then(async (filePath) => {
         if (filePath) {
-          await openFileByPath(filePath);
+          const fileContent = await loadFile(filePath);
+          const fileName = getFileNameFromPath(filePath);
+          let mtime: number | null = null;
+          try {
+            const result = await invoke('get_files_mtime', { paths: [filePath] }) as [string, number][];
+            if (result.length > 0) mtime = result[0][1];
+          } catch { /* ignore */ }
+          tabsStore.initWithContent(fileContent, filePath, fileName);
+          if (mtime !== null) {
+            const state = tabsStore.getState();
+            tabsStore.updateTabMtime(state.activeTabId, mtime);
+          }
+          content = fileContent;
+          currentFileName = fileName;
+          editorStore.batchRestore({
+            filePath, content: fileContent, isDirty: false, cursorOffset: 0, scrollFraction: 0,
+          });
+          await replaceContentAndScrollToTop(fileContent);
+          resetWorkflowState();
         }
       });
+
+      // Check if this window was created by tab detach (pending tab data)
+      invoke<{
+        file_path: string | null;
+        file_name: string;
+        content: string;
+        is_dirty: boolean;
+        cursor_offset: number;
+        scroll_fraction: number;
+        last_mtime: number | null;
+      } | null>('get_pending_tab').then(async (tabData) => {
+        if (!tabData) return;
+        content = tabData.content;
+        tabsStore.initWithContent(tabData.content, tabData.file_path, tabData.file_name);
+        editorStore.batchRestore({
+          filePath: tabData.file_path,
+          content: tabData.content,
+          isDirty: tabData.is_dirty,
+          cursorOffset: tabData.cursor_offset,
+          scrollFraction: tabData.scroll_fraction,
+        });
+        currentFileName = tabData.file_name;
+        await replaceContentAndScrollToTop(tabData.content);
+      });
+
+      // Cross-window tab transfer: receive tab from another window.
+      // IMPORTANT: Use getCurrentWindow().listen() — NOT the module-level listen() —
+      // so that only this window receives events targeted at it via emitTo(label).
+      // The module-level listen() uses target { kind: 'Any' } which receives events
+      // from ALL windows, causing stray tab insertions on the source window.
+      const curWin = getCurrentWindow();
+      curWin.listen<{ tabData: {
+        file_path: string | null;
+        file_name: string;
+        content: string;
+        is_dirty: boolean;
+        cursor_offset: number;
+        scroll_fraction: number;
+        last_mtime: number | null;
+      } }>('tab-transfer', async (event) => {
+        const td = event.payload.tabData;
+        const insertIdx = externalDropIndex >= 0 ? externalDropIndex : tabs.length;
+        externalDropIndex = -1;
+        // Sync current visual editor content to editorStore before insertTabAt calls syncFromEditor
+        // (in visual-only mode, editorStore.content is stale)
+        const freshContent = getCurrentContent();
+        editorStore.setContent(freshContent);
+        tabsStore.insertTabAt(insertIdx, td.file_path, td.file_name, td.content, td.is_dirty, td.last_mtime);
+      }).then(unlisten => { tabTransferUnlisten = unlisten; });
+
+      // Cross-window drag indicator events (window-scoped for same reason as above)
+      curWin.listen<{ screenX: number }>('tab-drag-hover', (event) => {
+        // Calculate insert index based on screenX over local tab elements
+        const scrollEl = document.querySelector('.mac-tabs-scroll') ?? document.querySelector('.tabs-scroll');
+        if (!scrollEl) { externalDropIndex = tabs.length; return; }
+        const tabEls = scrollEl.querySelectorAll('.tab-item');
+        let idx = tabs.length; // default: append at end
+        for (let i = 0; i < tabEls.length; i++) {
+          const rect = tabEls[i].getBoundingClientRect();
+          const mid = rect.left + rect.width / 2;
+          // Convert screenX to clientX (approximate: screenX - window.screenX)
+          const clientX = event.payload.screenX - window.screenX;
+          if (clientX < mid) {
+            idx = i;
+            break;
+          }
+        }
+        externalDropIndex = idx;
+      }).then(unlisten => { tabDragHoverUnlisten = unlisten; });
+
+      curWin.listen('tab-drag-end', () => {
+        externalDropIndex = -1;
+      }).then(unlisten => { tabDragEndUnlisten = unlisten; });
 
       // Drag-drop: open MD files each in a new window.
       // Use listen() with no target (defaults to Any) instead of
@@ -1819,6 +2087,9 @@ ${tr('welcome.tip')}
       menuUnlisteners.forEach(unlisten => unlisten());
       openFileUnlisten?.();
       dragDropUnlisten?.();
+      tabTransferUnlisten?.();
+      tabDragHoverUnlisten?.();
+      tabDragEndUnlisten?.();
       focusUnlisten?.();
       vvUnlisten?.();
       window.removeEventListener('moraya:file-synced', handleFileSynced);
@@ -1831,14 +2102,21 @@ ${tr('welcome.tip')}
 <svelte:window onkeydown={handleKeydown} />
 
 <div class="app-container">
-  <TitleBar title={currentFileName} {tabs} {activeTabId}
+  <TitleBar title={currentFileName} {tabs} {activeTabId} {externalDropIndex}
     onSwitchTab={handleSwitchTab} onCloseTab={handleCloseTab}
-    onNewFile={() => handleNewFile()} onOpenFile={() => handleOpenFile()} />
+    onNewFile={() => handleNewFile()} onOpenFile={() => handleOpenFile()}
+    onReorderTabs={(from, to) => tabsStore.reorderTabs(from, to)}
+    onDetachStart={performTabDetachStart} onDetachEnd={performTabDetachEnd}
+    onAttachTab={performTabAttach} />
 
-  {#if !isMacOS}
+  {#if false && !isMacOS}
     <TabBar
       onNewTab={() => handleNewFile()}
       onCloseTab={handleCloseTab}
+      {externalDropIndex}
+      onDetachStart={performTabDetachStart}
+      onDetachEnd={performTabDetachEnd}
+      onAttachTab={performTabAttach}
     />
   {/if}
 

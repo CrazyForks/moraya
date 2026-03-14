@@ -226,7 +226,7 @@
     if (useRegex) {
       let regex: RegExp;
       try {
-        regex = new RegExp(text, cs ? 'g' : 'gi');
+        regex = new RegExp(text, cs ? 'gm' : 'gim');
       } catch (e) {
         return { error: (e as Error).message };
       }

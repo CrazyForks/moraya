@@ -1020,7 +1020,19 @@
     }, 5000);
 
     // Strip frontmatter before editor sees it (avoids `---` → thematic break corruption)
-    const { frontmatter, body } = extractFrontmatter(content);
+    // Defensive: if content is empty but editorStore has content, recover from store.
+    // This handles potential Svelte 5 reactivity edge cases during mode switch.
+    let effectiveContent = content;
+    if (effectiveContent.length === 0) {
+      const storeState = editorStore.getState();
+      if (storeState.content.length > 0) {
+        console.warn('[Editor] content prop empty but store has content, recovering:', storeState.content.length);
+        effectiveContent = storeState.content;
+        content = effectiveContent;
+      }
+    }
+    console.log('[Editor] onMount content length:', effectiveContent.length, 'preview:', JSON.stringify(effectiveContent.slice(0, 100)));
+    const { frontmatter, body } = extractFrontmatter(effectiveContent);
     storedFrontmatter = frontmatter;
 
     // Split mode needs full markdown serialization (source editor sync via onChange).
@@ -1084,6 +1096,7 @@
 
     editor = createdEditor;
     isReady = true;
+    console.log('[Editor] createEditor done, doc content size:', createdEditor.view.state.doc.content.size, 'textContent length:', createdEditor.view.state.doc.textContent.length);
     onEditorReady?.(editor);
     if (showOutline) extractHeadings();
 
@@ -1102,17 +1115,50 @@
     requestAnimationFrame(() => {
       if (!editor) return;
 
-      // 1. Restore cursor position
+      // 1. Restore cursor position (source offset → ProseMirror position)
       try {
         const view = editor.view;
-        const docSize = view.state.doc.content.size;
-        // Map markdown offset to ProseMirror position using fraction
-        const fraction = content.length > 0 ? savedOffset / content.length : 0;
-        let pmPos = Math.round(fraction * docSize);
-        // Clamp to valid range (1 .. docSize-1)
-        pmPos = Math.max(1, Math.min(pmPos, Math.max(1, docSize - 1)));
-        // Resolve to nearest valid text position
-        const resolved = view.state.doc.resolve(pmPos);
+        const doc = view.state.doc;
+        const docSize = doc.content.size;
+        let pmPos: number | null = null;
+
+        // Strategy: suffix-match the markdown text around the cursor in the
+        // ProseMirror document's text content, then binary-search for the
+        // corresponding ProseMirror position.
+        const pmText = doc.textBetween(0, docSize, '\n', '');
+        const beforeCursor = content.slice(0, savedOffset);
+        const approxFraction = content.length > 0 ? savedOffset / content.length : 0;
+        const approxTextIdx = Math.floor(approxFraction * pmText.length);
+
+        for (const suffLen of [30, 20, 10, 5, 3]) {
+          if (beforeCursor.length < suffLen) continue;
+          const suffix = beforeCursor.slice(-suffLen);
+          if (!suffix.trim()) continue;
+          // Search near the estimated position to avoid false matches
+          const searchFrom = Math.max(0, approxTextIdx - suffLen * 5);
+          const idx = pmText.indexOf(suffix, searchFrom);
+          if (idx !== -1) {
+            // Binary search: smallest pmPos where textBetween length >= target
+            const target = idx + suffLen;
+            let lo = 1, hi = docSize;
+            while (lo < hi) {
+              const mid = (lo + hi) >> 1;
+              try {
+                if (doc.textBetween(0, mid, '\n', '').length < target) lo = mid + 1;
+                else hi = mid;
+              } catch { lo = mid + 1; }
+            }
+            pmPos = Math.max(1, Math.min(lo, docSize - 1));
+            break;
+          }
+        }
+
+        // Fallback: fraction-based approximation
+        if (pmPos === null) {
+          pmPos = Math.max(1, Math.min(Math.round(approxFraction * docSize), Math.max(1, docSize - 1)));
+        }
+
+        const resolved = doc.resolve(pmPos);
         const sel = TextSelection.near(resolved);
         // Don't use scrollIntoView — we restore scroll position separately
         view.dispatch(view.state.tr.setSelection(sel));
@@ -1238,6 +1284,7 @@
   // Debounced to avoid rebuilding the ProseMirror document on every keystroke.
   // Uses addToHistory:false to avoid undo history accumulation.
   function applySyncToEditor(md: string) {
+    console.log('[Editor] applySyncToEditor md length:', md.length, 'preview:', JSON.stringify(md.slice(0, 100)));
     if (!editor || !isReady) return;
     // Re-extract frontmatter in case user edited it in source mode
     const { frontmatter, body } = extractFrontmatter(md);
@@ -1399,7 +1446,7 @@
     if (useRegex) {
       let regex: RegExp;
       try {
-        regex = new RegExp(text, cs ? 'g' : 'gi');
+        regex = new RegExp(text, cs ? 'gm' : 'gim');
       } catch (e) {
         return { error: (e as Error).message };
       }

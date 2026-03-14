@@ -18,6 +18,29 @@ import { Schema, Fragment } from 'prosemirror-model';
 import type { NodeSpec, MarkSpec } from 'prosemirror-model';
 import katex from 'katex';
 
+// ── Helpers ──────────────────────────────────────────────────────
+
+/** Extract a quoted attribute value from an HTML tag string. */
+function extractHtmlAttr(html: string, name: string): string | null {
+  const re = new RegExp(`${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'i');
+  const m = html.match(re);
+  return m ? (m[1] ?? m[2] ?? null) : null;
+}
+
+/** Replace element content with broken-image icon + source code display. */
+function showBrokenImage(container: HTMLElement, sourceText: string): void {
+  container.textContent = '';
+  container.className = (container.className.replace(/\bhtml-img-wrapper\b|\bimage-node\b/, '').trim()
+    + ' broken-image').trim();
+  const icon = document.createElement('span');
+  icon.className = 'broken-image-icon';
+  container.appendChild(icon);
+  const code = document.createElement('code');
+  code.className = 'broken-image-src';
+  code.textContent = sourceText;
+  container.appendChild(code);
+}
+
 // ── Node Specs ──────────────────────────────────────────────────
 
 const doc: NodeSpec = {
@@ -189,7 +212,22 @@ const image: NodeSpec = {
     },
   }],
   toDOM(node) {
-    return ['img', { ...node.attrs }];
+    const container = document.createElement('span');
+    container.className = 'image-node';
+
+    const img = document.createElement('img');
+    img.src = node.attrs.src;
+    if (node.attrs.alt) img.alt = node.attrs.alt;
+    if (node.attrs.title) img.title = node.attrs.title;
+
+    img.onerror = () => {
+      const alt = node.attrs.alt ? `![${node.attrs.alt}]` : '![]';
+      const title = node.attrs.title ? ` "${node.attrs.title}"` : '';
+      showBrokenImage(container, `${alt}(${node.attrs.src}${title})`);
+    };
+
+    container.appendChild(img);
+    return container;
   },
 };
 
@@ -256,8 +294,32 @@ const html_inline: NodeSpec = {
     },
   }],
   toDOM(node) {
-    // Render as an empty invisible span; raw HTML stored in data-value for round-trip.
-    return ['span', { 'data-type': 'html-inline', 'data-value': node.attrs.value as string }];
+    const value = node.attrs.value as string;
+
+    // Render <img> tags as actual images (with broken image fallback)
+    if (/^<img\s/i.test(value)) {
+      const wrapper = document.createElement('span');
+      wrapper.dataset.type = 'html-inline';
+      wrapper.dataset.value = value;
+      wrapper.className = 'html-img-wrapper';
+
+      const src = extractHtmlAttr(value, 'src') || '';
+      if (src) {
+        const img = document.createElement('img');
+        img.src = src;
+        img.alt = extractHtmlAttr(value, 'alt') || '';
+        img.onerror = () => {
+          showBrokenImage(wrapper, value);
+        };
+        wrapper.appendChild(img);
+      } else {
+        showBrokenImage(wrapper, value);
+      }
+      return wrapper;
+    }
+
+    // Default: invisible span for other inline HTML (<font>, <br>, etc.)
+    return ['span', { 'data-type': 'html-inline', 'data-value': value }];
   },
 };
 

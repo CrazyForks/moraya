@@ -2338,6 +2338,7 @@
     border-radius: 8px;
     font-size: var(--font-size-sm);
     line-height: 1.5;
+    min-width: 6rem; /* prevent action buttons from overlapping timestamp on short messages */
   }
 
   .message.user {

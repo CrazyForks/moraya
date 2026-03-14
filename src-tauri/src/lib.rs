@@ -17,6 +17,21 @@ pub struct OpenedFiles(pub Mutex<Vec<String>>);
 /// Maps window labels to file paths that should be opened when the window mounts.
 pub struct PendingFiles(pub Mutex<HashMap<String, String>>);
 
+/// Serializable tab data for cross-window tab transfer (detach/attach).
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct TabTransferData {
+    pub file_path: Option<String>,
+    pub file_name: String,
+    pub content: String,
+    pub is_dirty: bool,
+    pub cursor_offset: usize,
+    pub scroll_fraction: f64,
+    pub last_mtime: Option<f64>,
+}
+
+/// Maps window labels to pending tab data for newly created windows (tab detach).
+pub struct PendingTabData(pub Mutex<HashMap<String, TabTransferData>>);
+
 /// Tracks whether the main window has called get_opened_file (i.e. frontend is ready).
 /// Used to distinguish cold-start file association from runtime file opens.
 pub struct MainWindowReady(pub AtomicBool);
@@ -235,6 +250,183 @@ fn create_new_window(
     create_editor_window(&app, &pending, None)
 }
 
+/// Return bounding rects of all Moraya windows (for cross-window drag detection).
+/// Each entry: (label, x, y, width, height, client_y_offset) in logical (CSS) pixels.
+/// client_y_offset is the vertical distance from the outer top to the client area top
+/// (equals the native title bar height on Windows/Linux; 0 on macOS overlay).
+#[tauri::command]
+fn get_all_window_bounds(app: tauri::AppHandle) -> Vec<(String, f64, f64, f64, f64, f64)> {
+    app.webview_windows()
+        .iter()
+        .filter_map(|(label, w)| {
+            let pos = w.outer_position().ok()?;
+            let size = w.outer_size().ok()?;
+            // Convert physical pixels to logical (CSS) pixels to match PointerEvent.screenX/Y
+            let scale = w.scale_factor().ok().unwrap_or(1.0);
+            // Client area offset: distance from outer top to inner content top (title bar height)
+            let inner_pos = w.inner_position().ok()?;
+            let client_y_offset = (inner_pos.y - pos.y) as f64 / scale;
+            Some((
+                label.clone(),
+                pos.x as f64 / scale,
+                pos.y as f64 / scale,
+                size.width as f64 / scale,
+                size.height as f64 / scale,
+                client_y_offset.max(0.0), // ensure non-negative
+            ))
+        })
+        .collect()
+}
+
+/// Create a new window at a specific position with pending tab data (for tab detach).
+#[tauri::command]
+fn detach_tab_to_window(
+    app: tauri::AppHandle,
+    pending_tab: tauri::State<'_, PendingTabData>,
+    tab_data: TabTransferData,
+    x: f64,
+    y: f64,
+) -> Result<String, String> {
+    #[cfg(target_os = "ios")]
+    {
+        let _ = (&app, &pending_tab, &tab_data, x, y);
+        return Err("Multi-window is not supported on iPad".to_string());
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let counter = WINDOW_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let label = format!("moraya-{}", counter);
+
+        let title = if tab_data.file_name.is_empty() {
+            "Moraya".to_string()
+        } else {
+            tab_data.file_name.clone()
+        };
+
+        // Store tab data for the new window to pick up on mount
+        {
+            let mut map = pending_tab.0.lock().unwrap();
+            map.insert(label.clone(), tab_data);
+        }
+
+        let mut builder = tauri::WebviewWindowBuilder::new(
+            &app,
+            &label,
+            tauri::WebviewUrl::default(),
+        )
+        .title(&title)
+        .inner_size(1200.0, 800.0)
+        .min_inner_size(600.0, 400.0)
+        .decorations(true)
+        .devtools(false);
+
+        #[cfg(target_os = "macos")]
+        {
+            use tauri::TitleBarStyle;
+            builder = builder.title_bar_style(TitleBarStyle::Overlay);
+        }
+
+        // Place the window approximately at the target position using builder.position()
+        // to avoid the flicker caused by appearing at the OS default location first.
+        // builder.position() may use physical pixels on some platforms, so follow up
+        // with set_position(LogicalPosition) for exact logical coordinate placement.
+        // We do NOT use visible(false)+show() because show() steals focus from the
+        // source window and breaks the ongoing pointer capture (killing the drag).
+        builder = builder.position(x, y);
+
+        let window = builder
+            .build()
+            .map_err(|e| format!("Failed to create window: {}", e))?;
+
+        let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+
+        #[cfg(target_os = "macos")]
+        {
+            use tauri::TitleBarStyle;
+            let _ = window.set_title_bar_style(TitleBarStyle::Overlay);
+        }
+
+        #[cfg(all(not(target_os = "macos"), not(target_os = "ios")))]
+        fit_window_to_screen(&window);
+
+        Ok(label)
+    }
+}
+
+/// Retrieve pending tab data for a newly created window (called on mount, mirrors get_opened_file).
+#[tauri::command]
+fn get_pending_tab(
+    window: tauri::Window,
+    pending_tab: tauri::State<'_, PendingTabData>,
+) -> Option<TabTransferData> {
+    let label = window.label();
+    pending_tab.0.lock().unwrap().remove(label)
+}
+
+/// Set a window's visual opacity (0.0 = invisible, 1.0 = fully opaque).
+/// Used to hide the active window during single-tab drag without moving it off-screen
+/// (macOS constrains active window positions, preventing full off-screen placement).
+#[tauri::command]
+fn set_window_alpha(app: tauri::AppHandle, label: String, alpha: f64) -> Result<(), String> {
+    let win = app.get_webview_window(&label).ok_or("Window not found")?;
+    let alpha_val = alpha.clamp(0.0, 1.0);
+
+    #[cfg(target_os = "macos")]
+    {
+        use objc::{msg_send, sel, sel_impl};
+        // SAFETY: ns_window() returns a valid NSWindow pointer on macOS.
+        // setAlphaValue: accepts CGFloat (f64 on 64-bit macOS). Value is clamped to [0,1].
+        let ns_window = win.ns_window().map_err(|e| e.to_string())?;
+        unsafe {
+            let _: () = msg_send![ns_window as *mut objc::runtime::Object, setAlphaValue: alpha_val];
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Windows/Linux: window manager constraints are less restrictive,
+        // use move off-screen as fallback.
+        if alpha_val <= 0.0 {
+            let _ = win.set_position(tauri::LogicalPosition::new(-99999.0, -99999.0));
+        }
+        let _ = alpha_val;
+    }
+
+    Ok(())
+}
+
+/// Move a window to a specific logical position (used for dragging detached tab windows).
+#[tauri::command]
+fn move_window(app: tauri::AppHandle, label: String, x: f64, y: f64) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window(&label) {
+        win.set_position(tauri::LogicalPosition::new(x, y))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Close a window by label (used for closing detached windows on re-attach).
+#[tauri::command]
+fn close_window_by_label(app: tauri::AppHandle, label: String) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window(&label) {
+        win.close().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Show or hide a window by label (used for hiding detached tab window when hovering over target).
+#[tauri::command]
+fn set_window_visible(app: tauri::AppHandle, label: String, visible: bool) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window(&label) {
+        if visible {
+            win.show().map_err(|e| e.to_string())?;
+        } else {
+            win.hide().map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 /// Register or update the document displayed in a window (for macOS Dock menu).
 /// Called from frontend whenever the file path or document name changes.
 #[cfg(target_os = "macos")]
@@ -314,6 +506,7 @@ pub fn run() {
         .manage(commands::plugin_manager::PluginProcessManager::new())
         .manage(OpenedFiles(Mutex::new(initial_files)))
         .manage(PendingFiles(Mutex::new(HashMap::new())))
+        .manage(PendingTabData(Mutex::new(HashMap::new())))
         .manage(MainWindowReady(AtomicBool::new(false)))
         .manage(DockDocumentTracker(Mutex::new(HashMap::new())))
         .invoke_handler(tauri::generate_handler![
@@ -371,6 +564,13 @@ pub fn run() {
             get_opened_file,
             open_file_in_new_window,
             create_new_window,
+            get_all_window_bounds,
+            detach_tab_to_window,
+            get_pending_tab,
+            move_window,
+            set_window_alpha,
+            close_window_by_label,
+            set_window_visible,
             register_dock_document,
         ])
         .setup(|app| {

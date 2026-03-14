@@ -254,6 +254,62 @@ function createTabsStore() {
       }));
     },
 
+    /** Insert a tab at a specific index (used for cross-window tab transfer).
+     *  Returns the new tab's id. */
+    insertTabAt(index: number, filePath: string | null, fileName: string, content: string, isDirty: boolean, mtime?: number | null): string {
+      syncFromEditor();
+      const newTab: TabItem = {
+        id: generateTabId(),
+        filePath,
+        fileName,
+        content,
+        isDirty,
+        cursorOffset: 0,
+        scrollFraction: 0,
+        lastMtime: mtime ?? null,
+      };
+      update(state => {
+        const tabs = [...state.tabs];
+        const clampedIndex = Math.max(0, Math.min(index, tabs.length));
+        tabs.splice(clampedIndex, 0, newTab);
+        return { tabs, activeTabId: newTab.id };
+      });
+      syncToEditor(newTab);
+      return newTab.id;
+    },
+
+    /** Remove a tab without creating an empty replacement (used for cross-window transfer).
+     *  Returns false if tab not found or it's the only tab (use closeTab for that). */
+    removeTab(tabId: string): boolean {
+      const state = get({ subscribe });
+      const tab = state.tabs.find(t => t.id === tabId);
+      if (!tab) return false;
+      const remaining = state.tabs.filter(t => t.id !== tabId);
+      if (remaining.length === 0) return false;
+
+      if (tabId === state.activeTabId) {
+        const idx = state.tabs.findIndex(t => t.id === tabId);
+        const nextIdx = idx > 0 ? idx - 1 : 0;
+        const nextTab = remaining[Math.min(nextIdx, remaining.length - 1)];
+        syncToEditor(nextTab);
+        update(() => ({ tabs: remaining, activeTabId: nextTab.id }));
+      } else {
+        update(s => ({ ...s, tabs: remaining }));
+      }
+      return true;
+    },
+
+    /** Reorder tabs by moving a tab from one index to another */
+    reorderTabs(fromIndex: number, toIndex: number) {
+      if (fromIndex === toIndex) return;
+      update(state => {
+        const tabs = [...state.tabs];
+        const [moved] = tabs.splice(fromIndex, 1);
+        tabs.splice(toIndex, 0, moved);
+        return { ...state, tabs };
+      });
+    },
+
     getState() {
       return get({ subscribe });
     },
