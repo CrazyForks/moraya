@@ -682,7 +682,10 @@ pub fn run() {
                 });
             }
 
-            let _ = window;
+            // Window starts hidden (visible:false in tauri.conf.json) to avoid
+            // a position flash on Windows/Linux where fit_window_to_screen may
+            // reposition/resize the window. Show it now that setup is complete.
+            let _ = window.show();
             Ok(())
         })
         .build(tauri::generate_context!())
