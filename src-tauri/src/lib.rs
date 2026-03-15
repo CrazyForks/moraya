@@ -53,6 +53,12 @@ pub struct DockDocEntry {
 #[cfg(target_os = "macos")]
 pub(crate) static FOCUSED_WINDOW_LABEL: Mutex<Option<String>> = Mutex::new(None);
 
+/// Saved window positions for set_window_alpha on Windows/Linux.
+/// When alpha=0 moves a window off-screen, the original position is saved here
+/// so alpha>0 can restore it. Without this, windows get stuck at (-99999,-99999).
+#[cfg(not(target_os = "macos"))]
+static SAVED_WINDOW_POSITIONS: Mutex<Option<HashMap<String, (f64, f64)>>> = Mutex::new(None);
+
 /// Tracks the number of focused Moraya windows (Windows only).
 /// Used to register/unregister the global Ctrl+Shift+I shortcut so it
 /// intercepts the key before WebView2 opens DevTools.
@@ -204,16 +210,14 @@ pub(crate) fn create_editor_window(
         let _ = _window.set_title_bar_style(TitleBarStyle::Overlay);
     }
 
-    // Windows/Linux: reuse the app-level menu (set during setup) instead of creating
-    // a brand-new set of menu items. Creating duplicate MenuItem/CheckMenuItem objects
-    // with the same accelerators can cause registration conflicts on Windows, and
-    // bloats the internal muda registry. If no app menu exists (should not happen),
-    // fall back to creating a fresh menu.
+    // Windows/Linux: create a fresh menu for each new window.
+    // Sharing the same Menu object via app.menu() can cause muda's internal
+    // accelerator table to conflict on Windows, freezing the new window's
+    // message loop and making it unresponsive (close button, input all dead).
+    // Each window needs its own Menu instance with independent HMENU handles.
     #[cfg(all(not(target_os = "macos"), not(target_os = "ios")))]
     {
-        if let Some(app_menu) = app.menu() {
-            let _ = _window.set_menu(app_menu);
-        } else if let Ok(win_menu) = menu::create_menu(app) {
+        if let Ok(win_menu) = menu::create_menu(app) {
             let _ = _window.set_menu(win_menu);
         }
         fit_window_to_screen(&_window);
@@ -360,9 +364,7 @@ fn detach_tab_to_window(
 
         #[cfg(all(not(target_os = "macos"), not(target_os = "ios")))]
         {
-            if let Some(app_menu) = app.menu() {
-                let _ = window.set_menu(app_menu);
-            } else if let Ok(win_menu) = menu::create_menu(&app) {
+            if let Ok(win_menu) = menu::create_menu(&app) {
                 let _ = window.set_menu(win_menu);
             }
             fit_window_to_screen(&window);
@@ -403,12 +405,24 @@ fn set_window_alpha(app: tauri::AppHandle, label: String, alpha: f64) -> Result<
 
     #[cfg(not(target_os = "macos"))]
     {
-        // Windows/Linux: window manager constraints are less restrictive,
-        // use move off-screen as fallback.
+        // Windows/Linux: move off-screen to "hide", restore saved position to "show".
+        let mut guard = match SAVED_WINDOW_POSITIONS.lock() {
+            Ok(g) => g,
+            Err(e) => e.into_inner(),
+        };
+        let map = guard.get_or_insert_with(HashMap::new);
+
         if alpha_val <= 0.0 {
+            // Save current position before moving off-screen
+            if let Ok(pos) = win.outer_position() {
+                let scale = win.scale_factor().unwrap_or(1.0);
+                map.insert(label.clone(), (pos.x as f64 / scale, pos.y as f64 / scale));
+            }
             let _ = win.set_position(tauri::LogicalPosition::new(-99999.0, -99999.0));
+        } else if let Some((x, y)) = map.remove(&label) {
+            // Restore to saved position
+            let _ = win.set_position(tauri::LogicalPosition::new(x, y));
         }
-        let _ = alpha_val;
     }
 
     Ok(())
