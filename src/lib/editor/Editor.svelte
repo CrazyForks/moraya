@@ -16,7 +16,7 @@
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import type { UnlistenFn } from '@tauri-apps/api/event';
   import { createEditor } from './setup';
-  import { schema } from './schema';
+  import { schema, setDocumentBaseDir } from './schema';
   import { parseMarkdown, parseMarkdownAsync, serializeMarkdown } from './markdown';
   import { docCache } from './doc-cache';
   import { editorStore } from '../stores/editor-store';
@@ -178,6 +178,33 @@
     handleDrop: (e: Event) => void;
     handleProseMirrorClick: (e: MouseEvent) => void;
   } | null = null;
+
+  /** Cached fallback directory for unsaved documents (lazy-loaded). */
+  let cachedDocumentsDir = '';
+
+  /**
+   * Update the schema's base directory for resolving relative image paths.
+   * For saved files: uses the parent directory of the file.
+   * For unsaved files: uses the user's Documents directory.
+   */
+  function updateDocumentBaseDir(filePath: string): void {
+    if (filePath) {
+      // Saved file: parent directory
+      const sep = filePath.includes('\\') ? '\\' : '/';
+      const lastSep = filePath.lastIndexOf(sep);
+      setDocumentBaseDir(lastSep > 0 ? filePath.slice(0, lastSep) : '');
+    } else if (cachedDocumentsDir) {
+      setDocumentBaseDir(cachedDocumentsDir);
+    } else {
+      // Lazy-load the Documents directory for unsaved files
+      import('@tauri-apps/api/path').then(({ documentDir }) => {
+        documentDir().then(dir => {
+          cachedDocumentsDir = dir;
+          setDocumentBaseDir(dir);
+        }).catch(() => {});
+      }).catch(() => {});
+    }
+  }
 
   /**
    * Convert single newlines to hard breaks (trailing two spaces + newline)
@@ -568,6 +595,85 @@
     }
   }
 
+  /**
+   * Save a clipboard/dropped image to disk and return the path to use in markdown.
+   * - Saved doc in KB: save to {kbRoot}/images/{mirror}/, return relative path from doc
+   * - Saved doc outside KB: save to {docDir}/images/, return relative path ./images/...
+   * - Unsaved doc: always absolute path (save location unpredictable, relative would break)
+   */
+  async function saveImageToDisk(file: File): Promise<string | null> {
+    try {
+      const ext = file.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+      const timestamp = Date.now();
+      const filename = `image-${timestamp}.${ext}`;
+
+      // Read file as base64
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const base64 = btoa(binary);
+
+      const currentFilePath = editorStore.getState().currentFilePath || '';
+      const kb = filesStore.getActiveKnowledgeBase?.();
+
+      if (kb && currentFilePath && currentFilePath.startsWith(kb.path)) {
+        // Saved doc inside knowledge base → use KB image directory convention
+        const { computeImageDir } = await import('../services/ai/image-path-utils');
+        const imageDir = computeImageDir(currentFilePath, kb.path);
+        const absPath = `${imageDir}/${filename}`;
+        await invoke('write_file_binary', { path: absPath, base64Data: base64 });
+
+        // Compute relative path from document directory
+        const docDir = currentFilePath.substring(0, currentFilePath.lastIndexOf('/'));
+        return computeRelativePath(docDir, absPath);
+      }
+
+      if (currentFilePath) {
+        // Saved doc outside knowledge base → save to {docDir}/images/
+        const docDir = currentFilePath.substring(0, currentFilePath.lastIndexOf('/'));
+        const imageDir = `${docDir}/images`;
+        const absPath = `${imageDir}/${filename}`;
+        await invoke('write_file_binary', { path: absPath, base64Data: base64 });
+        return `./images/${filename}`;
+      }
+
+      // Unsaved doc → always use absolute path (save location is unpredictable,
+      // relative paths would break after the user picks an arbitrary save location)
+      if (kb) {
+        const { computeImageDir } = await import('../services/ai/image-path-utils');
+        const imageDir = computeImageDir(null, kb.path);
+        const absPath = `${imageDir}/${filename}`;
+        await invoke('write_file_binary', { path: absPath, base64Data: base64 });
+        return absPath;
+      }
+
+      const { tempDir } = await import('@tauri-apps/api/path');
+      const tmp = await tempDir();
+      const absPath = `${tmp}moraya-images/${filename}`;
+      await invoke('write_file_binary', { path: absPath, base64Data: base64 });
+      return absPath;
+    } catch (e) {
+      console.warn('[Image] saveImageToDisk failed:', e);
+      return null;
+    }
+  }
+
+  /** Compute a relative path from `fromDir` to `toPath`. */
+  function computeRelativePath(fromDir: string, toPath: string): string {
+    const fromParts = fromDir.split('/').filter(Boolean);
+    const toParts = toPath.split('/').filter(Boolean);
+    // Find common prefix length
+    let common = 0;
+    while (common < fromParts.length && common < toParts.length && fromParts[common] === toParts[common]) {
+      common++;
+    }
+    const ups = fromParts.length - common;
+    const remainder = toParts.slice(common).join('/');
+    if (ups === 0) return `./${remainder}`;
+    return '../'.repeat(ups) + remainder;
+  }
+
   /** Handle paste event for clipboard images */
   function handlePaste(event: ClipboardEvent) {
     if (!event.clipboardData) return;
@@ -578,12 +684,28 @@
         event.preventDefault();
         const file = item.getAsFile();
         if (!file) continue;
-        const blobUrl = URL.createObjectURL(file);
-        insertImageAtCursor(blobUrl);
 
-        // Auto-upload if enabled
+        if (isTauri) {
+          // Save image to disk and insert file path
+          saveImageToDisk(file).then(path => {
+            if (path) {
+              insertImageAtCursor(path);
+            } else {
+              // Fallback to blob URL if save failed
+              insertImageAtCursor(URL.createObjectURL(file));
+            }
+          });
+        } else {
+          // Non-Tauri: use blob URL (web preview)
+          const blobUrl = URL.createObjectURL(file);
+          insertImageAtCursor(blobUrl);
+        }
+
+        // Auto-upload if enabled (still works — uploads the saved file)
         const target = settingsStore.getDefaultImageHostTarget();
         if (target?.autoUpload) {
+          // For auto-upload, create a temporary blob URL for the upload logic
+          const blobUrl = URL.createObjectURL(file);
           uploadAndReplace(blobUrl, targetToConfig(target));
         }
         return;
@@ -1035,6 +1157,9 @@
     console.log('[Editor] onMount content length:', effectiveContent.length, 'preview:', JSON.stringify(effectiveContent.slice(0, 100)));
     const { frontmatter, body } = extractFrontmatter(effectiveContent);
     storedFrontmatter = frontmatter;
+
+    // Set base dir for relative image resolution before editor renders
+    updateDocumentBaseDir(editorStore.getState().currentFilePath || '');
 
     // Split mode needs full markdown serialization (source editor sync via onChange).
     // Visual-only mode uses lightweight dirty tracking (no serialization per-keystroke).
@@ -1723,6 +1848,9 @@
     if (syncResetTimer) clearTimeout(syncResetTimer);
     const visualContent = toHardBreaks(body);
     const filePath = editorStore.getState().currentFilePath || '';
+
+    // Update base dir for relative image path resolution in schema.ts toDOM()
+    updateDocumentBaseDir(filePath);
 
     // Check LRU doc cache first
     const cached = docCache.get(filePath, visualContent);

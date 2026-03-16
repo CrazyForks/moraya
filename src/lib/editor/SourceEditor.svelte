@@ -155,7 +155,18 @@
       return;
     }
 
-    if (event.inputType !== 'insertReplacementText' && event.inputType !== 'insertText') return;
+    // Block all insertReplacementText events (macOS autocorrect/smart quotes/
+    // text substitution). In source mode, editing raw markdown/HTML, these
+    // automatic replacements corrupt attribute values (e.g. title="width=2"0""%")
+    // because the replacement range doesn't match selectionStart/End in textarea.
+    // Spell check highlights (red underlines) still work — only auto-replacement
+    // is blocked.
+    if (event.inputType === 'insertReplacementText') {
+      event.preventDefault();
+      return;
+    }
+
+    if (event.inputType !== 'insertText') return;
     const data = event.data;
     if (!data) return;
 
@@ -168,7 +179,7 @@
     }
     justInsertedNewline = false;
 
-    // Normalize smart/curly quotes to straight quotes
+    // Normalize smart/curly quotes to straight quotes (e.g. from CJK IME)
     const normalized = straightenQuotes(data);
     if (normalized !== data) {
       event.preventDefault();

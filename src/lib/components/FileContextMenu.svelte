@@ -49,6 +49,26 @@
 
   const tr = $t;
 
+  // Auto-flip: measure menu after render and flip upward if it would overflow viewport
+  let menuEl: HTMLDivElement | undefined = $state();
+  let adjustedTop = $state(position.top);
+  let adjustedLeft = $state(position.left);
+
+  $effect(() => {
+    if (!menuEl) return;
+    const rect = menuEl.getBoundingClientRect();
+    const viewH = window.innerHeight;
+    const viewW = window.innerWidth;
+    // Flip upward if menu overflows bottom
+    adjustedTop = (position.top + rect.height > viewH)
+      ? Math.max(4, position.top - rect.height)
+      : position.top;
+    // Shift left if menu overflows right
+    adjustedLeft = (position.left + rect.width > viewW)
+      ? Math.max(4, viewW - rect.width - 4)
+      : position.left;
+  });
+
   function handleAction(action: () => void) {
     action();
     onClose();
@@ -76,8 +96,9 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="menu-backdrop" onclick={onClose} oncontextmenu={(e) => { e.preventDefault(); onClose(); }}>
   <div
+    bind:this={menuEl}
     class="context-menu"
-    style="top: {position.top}px; left: {position.left}px"
+    style="top: {adjustedTop}px; left: {adjustedLeft}px"
     onclick={(e) => e.stopPropagation()}
   >
     <button class="menu-item" onclick={() => handleAction(onNewFile)}>

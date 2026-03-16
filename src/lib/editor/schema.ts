@@ -83,12 +83,52 @@ function htmlTagToStyle(openTag: string): string {
   }
 }
 
+/**
+ * Base directory for resolving relative image paths.
+ * Set to the parent directory of the current document (for saved files)
+ * or the user's Documents directory (for unsaved files).
+ */
+let documentBaseDir = '';
+
+/** Update the base directory used to resolve relative image paths. */
+export function setDocumentBaseDir(dir: string): void {
+  documentBaseDir = dir;
+}
+
 /** Check if a path is a local file path (absolute Unix or Windows path). */
-function isLocalFilePath(src: string): boolean {
+function isAbsoluteFilePath(src: string): boolean {
   if (!src) return false;
   if (src.startsWith('/') && !src.startsWith('//')) return true;
   if (/^[A-Z]:[\\\/]/i.test(src)) return true;
   return false;
+}
+
+/** Check if a src is a relative file path (not a URL scheme). */
+function isRelativePath(src: string): boolean {
+  if (!src) return false;
+  // Skip URLs and data/blob schemes
+  if (/^(https?:|data:|blob:|javascript:|vbscript:|tauri:|\/\/)/i.test(src)) return false;
+  // Skip absolute paths (handled by isAbsoluteFilePath)
+  if (src.startsWith('/') || /^[A-Z]:[\\\/]/i.test(src)) return false;
+  // Everything else is a relative path (./foo, ../foo, foo/bar, images/x.png)
+  return true;
+}
+
+/** Resolve a relative path against documentBaseDir to an absolute path. */
+function resolveRelativePath(src: string): string {
+  if (!documentBaseDir) return src;
+  // Normalize: strip leading ./
+  let rel = src.replace(/^\.\//, '');
+  // Join base dir + relative path
+  const sep = documentBaseDir.includes('\\') ? '\\' : '/';
+  let base = documentBaseDir.endsWith(sep) ? documentBaseDir.slice(0, -1) : documentBaseDir;
+  // Handle ../ segments
+  while (rel.startsWith('../') || rel.startsWith('..\\')) {
+    rel = rel.slice(3);
+    const lastSep = base.lastIndexOf(sep);
+    if (lastSep > 0) base = base.slice(0, lastSep);
+  }
+  return `${base}${sep}${rel}`;
 }
 
 /** Cache for local image blob URLs (path → blob:...) */
@@ -321,8 +361,10 @@ const image: NodeSpec = {
     };
 
     const src = node.attrs.src as string;
-    if (isLocalFilePath(src)) {
+    if (isAbsoluteFilePath(src)) {
       loadLocalImageSrc(img, src);
+    } else if (isRelativePath(src)) {
+      loadLocalImageSrc(img, resolveRelativePath(src));
     } else {
       img.src = src;
     }
@@ -419,8 +461,10 @@ const html_inline: NodeSpec = {
         img.onerror = () => {
           showBrokenImage(wrapper, value);
         };
-        if (isLocalFilePath(src)) {
+        if (isAbsoluteFilePath(src)) {
           loadLocalImageSrc(img, src);
+        } else if (isRelativePath(src)) {
+          loadLocalImageSrc(img, resolveRelativePath(src));
         } else {
           img.src = src;
         }

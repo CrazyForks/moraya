@@ -1042,8 +1042,9 @@ ${tr('welcome.tip')}
           cancelLabel: $t('tabs.discard'),
         }
       );
-      if (shouldSave && tab.filePath) {
-        await handleSave();
+      if (shouldSave) {
+        const saved = await handleSave();
+        if (!saved) return; // User cancelled SaveAs → don't close
       }
     }
 
@@ -2096,7 +2097,18 @@ ${tr('welcome.tip')}
       getCurrentWindow().onFocusChanged(async ({ payload: focused }) => {
         if (!focused || isCheckingChanges) return;
         isCheckingChanges = true;
-        try { await checkExternalChanges(); }
+        try {
+          await checkExternalChanges();
+          // Refresh sidebar file tree when window gains focus (another window
+          // may have saved a new file to the same knowledge base directory)
+          const folderPath = filesStore.getState().openFolderPath;
+          if (folderPath) {
+            const tree = await invoke<import('$lib/stores/files-store').FileEntry[]>(
+              'read_dir_recursive', { path: folderPath, depth: 3 }
+            );
+            filesStore.setFileTree(tree);
+          }
+        }
         finally { isCheckingChanges = false; }
       }).then(unlisten => { focusUnlisten = unlisten; });
     }
