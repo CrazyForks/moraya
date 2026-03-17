@@ -404,16 +404,18 @@ pub fn read_file_previews(
 const MAX_DIR_DEPTH: u32 = 10;
 
 #[tauri::command]
-pub fn read_dir_recursive(path: String, depth: Option<u32>) -> Result<Vec<FileEntry>, String> {
+pub fn read_dir_recursive(path: String, depth: Option<u32>, all_files: Option<bool>) -> Result<Vec<FileEntry>, String> {
     let safe_path = validate_path(&path)?;
     let max_depth = depth.unwrap_or(3).min(MAX_DIR_DEPTH);
-    read_dir_inner(safe_path.to_str().unwrap_or(""), 0, max_depth)
+    let show_all = all_files.unwrap_or(false);
+    read_dir_inner(safe_path.to_str().unwrap_or(""), 0, max_depth, show_all)
 }
 
 fn read_dir_inner(
     path: &str,
     current_depth: u32,
     max_depth: u32,
+    show_all: bool,
 ) -> Result<Vec<FileEntry>, String> {
     let entries = fs::read_dir(path).map_err(sanitize_io_error)?;
 
@@ -446,6 +448,7 @@ fn read_dir_inner(
                 file_path.to_str().unwrap_or(""),
                 current_depth + 1,
                 max_depth,
+                show_all,
             )?)
         } else if is_dir {
             Some(Vec::new())
@@ -453,8 +456,8 @@ fn read_dir_inner(
             None
         };
 
-        // Only show markdown files and directories
-        if is_dir || file_name.ends_with(".md") || file_name.ends_with(".markdown") {
+        // When show_all is false, only show markdown files and directories
+        if show_all || is_dir || file_name.ends_with(".md") || file_name.ends_with(".markdown") {
             result.push(FileEntry {
                 name: file_name,
                 path: file_path.to_string_lossy().to_string(),

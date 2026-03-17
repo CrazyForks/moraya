@@ -11,6 +11,11 @@
     type AITemplate,
     resolveContent,
     buildTemplateMessages,
+    getTemplateName,
+    loadAllCustomTemplates,
+    importTemplatesFromFile,
+    exportTemplates,
+    getAllTemplates,
   } from '$lib/services/ai';
   import { settingsStore } from '$lib/stores/settings-store';
   import { startTranscription, stopTranscription } from '$lib/services/voice/speech-service';
@@ -29,6 +34,7 @@
   import { compressImage, blobToBase64 } from '$lib/services/ai/image-utils';
   import TemplateGallery from './TemplateGallery.svelte';
   import TemplateParamPanel from './TemplateParamPanel.svelte';
+  import TemplateManagePanel from './TemplateManagePanel.svelte';
 
   let {
     documentContent = '',
@@ -94,6 +100,12 @@
   let activeTemplate = $state<AITemplate | null>(null);
   let showParamPanel = $state(false);
   let inputPlaceholderOverride = $state<string | null>(null);
+
+  // Template management state
+  let showTemplateMenu = $state(false);
+  let showManagePanel = $state(false);
+  let templateMenuEl = $state<HTMLDivElement | undefined>(undefined);
+  let templateMenuBtnEl = $state<HTMLButtonElement | undefined>(undefined);
 
   // Image attachments
   const MAX_IMAGES = 5;
@@ -196,8 +208,14 @@
   // Top-level store subscriptions — do NOT wrap in $effect().
   // In Svelte 5, $effect tracks reads inside subscribe callbacks, causing
   // infinite re-subscription loops when callbacks write to $state vars.
+  let prevActiveKbId: string | null = null;
   const unsubFiles = filesStore.subscribe(state => {
     folderPath = state.openFolderPath;
+    // Reload custom templates when active KB changes
+    if (state.activeKnowledgeBaseId !== prevActiveKbId) {
+      prevActiveKbId = state.activeKnowledgeBaseId ?? null;
+      loadAllCustomTemplates().catch(e => console.warn('Failed to reload templates:', e));
+    }
   });
 
   $effect(() => {
@@ -271,13 +289,18 @@
     }
   });
 
-  // Resizable width — default to golden ratio (smaller portion ≈ 38.2%)
-  const GOLDEN_RATIO = 1.618;
+  // Resizable width — default to 33% of window, persisted to settings
   const MIN_WIDTH = 280;
   const MAX_WIDTH = 800;
-  let panelWidth = $state(Math.round(
-    Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, window.innerWidth / (1 + GOLDEN_RATIO)))
-  ));
+  function defaultPanelWidth(): number {
+    return Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, window.innerWidth * 0.33)));
+  }
+  const savedWidth = settingsStore.getState().aiPanelWidth;
+  let panelWidth = $state(
+    savedWidth != null
+      ? Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, savedWidth))
+      : defaultPanelWidth()
+  );
   let isResizing = $state(false);
 
   let resizeRafId: number | undefined;
@@ -306,6 +329,8 @@
         resizeRafId = undefined;
       }
       isResizing = false;
+      // Persist width to settings on drag end
+      settingsStore.update({ aiPanelWidth: panelWidth });
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     }
@@ -341,12 +366,20 @@
   });
 
   onMount(() => {
+    // Load custom templates on mount
+    loadAllCustomTemplates().catch(e => console.warn('Failed to load custom templates:', e));
+
     const handleGlobalPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
       if (showModelDropdown) {
         if (!modelDropdownEl?.contains(target) && !modelDropdownTriggerEl?.contains(target)) {
           showModelDropdown = false;
+        }
+      }
+      if (showTemplateMenu) {
+        if (!templateMenuEl?.contains(target) && !templateMenuBtnEl?.contains(target)) {
+          showTemplateMenu = false;
         }
       }
       if (!showActionDrawer) return;
@@ -1030,7 +1063,7 @@
         // Switch to input mode with custom placeholder
         activeTemplate = template;
         showParamPanel = false;
-        inputPlaceholderOverride = template.inputHintKey ? $t(template.inputHintKey) : null;
+        inputPlaceholderOverride = template.inputHint ?? (template.inputHintKey ? $t(template.inputHintKey) : null);
         inputEl?.focus();
         break;
       }
@@ -1063,7 +1096,7 @@
     const paramLabels: Record<string, string> = {};
     for (const p of activeTemplate.params ?? []) {
       const selectedOption = p.options.find(o => o.value === params[p.key]);
-      if (selectedOption) paramLabels[p.key] = $t(selectedOption.labelKey);
+      if (selectedOption) paramLabels[p.key] = selectedOption.label ?? (selectedOption.labelKey ? $t(selectedOption.labelKey) : selectedOption.value);
     }
 
     const { systemPrompt, userMessage } = buildTemplateMessages(activeTemplate, {
@@ -1421,6 +1454,40 @@
     }
   }
 
+  // ── Template Management ──
+
+  async function handleImportTemplates() {
+    showTemplateMenu = false;
+    try {
+      const result = await importTemplatesFromFile();
+      if (result.imported > 0) {
+        // Force gallery refresh
+        console.info(`Imported ${result.imported} template(s)`);
+      }
+      if (result.errors.length > 0) {
+        console.warn('Import errors:', result.errors);
+      }
+    } catch (e) {
+      console.error('Template import failed:', e);
+    }
+  }
+
+  async function handleExportTemplates() {
+    showTemplateMenu = false;
+    const allTpl = getAllTemplates();
+    if (allTpl.length === 0) return;
+    try {
+      await exportTemplates(allTpl);
+    } catch (e) {
+      console.error('Template export failed:', e);
+    }
+  }
+
+  function handleManageTemplates() {
+    showTemplateMenu = false;
+    showManagePanel = true;
+  }
+
   function clearChat() {
     // Revoke pending image blob URLs
     for (const img of pendingImages) {
@@ -1570,6 +1637,38 @@
         </span>
       {/if}
     </div>
+    {#if chatMessages.length === 0}
+      <div class="template-menu-wrap">
+        <button
+          class="ai-btn"
+          bind:this={templateMenuBtnEl}
+          onclick={() => showTemplateMenu = !showTemplateMenu}
+          title={$t('templates.manage.title')}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+            <circle cx="7" cy="2.5" r="1.3"/>
+            <circle cx="7" cy="7" r="1.3"/>
+            <circle cx="7" cy="11.5" r="1.3"/>
+          </svg>
+        </button>
+        {#if showTemplateMenu}
+          <div class="template-menu-dropdown" bind:this={templateMenuEl}>
+            <button class="template-menu-item" onclick={handleImportTemplates}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7m-3-3l3 3 3-3M1 10h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              <span>{$t('templates.manage.import')}</span>
+            </button>
+            <button class="template-menu-item" onclick={handleExportTemplates}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 8V1m-3 3l3-3 3 3M1 10h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              <span>{$t('templates.manage.export')}</span>
+            </button>
+            <button class="template-menu-item" onclick={handleManageTemplates}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 3h10M1 6h10M1 9h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              <span>{$t('templates.manage.manage')}</span>
+            </button>
+          </div>
+        {/if}
+      </div>
+    {/if}
     {#if chatMessages.length > 0}
       <button class="ai-btn" onclick={clearChat} title={$t('ai.clearChat')}>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
@@ -1635,7 +1734,11 @@
   {:else}
     <div class="ai-messages" bind:this={messagesEl} onscroll={handleMessagesScroll}>
       {#if chatMessages.length === 0 && !isLoading && !showCommands && !isRealtimeVoiceActive && !isRealtimeVoiceConnecting && !showTranscription}
-        <TemplateGallery onSelectTemplate={handleTemplateSelect} />
+        {#if showManagePanel}
+          <TemplateManagePanel onBack={() => showManagePanel = false} />
+        {:else}
+          <TemplateGallery onSelectTemplate={handleTemplateSelect} />
+        {/if}
       {/if}
 
       {#each chatMessages as msg (msg.timestamp)}
@@ -1851,7 +1954,7 @@
 
       {#if activeTemplate && !showParamPanel}
         <div class="template-hint">
-          <span class="template-hint-label">{activeTemplate.icon} {$t(activeTemplate.nameKey)}</span>
+          <span class="template-hint-label">{activeTemplate.icon} {getTemplateName(activeTemplate, $t)}</span>
           <button class="template-hint-close" aria-label={$t('common.close')} onclick={() => { activeTemplate = null; inputPlaceholderOverride = null; }}>
             <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
               <path d="M8 2L2 8m0-6l6 6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
@@ -2282,6 +2385,49 @@
   .ai-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
+  }
+
+  .template-menu-wrap {
+    position: relative;
+  }
+
+  .template-menu-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 100;
+    min-width: 160px;
+    white-space: nowrap;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 0.25rem;
+    margin-top: 0.25rem;
+  }
+
+  .template-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+    border-radius: 4px;
+    text-align: left;
+  }
+
+  .template-menu-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .template-menu-item svg {
+    flex-shrink: 0;
+    color: var(--text-muted);
   }
 
   .ai-unconfigured {

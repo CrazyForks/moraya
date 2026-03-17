@@ -227,8 +227,17 @@ const parserTokens: Record<string, import('prosemirror-markdown').ParseSpec> = {
   link: {
     mark: 'link',
     getAttrs(token) {
+      let href = token.attrGet('href') || '';
+      // Decode percent-encoded non-ASCII UTF-8 characters (e.g. Chinese/Japanese/Korean)
+      // so URLs preserve original characters through roundtrips.
+      // Only decodes multi-byte UTF-8 sequences (C2-FF start bytes + 80-BF continuations),
+      // leaving ASCII encodings like %20 (space), %28/%29 (parens) intact.
+      href = href.replace(
+        /%[C-F][0-9A-F](?:%[89AB][0-9A-F])+/gi,
+        (m) => { try { return decodeURIComponent(m); } catch { return m; } },
+      );
       return {
-        href: token.attrGet('href') || '',
+        href,
         title: token.attrGet('title') || null,
       };
     },
@@ -302,12 +311,108 @@ class MorayaMarkdownParser extends MarkdownParser {
       state.closeNode(); // close table_cell
     };
 
+    // ── Empty link preservation ────────────────────────────────────
+    // When markdown-it parses `[]()` or `[](url)`, it emits link_open → link_close
+    // with no text token between them. ProseMirror discards marks with no content,
+    // so the link completely disappears. Fix: detect empty-text links and insert
+    // the raw markdown syntax as literal text instead of creating a mark.
+    const defaultLinkOpen = h['link_open'];
+    const defaultLinkClose = h['link_close'];
+
+    h['link_open'] = (state: any, tok: any, tokens: any[], i: number) => {
+      // Check if there's actual content between link_open and link_close
+      let hasContent = false;
+      for (let j = i + 1; j < tokens.length; j++) {
+        if (tokens[j].type === 'link_close') break;
+        if (tokens[j].type === 'text' && tokens[j].content) {
+          hasContent = true;
+          break;
+        }
+        if (['image', 'code_inline', 'softbreak', 'hardbreak', 'html_inline'].includes(tokens[j].type)) {
+          hasContent = true;
+          break;
+        }
+      }
+
+      if (!hasContent) {
+        // Empty-text link: insert raw markdown syntax as literal text
+        let href = tok.attrGet('href') || '';
+        // Decode non-ASCII characters for readability
+        href = href.replace(
+          /%[C-F][0-9A-F](?:%[89AB][0-9A-F])+/gi,
+          (m: string) => { try { return decodeURIComponent(m); } catch { return m; } },
+        );
+        const title = tok.attrGet('title');
+        let literal = `[](${href}`;
+        if (title) literal += ` "${title}"`;
+        literal += ')';
+        state.addText(literal);
+        // Mark the corresponding link_close to be skipped
+        for (let j = i + 1; j < tokens.length; j++) {
+          if (tokens[j].type === 'link_close') {
+            tokens[j].meta = { ...(tokens[j].meta || {}), skipClose: true };
+            break;
+          }
+        }
+        return;
+      }
+
+      defaultLinkOpen(state, tok, tokens, i);
+    };
+
+    h['link_close'] = (state: any, tok: any, tokens: any[], i: number) => {
+      if (tok.meta?.skipClose) return;
+      defaultLinkClose(state, tok, tokens, i);
+    };
+
     // ── Paired inline HTML → marks ─────────────────────────────────
     // Pre-scanned paired tags (meta.htmlPaired) become openMark/closeMark
     // so the visual editor renders them with styling. Unpaired tags stay
     // as html_inline atom nodes for exact roundtrip fidelity.
-    h['html_inline'] = (state, tok) => {
+    //
+    // Special case: <audio>/<video> inline tags (single-line, e.g.
+    // `<audio src="..." controls></audio>`) are combined into a single
+    // html_inline atom node so toDOM renders them as media players.
+    // markdown-it treats these as inline HTML (not html_block) because
+    // <audio>/<video> are not in the CommonMark block-level tag list.
+
+    // Override text handler to respect mediaSkip flag (intermediate content
+    // between <audio>/<video> opening and closing tags).
+    const defaultTextHandler = h['text'];
+    h['text'] = (state: any, tok: any, toks: any[], ii: number) => {
+      if (tok.meta?.mediaSkip) return;
+      defaultTextHandler(state, tok, toks, ii);
+    };
+
+    h['html_inline'] = (state, tok, tokens, i) => {
+      // Skip tokens already consumed by audio/video combination
+      if (tok.meta?.mediaSkip) return;
+
       const content: string = tok.content;
+
+      // <audio>/<video> inline: combine opening + closing into single atom.
+      // This handles cases like `<audio src="..." controls></audio>` on one line,
+      // or `<audio><source src="..." type="audio/mpeg"></audio>`.
+      const mediaMatch = content.match(/^<(audio|video)\b/i);
+      if (mediaMatch) {
+        const tagName = mediaMatch[1].toLowerCase();
+        const closeRe = new RegExp(`^</${tagName}\\s*>$`, 'i');
+        let fullHtml = content;
+        for (let j = i + 1; j < tokens.length; j++) {
+          const t = tokens[j];
+          if (t.type === 'html_inline' && closeRe.test(t.content.trim())) {
+            fullHtml += t.content;
+            t.meta = { ...(t.meta || {}), mediaSkip: true };
+            break;
+          }
+          // Include intermediate tokens (e.g. <source>, fallback text)
+          if (t.content) fullHtml += t.content;
+          t.meta = { ...(t.meta || {}), mediaSkip: true };
+        }
+        state.addNode(schema.nodes.html_inline, { value: fullHtml });
+        return;
+      }
+
       if (tok.meta?.htmlPaired) {
         if (!content.startsWith('</')) {
           // Opening tag → open mark
@@ -352,6 +457,14 @@ class MorayaMarkdownParser extends MarkdownParser {
         } else {
           state.addNode(schema.nodes.html_inline, { value: content });
         }
+        state.closeNode();
+      } else if (/^<(video|audio)\b/i.test(content)) {
+        // Promote <video>/<audio> blocks to paragraph(html_inline) so toDOM
+        // renders them as actual media players instead of code blocks.
+        // The entire raw HTML (including child <source> tags) is stored in
+        // the html_inline value attribute for lossless roundtrip.
+        state.openNode(schema.nodes.paragraph, null);
+        state.addNode(schema.nodes.html_inline, { value: content });
         state.closeNode();
       } else {
         defaultHtmlBlock(state, tok, tokens, i);
@@ -732,5 +845,12 @@ export function parseMarkdownAsync(markdown: string): Promise<PmNode> {
  * Serialize a ProseMirror document node to a markdown string.
  */
 export function serializeMarkdown(doc: PmNode): string {
-  return serializer.serialize(doc, { tightLists: true });
+  let result = serializer.serialize(doc, { tightLists: true });
+  // Un-escape markdown link syntax that the serializer's esc() over-escapes.
+  // \[\](url) → [](url)  — empty-text links (user placeholder)
+  // \[text\](url) → [text](url) — literal link syntax typed as text
+  // This is safe: re-parsing produces the same ProseMirror doc (empty links →
+  // literal text via our custom handler; non-empty links → link marks).
+  result = result.replace(/\\\[([^\\\[\]]*)\\\]\(([^)]*)\)/g, '[$1]($2)');
+  return result;
 }

@@ -334,6 +334,10 @@ All API keys are stored exclusively in your OS Keychain — never in plaintext. 
 | v0.23.0 | AI input interaction and real-time voice dialogue upgrade | Complete |
 | v0.24.0 | Fix KB subdirs, AI image storage; add drag-drop, MCP rules, MORAYA.md highlight | Complete |
 | v0.25.0 | Regex Search & Replace & Base64 Image Support | Complete |
+| v0.26.0 | Prompt Template management, 6 new MCP, Workflow adjustments, full-tree + image preview Tab | Complete |
+
+
+
 
 ## ⭐ Star Growth trend (updated in real time)
 

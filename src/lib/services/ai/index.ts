@@ -37,8 +37,13 @@ export {
 } from './types';
 
 // Template system
-export type { AITemplate, AITemplateCategory, TemplateContext, TemplateParam, FlowType } from './templates';
-export { getCategories, getTemplatesByCategory, resolveContent, buildTemplateMessages, getAllTemplates } from './templates';
+export type { AITemplate, AITemplateCategory, TemplateContext, TemplateParam, FlowType, TemplateSource, TemplateExportFile } from './templates';
+export {
+  getCategories, getTemplatesByCategory, resolveContent, buildTemplateMessages, getAllTemplates,
+  getTemplateName, getTemplateDesc, getParamLabel, getOptionLabel,
+  setCustomTemplates, loadAllCustomTemplates,
+  importTemplatesFromFile, exportTemplates, saveTemplate, deleteTemplate,
+} from './templates';
 
 // Rules engine
 export { loadRules, buildRulesPrompt } from './rules-engine';

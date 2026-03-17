@@ -225,7 +225,7 @@
     "saveAsKB": "Als Wissensbasis speichern"
   },
   "ai": {
-    "title": "KI-Assistent",
+    "title": "AI",
     "rulesActive": "MORAYA.md-Regeln aktiv ({count} Abschnitte)",
     "clearChat": "Chat löschen",
     "unconfigured": "KI ist nicht konfiguriert.",
@@ -399,8 +399,21 @@
         "filesystem": "Lokale Dateien lesen, durchsuchen und verwalten",
         "fetch": "Webseiten abrufen und in Markdown konvertieren",
         "git": "Git-Repositories lesen und durchsuchen",
-        "memory": "Persistenter Wissensgraph für KI-Gedächtnis"
+        "memory": "Persistenter Wissensgraph für KI-Gedächtnis",
+        "puppeteer": "Browser-Automatisierung und Web-Scraping",
+        "sqlite": "SQLite-Datenbanken abfragen und verwalten",
+        "slack": "Slack-Kanäle und Nachrichten lesen und durchsuchen",
+        "googleMaps": "Geokodierung, Routenplanung und Ortssuche",
+        "sequentialThinking": "Schrittweises Denken und Problemlösung",
+        "everything": "Windows-Dateisuche über Everything"
       },
+      "presetEnvTitle": "Umgebungsvariablen",
+      "presetEnvDesc": {
+        "slackBotToken": "Slack Bot OAuth Token (xoxb-...)",
+        "slackTeamId": "Slack Team-/Workspace-ID (optional)",
+        "googleMapsApiKey": "Google Maps API-Schlüssel"
+      },
+      "presetAdd": "Hinzufügen & Verbinden",
       "formMode": "Formular",
       "jsonMode": "JSON",
       "jsonPlaceholder": "JSON-Konfiguration einfügen, z. B.:\n{\n  \"mcpServers\": {\n    \"name\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@.../server-xxx\"]\n    }\n  }\n}",
@@ -615,7 +628,18 @@
     "aboutMoraya": "Über Moraya",
     "feedback": "Feedback",
     "settings": "Einstellungen...",
-    "versionInfo": "Versionsinformationen"
+    "versionInfo": "Versionsinformationen",
+    "workflow": "Workflow",
+    "seoOptimization": "SEO-Optimierung",
+    "aiImageGeneration": "KI-Bildgenerierung",
+    "publish": "Veröffentlichen",
+    "mcpTools": "MCP-Werkzeuge",
+    "noMCPTools": "Keine MCP-Werkzeuge verbunden"
+  },
+  "contextMenu": {
+    "cut": "Ausschneiden",
+    "copy": "Kopieren",
+    "paste": "Einfügen"
   },
   "search": {
     "findPlaceholder": "Suchen...",
@@ -826,7 +850,12 @@
     "progressPublishing": "Lade hoch...",
     "progressRss": "Aktualisiere RSS...",
     "progressDone": "Fertig",
-    "progressFailed": "Fehlgeschlagen"
+    "progressFailed": "Fehlgeschlagen",
+    "enableSEO": "SEO-Optimierung",
+    "enableSEOHint": "Titel, Auszug, Tags und Meta-Beschreibung vor der Veröffentlichung generieren",
+    "nextSEO": "Weiter: SEO →",
+    "backToTargets": "Zurück",
+    "seoNoProvider": "Kein KI-Anbieter konfiguriert. Bitte konfigurieren Sie einen KI-Anbieter in den Einstellungen."
   },
   "update": {
     "title": "Versionsinformationen",
@@ -908,6 +937,25 @@
       "search": "Vorlagen suchen...",
       "back": "Zurück",
       "start": "Starten"
+    },
+    "myTemplates": {
+      "name": "Meine Vorlagen",
+      "desc": "Von Ihnen importierte oder erstellte benutzerdefinierte Vorlagen"
+    },
+    "manage": {
+      "title": "Vorlagen verwalten",
+      "import": "Vorlage importieren",
+      "export": "Vorlagen exportieren",
+      "manage": "Vorlagen verwalten",
+      "delete": "Löschen",
+      "deleteConfirm": "Bestätigen?",
+      "importSuccess": "{count} Vorlage(n) importiert",
+      "exportSuccess": "Vorlagen erfolgreich exportiert",
+      "noCustomTemplates": "Noch keine benutzerdefinierten Vorlagen",
+      "sourceGlobal": "Global",
+      "sourceKb": "Wissensbasis",
+      "invalidFormat": "Ungültiges Vorlagenformat",
+      "selectTemplates": "Vorlagen zum Exportieren auswählen"
     },
     "error": {
       "noDocument": "Bitte schreiben Sie zuerst etwas",
@@ -1409,5 +1457,9 @@
     "unsavedMsg": "\u201E{fileName}\u201C hat ungespeicherte Änderungen.",
     "save": "Speichern",
     "discard": "Verwerfen"
+  },
+  "link": {
+    "open": "Link öffnen",
+    "remove": "Link entfernen"
   }
 }

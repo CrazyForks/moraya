@@ -8,9 +8,11 @@ let currentWatchPath: string | null = null;
 
 export async function refreshFileTree(folderPath: string) {
   try {
+    const allFiles = filesStore.getState().sidebarViewMode === 'tree';
     const tree = await invoke<FileEntry[]>('read_dir_recursive', {
       path: folderPath,
       depth: 3,
+      allFiles,
     });
     filesStore.setFileTree(tree);
   } catch {

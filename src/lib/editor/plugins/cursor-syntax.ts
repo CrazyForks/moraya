@@ -125,35 +125,7 @@ function buildDecorations(state: EditorState): DecorationSet {
     );
   }
 
-  // 4. Link mark: show '[' at start and '](href)' at end
-  const linkType = state.schema.marks.link;
-  if (linkType) {
-    const range = getMarkRange(state, pos, linkType);
-    if (range) {
-      // Read href from the first link-marked inline child within the range
-      let href = '';
-      const base = $from.start();
-      $from.parent.forEach((child, offset) => {
-        if (href) return;
-        const childStart = base + offset;
-        if (childStart >= range.from && childStart < range.to) {
-          const lm = child.marks.find(m => m.type === linkType);
-          if (lm) href = (lm.attrs.href as string) ?? '';
-        }
-      });
-
-      decorations.push(
-        Decoration.widget(range.from, makeWidget('[', 'syntax-md-mark'), {
-          side: -1,
-          key: 'link-open',
-        }),
-        Decoration.widget(range.to, makeWidget(`](${href})`, 'syntax-md-mark'), {
-          side: 1,
-          key: 'link-close',
-        })
-      );
-    }
-  }
+  // 4. Link marks are handled by link-text-plugin (expand/collapse)
 
   return DecorationSet.create(state.doc, decorations);
 }

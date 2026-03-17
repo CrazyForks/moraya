@@ -668,10 +668,59 @@
   display: none;
 }
 
-/* No selection outline for image wrappers — images use the resize toolbar instead */
+/* No selection outline for image wrappers, media, and math blocks */
 .moraya-editor .image-node.ProseMirror-selectednode,
-.moraya-editor .html-img-wrapper.ProseMirror-selectednode {
+.moraya-editor .html-img-wrapper.ProseMirror-selectednode,
+.moraya-editor .html-media-wrapper.ProseMirror-selectednode,
+.moraya-editor div[data-type="math_block"].ProseMirror-selectednode {
   outline: none;
+}
+
+/* Blue overlay when images are within a range selection (Cmd+A, drag-select, etc.).
+   Images don't get the browser's native text-selection highlight, so this decoration
+   provides visual feedback that they are included in the selection. */
+.moraya-editor .image-in-selection {
+  position: relative;
+}
+.moraya-editor .image-in-selection::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 122, 255, 0.25);
+  pointer-events: none;
+  border-radius: 2px;
+}
+
+/* Media elements (video/audio) rendered from HTML blocks */
+.moraya-editor .html-media-wrapper {
+  display: block;
+  line-height: 0;
+  margin: 0.5em 0;
+}
+
+.moraya-editor .html-media-wrapper video {
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+.moraya-editor .html-media-wrapper audio {
+  max-width: 100%;
+  min-width: 280px;
+}
+
+/* Remove paragraph margin when it contains media elements */
+.moraya-editor p:has(> .html-media-wrapper) {
+  margin: 0;
+}
+
+/* Hide trailing break after media wrapper */
+.moraya-editor .html-media-wrapper + br,
+.moraya-editor .html-media-wrapper + [data-type="hardbreak"] {
+  display: none;
+}
+
+.moraya-editor p:has(> .html-media-wrapper) > br.ProseMirror-trailingBreak {
+  display: none;
 }
 
 /* Broken image display: icon + source code */
@@ -896,4 +945,14 @@
   opacity: 0.45;
   user-select: none;
   pointer-events: none;
+}
+
+/* link-text-plugin: muted style for [text](url) literal patterns */
+.link-text-syntax {
+  color: var(--text-muted);
+}
+
+/* Cmd/Ctrl held: show pointer cursor on links to indicate they're clickable */
+.ProseMirror.link-hover a[href] {
+  cursor: pointer;
 }

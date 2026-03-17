@@ -53,6 +53,8 @@ interface Settings {
   recordingBackupDir: string | null;   // null = disabled
   voiceSyncDir: string | null;         // null = use AppData default
   showOutline: boolean;
+  outlineWidth: number;
+  aiPanelWidth: number | null;   // null = use default (33% of window)
   rulesHistoryCount: number;
 }
 
@@ -91,6 +93,8 @@ const DEFAULT_SETTINGS: Settings = {
   recordingBackupDir: null,
   voiceSyncDir: null,
   showOutline: false,
+  outlineWidth: 200,
+  aiPanelWidth: null,
   rulesHistoryCount: 10,
 };
 

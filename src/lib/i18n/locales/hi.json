@@ -225,7 +225,7 @@
     "saveAsKB": "ज्ञान आधार के रूप में सहेजें"
   },
   "ai": {
-    "title": "AI सहायक",
+    "title": "AI",
     "rulesActive": "MORAYA.md नियम सक्रिय ({count} अनुभाग)",
     "clearChat": "चैट साफ़ करें",
     "unconfigured": "AI कॉन्फ़िगर नहीं है।",
@@ -399,8 +399,21 @@
         "filesystem": "स्थानीय फ़ाइलें पढ़ें, खोजें और प्रबंधित करें",
         "fetch": "वेब पेज लाएँ और Markdown में बदलें",
         "git": "Git रिपॉजिटरी पढ़ें और खोजें",
-        "memory": "AI मेमोरी के लिए स्थायी ज्ञान ग्राफ़"
+        "memory": "AI मेमोरी के लिए स्थायी ज्ञान ग्राफ़",
+        "puppeteer": "ब्राउज़र ऑटोमेशन और वेब स्क्रैपिंग",
+        "sqlite": "SQLite डेटाबेस क्वेरी और प्रबंधन",
+        "slack": "Slack चैनल और संदेश पढ़ें और खोजें",
+        "googleMaps": "जियोकोडिंग, दिशा-निर्देश और स्थान खोज",
+        "sequentialThinking": "चरणबद्ध तर्क और समस्या समाधान",
+        "everything": "Everything के माध्यम से Windows फ़ाइल खोज"
       },
+      "presetEnvTitle": "पर्यावरण चर",
+      "presetEnvDesc": {
+        "slackBotToken": "Slack Bot OAuth Token (xoxb-...)",
+        "slackTeamId": "Slack टीम/कार्यक्षेत्र ID (वैकल्पिक)",
+        "googleMapsApiKey": "Google Maps API कुंजी"
+      },
+      "presetAdd": "जोड़ें और कनेक्ट करें",
       "formMode": "फ़ॉर्म",
       "jsonMode": "JSON",
       "jsonPlaceholder": "JSON कॉन्फ़िग पेस्ट करें, जैसे:\n{\n  \"mcpServers\": {\n    \"name\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@.../server-xxx\"]\n    }\n  }\n}",
@@ -615,7 +628,18 @@
     "aboutMoraya": "Moraya के बारे में",
     "feedback": "प्रतिक्रिया",
     "settings": "सेटिंग्स...",
-    "versionInfo": "संस्करण जानकारी"
+    "versionInfo": "संस्करण जानकारी",
+    "workflow": "वर्कफ़्लो",
+    "seoOptimization": "SEO अनुकूलन",
+    "aiImageGeneration": "AI छवि निर्माण",
+    "publish": "प्रकाशित करें",
+    "mcpTools": "MCP उपकरण",
+    "noMCPTools": "कोई MCP उपकरण कनेक्ट नहीं है"
+  },
+  "contextMenu": {
+    "cut": "काटें",
+    "copy": "कॉपी करें",
+    "paste": "चिपकाएँ"
   },
   "search": {
     "findPlaceholder": "खोजें...",
@@ -826,7 +850,12 @@
     "progressPublishing": "अपलोड हो रहा है...",
     "progressRss": "RSS अपडेट हो रहा है...",
     "progressDone": "पूर्ण",
-    "progressFailed": "विफल"
+    "progressFailed": "विफल",
+    "enableSEO": "SEO अनुकूलन",
+    "enableSEOHint": "प्रकाशन से पहले शीर्षक, अंश, टैग और मेटा विवरण बनाएं",
+    "nextSEO": "अगला: SEO →",
+    "backToTargets": "वापस",
+    "seoNoProvider": "कोई AI प्रदाता कॉन्फ़िगर नहीं है। कृपया सेटिंग्स में AI प्रदाता कॉन्फ़िगर करें।"
   },
   "update": {
     "title": "संस्करण जानकारी",
@@ -908,6 +937,25 @@
       "search": "टेम्पलेट खोजें...",
       "back": "पीछे",
       "start": "शुरू करें"
+    },
+    "myTemplates": {
+      "name": "मेरे टेम्पलेट",
+      "desc": "आपके द्वारा आयातित या बनाए गए कस्टम टेम्पलेट"
+    },
+    "manage": {
+      "title": "टेम्पलेट प्रबंधित करें",
+      "import": "टेम्पलेट आयात करें",
+      "export": "टेम्पलेट निर्यात करें",
+      "manage": "टेम्पलेट प्रबंधित करें",
+      "delete": "हटाएं",
+      "deleteConfirm": "पुष्टि करें?",
+      "importSuccess": "{count} टेम्पलेट आयातित",
+      "exportSuccess": "टेम्पलेट सफलतापूर्वक निर्यात किए गए",
+      "noCustomTemplates": "अभी तक कोई कस्टम टेम्पलेट नहीं",
+      "sourceGlobal": "वैश्विक",
+      "sourceKb": "ज्ञानकोष",
+      "invalidFormat": "अमान्य टेम्पलेट प्रारूप",
+      "selectTemplates": "निर्यात के लिए टेम्पलेट चुनें"
     },
     "error": {
       "noDocument": "कृपया पहले कुछ सामग्री लिखें",
@@ -1409,5 +1457,9 @@
     "unsavedMsg": "\"{fileName}\" में सहेजे नहीं गए परिवर्तन हैं।",
     "save": "सहेजें",
     "discard": "छोड़ें"
+  },
+  "link": {
+    "open": "लिंक खोलें",
+    "remove": "लिंक हटाएं"
   }
 }

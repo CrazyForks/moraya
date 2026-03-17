@@ -225,7 +225,7 @@
     "saveAsKB": "ナレッジベースとして保存"
   },
   "ai": {
-    "title": "AI アシスタント",
+    "title": "AI",
     "rulesActive": "MORAYA.md ルール有効（{count} セクション）",
     "clearChat": "チャットをクリア",
     "unconfigured": "AI が設定されていません。",
@@ -399,8 +399,21 @@
         "filesystem": "ローカルファイルの読み取り、検索、管理",
         "fetch": "Web ページを取得して Markdown に変換",
         "git": "Git リポジトリの読み取りと検索",
-        "memory": "AI メモリ用の永続ナレッジグラフ"
+        "memory": "AI メモリ用の永続ナレッジグラフ",
+        "puppeteer": "ブラウザ自動化とウェブスクレイピング",
+        "sqlite": "SQLiteデータベースのクエリと管理",
+        "slack": "Slackチャンネルとメッセージの閲覧・検索",
+        "googleMaps": "ジオコーディング、ルート案内、場所検索",
+        "sequentialThinking": "段階的推論と問題解決",
+        "everything": "Everything によるWindowsファイル検索"
       },
+      "presetEnvTitle": "環境変数",
+      "presetEnvDesc": {
+        "slackBotToken": "Slack Bot OAuth Token (xoxb-...)",
+        "slackTeamId": "Slackチーム/ワークスペースID（任意）",
+        "googleMapsApiKey": "Google Maps APIキー"
+      },
+      "presetAdd": "追加して接続",
       "formMode": "フォーム",
       "jsonMode": "JSON",
       "jsonPlaceholder": "JSON 設定を貼り付けてください。例：\n{\n  \"mcpServers\": {\n    \"name\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@.../server-xxx\"]\n    }\n  }\n}",
@@ -615,7 +628,18 @@
     "aboutMoraya": "Moraya について",
     "feedback": "フィードバック",
     "settings": "設定...",
-    "versionInfo": "バージョン情報"
+    "versionInfo": "バージョン情報",
+    "workflow": "ワークフロー",
+    "seoOptimization": "SEO最適化",
+    "aiImageGeneration": "AI画像生成",
+    "publish": "公開",
+    "mcpTools": "MCPツール",
+    "noMCPTools": "接続されたMCPツールはありません"
+  },
+  "contextMenu": {
+    "cut": "切り取り",
+    "copy": "コピー",
+    "paste": "貼り付け"
   },
   "search": {
     "findPlaceholder": "検索...",
@@ -826,7 +850,12 @@
     "progressPublishing": "アップロード中...",
     "progressRss": "RSS 更新中...",
     "progressDone": "完了",
-    "progressFailed": "失敗"
+    "progressFailed": "失敗",
+    "enableSEO": "SEO最適化",
+    "enableSEOHint": "公開前にタイトル、抜粋、タグ、メタディスクリプションを生成",
+    "nextSEO": "次へ：SEO →",
+    "backToTargets": "戻る",
+    "seoNoProvider": "AIプロバイダーが設定されていません。設定でAIプロバイダーを構成してください。"
   },
   "update": {
     "title": "バージョン情報",
@@ -908,6 +937,25 @@
       "search": "テンプレートを検索...",
       "back": "戻る",
       "start": "開始"
+    },
+    "myTemplates": {
+      "name": "マイテンプレート",
+      "desc": "インポートまたは作成したカスタムテンプレート"
+    },
+    "manage": {
+      "title": "テンプレート管理",
+      "import": "テンプレートをインポート",
+      "export": "テンプレートをエクスポート",
+      "manage": "テンプレート管理",
+      "delete": "削除",
+      "deleteConfirm": "確認しますか？",
+      "importSuccess": "{count} 件のテンプレートをインポートしました",
+      "exportSuccess": "テンプレートのエクスポートに成功しました",
+      "noCustomTemplates": "カスタムテンプレートはまだありません",
+      "sourceGlobal": "グローバル",
+      "sourceKb": "ナレッジベース",
+      "invalidFormat": "無効なテンプレート形式",
+      "selectTemplates": "エクスポートするテンプレートを選択"
     },
     "error": {
       "noDocument": "まずコンテンツを書いてください",
@@ -1409,5 +1457,9 @@
     "unsavedMsg": "「{fileName}」には未保存の変更があります。",
     "save": "保存",
     "discard": "破棄"
+  },
+  "link": {
+    "open": "リンクを開く",
+    "remove": "リンクを削除"
   }
 }

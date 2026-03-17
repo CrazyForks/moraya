@@ -8,12 +8,16 @@
     content = $bindable(''),
     hideScrollbar = false,
     showOutline = false,
+    outlineWidth = 200,
     onContentChange,
+    onOutlineWidthChange,
   }: {
     content?: string;
     hideScrollbar?: boolean;
     showOutline?: boolean;
+    outlineWidth?: number;
     onContentChange?: (content: string) => void;
+    onOutlineWidthChange?: (width: number) => void;
   } = $props();
 
   let showLineNumbers = $state(false);
@@ -441,9 +445,9 @@
   });
 }}>
   {#if showOutline}
-    <OutlinePanel headings={outlineHeadings} activeId={activeHeadingId} onSelect={handleOutlineSelectSource} />
+    <OutlinePanel headings={outlineHeadings} activeId={activeHeadingId} width={outlineWidth} onSelect={handleOutlineSelectSource} onWidthChange={onOutlineWidthChange} />
   {/if}
-  <div class="source-editor-inner" style="max-width: {showOutline ? `${editorLineWidth + 200}px` : `${editorLineWidth}px`}">
+  <div class="source-editor-inner" style="max-width: {showOutline ? `${editorLineWidth + outlineWidth}px` : `${editorLineWidth}px`}">
     {#if showLineNumbers}
       <div class="line-numbers">
         {#each Array(lineCount) as _, i}

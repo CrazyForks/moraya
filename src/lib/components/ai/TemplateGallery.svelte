@@ -4,6 +4,8 @@
     getCategories,
     getTemplatesByCategory,
     getAllTemplates,
+    getTemplateName,
+    getTemplateDesc,
     type AITemplate,
     type AITemplateCategory,
   } from '$lib/services/ai';
@@ -18,14 +20,15 @@
   let selectedCategory = $state<AITemplateCategory | null>(null);
   let searchQuery = $state('');
 
-  const categories = getCategories();
+  // Reactive — recalculates when custom templates change
+  let categories = $derived(getCategories());
 
   let displayTemplates = $derived.by(() => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return getAllTemplates().filter(tpl => {
-        const name = $t(tpl.nameKey).toLowerCase();
-        const desc = $t(tpl.descKey).toLowerCase();
+        const name = getTemplateName(tpl, $t).toLowerCase();
+        const desc = getTemplateDesc(tpl, $t).toLowerCase();
         const tags = tpl.tags?.join(' ').toLowerCase() ?? '';
         return name.includes(q) || desc.includes(q) || tags.includes(q);
       });
@@ -100,8 +103,11 @@
           <button class="template-item" onclick={() => onSelectTemplate(tpl)}>
             <span class="tpl-icon">{tpl.icon}</span>
             <div class="tpl-info">
-              <span class="tpl-name">{$t(tpl.nameKey)}</span>
-              <span class="tpl-desc">{$t(tpl.descKey)}</span>
+              <span class="tpl-name">{getTemplateName(tpl, $t)}</span>
+              <span class="tpl-desc">{getTemplateDesc(tpl, $t)}</span>
+              {#if tpl.source}
+                <span class="tpl-source">{tpl.source === 'kb' ? 'KB' : 'Global'}</span>
+              {/if}
             </div>
             <span class="tpl-arrow">
               <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
@@ -291,6 +297,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .tpl-source {
+    font-size: 9px;
+    color: var(--accent-color);
+    background: var(--bg-hover);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    width: fit-content;
   }
 
   .tpl-arrow {

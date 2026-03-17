@@ -48,6 +48,18 @@
     "dialog:allow-message",
     "store:default",
     "opener:default",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "$DESKTOP/**" },
+        { "path": "$DOCUMENT/**" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$HOME/.moraya/**" },
+        { "path": "/Volumes/**" },
+        { "path": "/media/**" },
+        { "path": "/mnt/**" }
+      ]
+    },
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
     {

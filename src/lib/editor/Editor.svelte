@@ -43,6 +43,7 @@
   import { filesStore } from '$lib/stores/files-store';
   import type { InstalledPlugin } from '$lib/services/plugin/types';
   import PluginContextMenu from './PluginContextMenu.svelte';
+  import EditorContextMenu from './EditorContextMenu.svelte';
 
   /** Stored frontmatter block (including `---` fences and trailing newline) */
   let storedFrontmatter = '';
@@ -54,15 +55,25 @@
   let {
     content = $bindable(''),
     showOutline = false,
+    outlineWidth = 200,
     onEditorReady,
     onContentChange,
     onNotify,
+    onOutlineWidthChange,
+    onWorkflowSEO,
+    onWorkflowImageGen,
+    onWorkflowPublish,
   }: {
     content?: string;
     showOutline?: boolean;
+    outlineWidth?: number;
     onEditorReady?: (editor: MorayaEditor) => void;
     onContentChange?: (content: string) => void;
     onNotify?: (text: string, type: 'success' | 'error') => void;
+    onOutlineWidthChange?: (width: number) => void;
+    onWorkflowSEO?: () => void;
+    onWorkflowImageGen?: () => void;
+    onWorkflowPublish?: () => void;
   } = $props();
 
   let editorLineWidth = $state(settingsStore.getState().editorLineWidth);
@@ -167,6 +178,7 @@
   let lastSyncedMd = ''; // tracks last markdown synced to editor to avoid redundant getMarkdown()
   let tableToolbarRaf: number | undefined; // RAF throttle for table toolbar updates
   let syncGeneration = 0; // Incremented on each syncContent call; stale async callbacks bail out
+  let focusRetryInterval: ReturnType<typeof setInterval> | undefined; // interval for new-window focus retries
 
   // References for event listener cleanup in onDestroy
   let mountedEditorEl: HTMLDivElement | null = null;
@@ -278,6 +290,10 @@
   let showPluginMenu = $state(false);
   let pluginMenuPosition = $state({ top: 0, left: 0 });
   let pluginMenuPlugins = $state<InstalledPlugin[]>([]);
+
+  // Editor context menu (workflow items + clipboard)
+  let showEditorContextMenu = $state(false);
+  let editorContextMenuPosition = $state({ top: 0, left: 0 });
   let pluginInvokingId = $state<string | null>(null);
 
   // Image click toolbar state
@@ -285,6 +301,7 @@
   let imageToolbarPosition = $state({ top: 0, left: 0 });
   let imageToolbarCurrentWidth = $state('');
   let imageToolbarTargetPos = $state<number | null>(null);
+
 
   // Cache for isInsideTable check — avoids redundant depth traversal when
   // cursor position hasn't changed between consecutive keyup/click events.
@@ -298,9 +315,9 @@
       const { from } = view.state.selection;
       if (from === cachedSelFrom) return cachedInTable;
       cachedSelFrom = from;
-      const resolvedFrom = view.state.selection.$from;
-      for (let d = resolvedFrom.depth; d > 0; d--) {
-        const name = resolvedFrom.node(d).type.name;
+      const sf = view.state.selection.$from;
+      for (let d = sf.depth; d > 0; d--) {
+        const name = sf.node(d).type.name;
         if (name === 'table_cell' || name === 'table_header') {
           cachedInTable = true;
           return true;
@@ -318,10 +335,10 @@
     if (!editor) return null;
     try {
       const view = editor.view;
-      const selFrom = view.state.selection.$from;
-      for (let d = selFrom.depth; d > 0; d--) {
-        if (selFrom.node(d).type.name === 'table') {
-          const tableNode = selFrom.node(d);
+      const selF = view.state.selection.$from;
+      for (let d = selF.depth; d > 0; d--) {
+        if (selF.node(d).type.name === 'table') {
+          const tableNode = selF.node(d);
           const tempDoc = schema.node('doc', null, [tableNode]);
           return serializeMarkdown(tempDoc).trim();
         }
@@ -459,21 +476,21 @@
     if (!editor) return;
     try {
       const view = editor.view;
-      const resolvedFrom = view.state.selection.$from;
+      const rFrom = view.state.selection.$from;
 
       // Find current column index and table boundaries
       let colIndex = -1;
       let tableStart = -1;
       let tableEnd = -1;
 
-      for (let d = resolvedFrom.depth; d > 0; d--) {
-        const node = resolvedFrom.node(d);
+      for (let d = rFrom.depth; d > 0; d--) {
+        const node = rFrom.node(d);
         if (node.type.name === 'table_cell' || node.type.name === 'table_header') {
-          colIndex = resolvedFrom.index(d - 1);
+          colIndex = rFrom.index(d - 1);
         }
         if (node.type.name === 'table') {
-          tableStart = resolvedFrom.before(d);
-          tableEnd = resolvedFrom.after(d);
+          tableStart = rFrom.before(d);
+          tableEnd = rFrom.after(d);
           break;
         }
       }
@@ -738,17 +755,11 @@
 
     // Image right-click — handled below
     if (target.tagName !== 'IMG') {
-      // Gap 4: general editor right-click — show plugin context menu
-      const running = get(pluginStore).installed.filter(
-        p => p.enabled && p.processState === 'running'
-      );
-      if (running.length > 0) {
-        event.preventDefault();
-        event.stopPropagation();
-        pluginMenuPosition = { top: event.clientY, left: event.clientX };
-        pluginMenuPlugins = running;
-        showPluginMenu = true;
-      }
+      // Show editor context menu (clipboard + workflow items)
+      event.preventDefault();
+      event.stopPropagation();
+      editorContextMenuPosition = { top: event.clientY, left: event.clientX };
+      showEditorContextMenu = true;
       return;
     }
 
@@ -1047,6 +1058,7 @@
     event.stopPropagation();
   }
 
+
   /** Handle left-click on images to show floating resize toolbar */
   function handleImageClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
@@ -1245,51 +1257,46 @@
       if (!editor) return;
 
       // 1. Restore cursor position (source offset → ProseMirror position)
+      // Uses binary search with doc.cut + serialize + common-prefix comparison.
+      // This is the inverse of the visual→source approach: find the PM position
+      // whose serialized-cut-doc common prefix length matches the target markdown offset.
       try {
         const view = editor.view;
         const doc = view.state.doc;
         const docSize = doc.content.size;
-        let pmPos: number | null = null;
+        const fmLen = storedFrontmatter.length;
+        const targetMdPos = savedOffset - fmLen;
+        const fullMd = content.slice(fmLen);
+        let pmPos: number;
 
-        // Strategy: suffix-match the markdown text around the cursor in the
-        // ProseMirror document's text content, then binary-search for the
-        // corresponding ProseMirror position.
-        const pmText = doc.textBetween(0, docSize, '\n', '');
-        const beforeCursor = content.slice(0, savedOffset);
-        const approxFraction = content.length > 0 ? savedOffset / content.length : 0;
-        const approxTextIdx = Math.floor(approxFraction * pmText.length);
+        if (targetMdPos <= 0) {
+          pmPos = 1;
+        } else if (targetMdPos >= fullMd.length) {
+          pmPos = Math.max(1, docSize - 1);
+        } else {
+          // Helper: compute markdown offset for a given PM position
+          const mdOffsetAt = (p: number): number => {
+            try {
+              const cutMd = serializeMarkdown(doc.cut(0, p)).replace(/\n+$/, '');
+              let cl = 0;
+              const ml = Math.min(cutMd.length, fullMd.length);
+              while (cl < ml && cutMd[cl] === fullMd[cl]) cl++;
+              return cl;
+            } catch { return 0; }
+          };
 
-        for (const suffLen of [30, 20, 10, 5, 3]) {
-          if (beforeCursor.length < suffLen) continue;
-          const suffix = beforeCursor.slice(-suffLen);
-          if (!suffix.trim()) continue;
-          // Search near the estimated position to avoid false matches
-          const searchFrom = Math.max(0, approxTextIdx - suffLen * 5);
-          const idx = pmText.indexOf(suffix, searchFrom);
-          if (idx !== -1) {
-            // Binary search: smallest pmPos where textBetween length >= target
-            const target = idx + suffLen;
-            let lo = 1, hi = docSize;
-            while (lo < hi) {
-              const mid = (lo + hi) >> 1;
-              try {
-                if (doc.textBetween(0, mid, '\n', '').length < target) lo = mid + 1;
-                else hi = mid;
-              } catch { lo = mid + 1; }
-            }
-            pmPos = Math.max(1, Math.min(lo, docSize - 1));
-            break;
+          // Binary search: find smallest PM position where mdOffset >= targetMdPos
+          let lo = 1, hi = docSize;
+          while (lo < hi) {
+            const mid = (lo + hi) >> 1;
+            if (mdOffsetAt(mid) < targetMdPos) lo = mid + 1;
+            else hi = mid;
           }
-        }
-
-        // Fallback: fraction-based approximation
-        if (pmPos === null) {
-          pmPos = Math.max(1, Math.min(Math.round(approxFraction * docSize), Math.max(1, docSize - 1)));
+          pmPos = Math.max(1, Math.min(lo, docSize - 1));
         }
 
         const resolved = doc.resolve(pmPos);
         const sel = TextSelection.near(resolved);
-        // Don't use scrollIntoView — we restore scroll position separately
         view.dispatch(view.state.tr.setSelection(sel));
         view.focus();
       } catch {
@@ -1307,6 +1314,20 @@
           wrapper.scrollTop = Math.round(savedScrollFraction * maxScroll);
         }
       }
+
+      // 3. Retry focus for new windows: WKWebView may not be ready on the
+      // first attempt (contenteditable needs layout before it accepts focus).
+      // Use an interval that retries every 100ms for up to 1.5s, then stops.
+      let focusRetries = 0;
+      if (focusRetryInterval) clearInterval(focusRetryInterval);
+      focusRetryInterval = setInterval(() => {
+        if (!editor || focusRetries >= 15) { clearInterval(focusRetryInterval!); focusRetryInterval = undefined; return; }
+        try {
+          if (editor.view.hasFocus()) { clearInterval(focusRetryInterval!); focusRetryInterval = undefined; return; }
+          editor.view.focus();
+        } catch { /* editor may have been destroyed */ clearInterval(focusRetryInterval!); focusRetryInterval = undefined; }
+        focusRetries++;
+      }, 100);
     });
 
     // ── Fast AllSelection deletion ──────────────────────────────────
@@ -1331,6 +1352,16 @@
             const tr = view.state.tr.replaceWith(0, docSize, emptyParagraph);
             tr.setSelection(TextSelection.create(tr.doc, 1));
             view.dispatch(tr);
+            // Reset scroll position — content is now empty but the wrapper
+            // may still have scrollTop from the previous content, keeping the
+            // scrollbar visible even though there's nothing to scroll.
+            const wrapper = editorEl?.closest('.editor-wrapper') as HTMLElement | null;
+            if (wrapper) wrapper.scrollTop = 0;
+            // WKWebView may lose the native caret after bulk deletion.
+            // Re-focus to ensure the CSS fake caret appears.
+            requestAnimationFrame(() => {
+              try { if (editor && !editor.view.hasFocus()) editor.view.focus(); } catch {}
+            });
           }
         } catch {
           // Ignore errors
@@ -1928,6 +1959,7 @@
     isMounted = false; // Signal async callbacks to stop
     if (syncResetTimer) clearTimeout(syncResetTimer);
     if (externalSyncTimer) clearTimeout(externalSyncTimer);
+    if (focusRetryInterval) clearInterval(focusRetryInterval);
     if (tableToolbarRaf) cancelAnimationFrame(tableToolbarRaf); // legacy guard, noop
     if (hoverRaf) cancelAnimationFrame(hoverRaf);
     if (outlineTimer) clearTimeout(outlineTimer);
@@ -1977,40 +2009,54 @@
         }
       }
 
-      // Save cursor position using text-content matching (fraction-based is inaccurate
-      // because ProseMirror positions include node boundary tokens that inflate docSize)
+      // Save cursor position using doc.cut + common-prefix comparison.
+      // Serialize the doc up to the cursor, then find the longest common prefix
+      // between that output and the full markdown. This correctly handles all
+      // inline syntax (marks like **bold**, atoms like $math$, raw HTML, etc.)
+      // because both strings go through the same serializer.
       try {
         const view = editor.view;
         const { from } = view.state.selection;
         const doc = view.state.doc;
-        // Get plain text before the cursor (no separator — pure text content)
-        const textBefore = doc.textBetween(0, from, '\n', '');
-        // Find where this text ends in the markdown string by searching from an approximate
-        // position backwards. Use a suffix search: try progressively shorter suffixes until
-        // we find a match, then return the end position of the first match.
-        const approxFraction = doc.content.size > 0 ? from / doc.content.size : 0;
-        const approxPos = Math.floor(approxFraction * flushContent.length);
-        // Try suffix lengths: 20 chars, 10 chars, 5 chars, 1 char, fallback to 0
-        const suffixLengths = [20, 10, 5, 1];
-        let found = false;
-        for (const suffLen of suffixLengths) {
-          if (textBefore.length < suffLen) continue;
-          const suffix = textBefore.slice(-suffLen);
-          // Search forward from approxPos - suffix length context
-          const searchFrom = Math.max(0, approxPos - suffLen * 3);
-          const idx = flushContent.indexOf(suffix, searchFrom);
-          if (idx !== -1) {
-            cursorOffset = idx + suffix.length;
-            found = true;
-            break;
+        const fmLen = storedFrontmatter.length;
+
+        if (from <= 0) {
+          cursorOffset = fmLen;
+        } else {
+          const resolvedFrom = doc.resolve(from);
+          const isBlockBoundary = !resolvedFrom.parent.isTextblock;
+
+          // Serialize the doc content before the cursor
+          const cutDoc = doc.cut(0, from);
+          const cutMd = serializeMarkdown(cutDoc).replace(/\n+$/, '');
+
+          // The cut serialization may include extra closing syntax added by the
+          // serializer (e.g., closing **bold**, closing ```, closing $$).
+          // Find the longest common prefix with the full markdown body to get the
+          // exact cursor position — divergence point = where the closing syntax starts.
+          const fullMd = flushContent.slice(fmLen);
+          let commonLen = 0;
+          const maxLen = Math.min(cutMd.length, fullMd.length);
+          while (commonLen < maxLen && cutMd[commonLen] === fullMd[commonLen]) {
+            commonLen++;
+          }
+
+          cursorOffset = fmLen + commonLen;
+
+          // For block boundaries (cursor between blocks, e.g., NodeSelection on
+          // an atom block), advance past inter-block newlines to the next block start
+          if (isBlockBoundary && resolvedFrom.nodeAfter) {
+            while (cursorOffset < flushContent.length && flushContent[cursorOffset] === '\n') {
+              cursorOffset++;
+            }
           }
         }
-        if (!found) {
-          // Fallback: use fraction-based approximation
-          cursorOffset = approxPos;
-        }
       } catch {
-        // Ignore errors during position save
+        // Fallback: fraction-based approximation
+        const fmLen = storedFrontmatter.length;
+        const mdLen = flushContent.length - fmLen;
+        const approxFraction = editor ? editor.view.state.selection.from / Math.max(1, editor.view.state.doc.content.size) : 0;
+        cursorOffset = fmLen + Math.floor(approxFraction * mdLen);
       }
 
       // Save scroll fraction for cross-mode restore
@@ -2033,10 +2079,14 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="editor-wrapper" class:ready={isReady} class:has-outline={showOutline} onclick={(e) => {
-  // Click on empty area → focus editor and place cursor at end
-  if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('editor-root') || (e.target as HTMLElement).classList.contains('editor-content-area')) {
+  // Click on empty area or empty ProseMirror content → focus editor
+  const target = e.target as HTMLElement;
+  if (target === e.currentTarget || target.classList.contains('editor-root') || target.classList.contains('editor-content-area')) {
     const pm = editorEl?.querySelector('.ProseMirror') as HTMLElement | null;
     if (pm) pm.focus();
+  } else if (editor && !editor.view.hasFocus()) {
+    // WKWebView may fail to focus contenteditable on click in empty docs
+    editor.view.focus();
   }
 }} onscroll={() => {
   if (!showOutline) return;
@@ -2046,13 +2096,36 @@
     updateActiveHeading();
   });
 }}>
-  <div class="editor-content-area" style="max-width: {showOutline ? `${editorLineWidth + 200}px` : `${editorLineWidth}px`}">
+  <div class="editor-content-area" style="max-width: {showOutline ? `${editorLineWidth + outlineWidth}px` : `${editorLineWidth}px`}">
     {#if showOutline}
-      <OutlinePanel headings={outlineHeadings} activeId={activeHeadingId} onSelect={handleOutlineSelect} />
+      <OutlinePanel headings={outlineHeadings} activeId={activeHeadingId} width={outlineWidth} onSelect={handleOutlineSelect} onWidthChange={onOutlineWidthChange} />
     {/if}
     <div bind:this={editorEl} class="editor-root"></div>
   </div>
 </div>
+
+{#if showEditorContextMenu}
+  <EditorContextMenu
+    position={editorContextMenuPosition}
+    onCut={() => { document.execCommand('cut'); }}
+    onCopy={() => { document.execCommand('copy'); }}
+    onPaste={async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        editor?.view.dispatch(
+          editor.view.state.tr.replaceSelectionWith(
+            schema.text(text),
+            true
+          )
+        );
+      } catch { /* clipboard permission denied */ }
+    }}
+    onSEO={() => { onWorkflowSEO?.(); }}
+    onImageGen={() => { onWorkflowImageGen?.(); }}
+    onPublish={() => { onWorkflowPublish?.(); }}
+    onClose={() => showEditorContextMenu = false}
+  />
+{/if}
 
 {#if showPluginMenu}
   <PluginContextMenu
@@ -2116,6 +2189,7 @@
     onCancel={() => showAltEditor = false}
   />
 {/if}
+
 
 <style>
   .editor-wrapper {

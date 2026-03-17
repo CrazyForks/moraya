@@ -10,6 +10,8 @@ export interface TabItem {
   cursorOffset: number;
   scrollFraction: number;
   lastMtime: number | null;
+  /** When true, the tab displays an image preview instead of the editor. */
+  isImage?: boolean;
 }
 
 interface TabsState {
@@ -42,6 +44,10 @@ function createTabsStore() {
 
   /** Save current editor state into the active tab */
   function syncFromEditor() {
+    const s = get({ subscribe });
+    const activeTab = s.tabs.find(t => t.id === s.activeTabId);
+    // Image tabs have no editor state to sync
+    if (activeTab?.isImage) return;
     const edState = editorStore.getState();
     update(state => ({
       ...state,
@@ -61,8 +67,10 @@ function createTabsStore() {
   }
 
   /** Restore a tab's state into the editor.
-   *  Uses batchRestore for a single store notification instead of 5 separate updates. */
+   *  Uses batchRestore for a single store notification instead of 5 separate updates.
+   *  Image tabs have no editor state — skip. */
   function syncToEditor(tab: TabItem) {
+    if (tab.isImage) return;
     editorStore.batchRestore({
       filePath: tab.filePath,
       content: tab.content,
@@ -113,8 +121,9 @@ function createTabsStore() {
 
     /** Open a file in a new tab or switch to existing tab if already open.
      *  When skipSync is true, skip syncFromEditor() — caller has already synced
-     *  or editorStore has been modified by loadFile()/openFile() before this call. */
-    openFileTab(filePath: string, fileName: string, content: string, mtime?: number | null, skipSync = false): string {
+     *  or editorStore has been modified by loadFile()/openFile() before this call.
+     *  When isImage is true, the tab renders an image preview instead of the editor. */
+    openFileTab(filePath: string, fileName: string, content: string, mtime?: number | null, skipSync = false, isImage = false): string {
       const state = get({ subscribe });
       // Check if file is already open in a tab
       const existing = state.tabs.find(t => t.filePath === filePath);
@@ -136,6 +145,7 @@ function createTabsStore() {
         cursorOffset: 0,
         scrollFraction: 0,
         lastMtime: mtime ?? null,
+        isImage,
       };
       update(s => ({
         tabs: [...s.tabs, newTab],

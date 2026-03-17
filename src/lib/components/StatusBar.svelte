@@ -5,7 +5,6 @@
   import { isMacOS, isIPadOS } from '$lib/utils/platform';
 
   let {
-    onPublishWorkflow,
     onShowUpdateDialog,
     onToggleAI,
     onModeChange,
@@ -18,8 +17,8 @@
     searchMatchCount = 0,
     searchCurrentMatch = 0,
     searchRegexError = '',
+    hideModeSwitcher = false,
   }: {
-    onPublishWorkflow?: () => void;
     onShowUpdateDialog?: () => void;
     onToggleAI?: () => void;
     onModeChange?: (mode: EditorMode) => void;
@@ -32,6 +31,7 @@
     searchMatchCount?: number;
     searchCurrentMatch?: number;
     searchRegexError?: string;
+    hideModeSwitcher?: boolean;
   } = $props();
 
   const aiShortcutHint = isMacOS || isIPadOS ? '⇧⌘I' : 'Ctrl+Shift+I';
@@ -84,31 +84,26 @@
     {/if}
   </div>
   <div class="statusbar-right">
-    <div class="mode-switcher">
-      {#each modes as mode}
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <span
-          class="mode-btn"
-          class:active={currentMode === mode}
-          onclick={() => {
-            if (onModeChange) {
-              onModeChange(mode);
-            } else {
-              editorStore.setEditorMode(mode);
-            }
-          }}
-        >
-          {$t(getModeLabel(mode))}
-        </span>
-      {/each}
-    </div>
-    {#if onPublishWorkflow}
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <span class="publish-btn" onclick={onPublishWorkflow}>
-        {$t('statusbar.publishWorkflow')}
-      </span>
+    {#if !hideModeSwitcher}
+      <div class="mode-switcher">
+        {#each modes as mode}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <span
+            class="mode-btn"
+            class:active={currentMode === mode}
+            onclick={() => {
+              if (onModeChange) {
+                onModeChange(mode);
+              } else {
+                editorStore.setEditorMode(mode);
+              }
+            }}
+          >
+            {$t(getModeLabel(mode))}
+          </span>
+        {/each}
+      </div>
     {/if}
     {#if updateAvailable && onShowUpdateDialog}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -199,21 +194,6 @@
     color: white;
   }
 
-  .publish-btn {
-    padding: 0.1rem 0.4rem;
-    cursor: pointer;
-    border: 1px solid var(--border-light);
-    border-radius: 3px;
-    color: var(--text-muted);
-    font-size: var(--font-size-xs);
-    transition: background var(--transition-fast), color var(--transition-fast);
-  }
-
-  .publish-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-secondary);
-  }
-
   .update-indicator {
     cursor: pointer;
     font-size: 12px;
@@ -291,14 +271,6 @@
     justify-content: center;
     padding: 0 0.6rem;
     height: 100%;
-  }
-
-  :global(.platform-ipados) .publish-btn {
-    display: flex;
-    align-items: center;
-    padding: 0 0.6rem;
-    height: 28px;
-    border-radius: 5px;
   }
 
   :global(.platform-ipados) .ai-sparkle svg {

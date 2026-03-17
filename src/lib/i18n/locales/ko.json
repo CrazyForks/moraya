@@ -225,7 +225,7 @@
     "saveAsKB": "지식 베이스로 저장"
   },
   "ai": {
-    "title": "AI 어시스턴트",
+    "title": "AI",
     "rulesActive": "MORAYA.md 규칙 활성화 ({count}개 섹션)",
     "clearChat": "대화 지우기",
     "unconfigured": "AI가 구성되지 않았습니다.",
@@ -399,8 +399,21 @@
         "filesystem": "로컬 파일 읽기, 검색 및 관리",
         "fetch": "웹 페이지를 가져와 Markdown으로 변환",
         "git": "Git 저장소 읽기 및 검색",
-        "memory": "AI 메모리용 영구 지식 그래프"
+        "memory": "AI 메모리용 영구 지식 그래프",
+        "puppeteer": "브라우저 자동화 및 웹 스크래핑",
+        "sqlite": "SQLite 데이터베이스 쿼리 및 관리",
+        "slack": "Slack 채널 및 메시지 읽기/검색",
+        "googleMaps": "지오코딩, 경로 안내 및 장소 검색",
+        "sequentialThinking": "단계별 추론 및 문제 해결",
+        "everything": "Everything을 통한 Windows 파일 검색"
       },
+      "presetEnvTitle": "환경 변수",
+      "presetEnvDesc": {
+        "slackBotToken": "Slack Bot OAuth Token (xoxb-...)",
+        "slackTeamId": "Slack 팀/워크스페이스 ID (선택 사항)",
+        "googleMapsApiKey": "Google Maps API 키"
+      },
+      "presetAdd": "추가 및 연결",
       "formMode": "양식",
       "jsonMode": "JSON",
       "jsonPlaceholder": "JSON 구성을 붙여넣으세요. 예:\n{\n  \"mcpServers\": {\n    \"이름\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@.../server-xxx\"]\n    }\n  }\n}",
@@ -615,7 +628,18 @@
     "aboutMoraya": "Moraya 정보",
     "feedback": "피드백",
     "settings": "설정...",
-    "versionInfo": "버전 정보"
+    "versionInfo": "버전 정보",
+    "workflow": "워크플로",
+    "seoOptimization": "SEO 최적화",
+    "aiImageGeneration": "AI 이미지 생성",
+    "publish": "게시",
+    "mcpTools": "MCP 도구",
+    "noMCPTools": "연결된 MCP 도구 없음"
+  },
+  "contextMenu": {
+    "cut": "잘라내기",
+    "copy": "복사",
+    "paste": "붙여넣기"
   },
   "search": {
     "findPlaceholder": "찾기...",
@@ -826,7 +850,12 @@
     "progressPublishing": "업로드 중...",
     "progressRss": "RSS 업데이트 중...",
     "progressDone": "완료",
-    "progressFailed": "실패"
+    "progressFailed": "실패",
+    "enableSEO": "SEO 최적화",
+    "enableSEOHint": "게시 전 제목, 발췌, 태그 및 메타 설명 생성",
+    "nextSEO": "다음: SEO →",
+    "backToTargets": "뒤로",
+    "seoNoProvider": "AI 제공업체가 구성되지 않았습니다. 설정에서 AI 제공업체를 구성하세요."
   },
   "update": {
     "title": "버전 정보",
@@ -908,6 +937,25 @@
       "search": "템플릿 검색...",
       "back": "뒤로",
       "start": "시작"
+    },
+    "myTemplates": {
+      "name": "내 템플릿",
+      "desc": "가져오거나 직접 만든 사용자 정의 템플릿"
+    },
+    "manage": {
+      "title": "템플릿 관리",
+      "import": "템플릿 가져오기",
+      "export": "템플릿 내보내기",
+      "manage": "템플릿 관리",
+      "delete": "삭제",
+      "deleteConfirm": "확인하시겠습니까?",
+      "importSuccess": "{count}개 템플릿 가져옴",
+      "exportSuccess": "템플릿이 성공적으로 내보내졌습니다",
+      "noCustomTemplates": "아직 사용자 정의 템플릿이 없습니다",
+      "sourceGlobal": "전역",
+      "sourceKb": "지식베이스",
+      "invalidFormat": "잘못된 템플릿 형식",
+      "selectTemplates": "내보낼 템플릿을 선택하세요"
     },
     "error": {
       "noDocument": "먼저 내용을 작성해 주세요",
@@ -1409,5 +1457,9 @@
     "unsavedMsg": "\"{fileName}\"에 저장되지 않은 변경사항이 있습니다.",
     "save": "저장",
     "discard": "삭제"
+  },
+  "link": {
+    "open": "링크 열기",
+    "remove": "링크 제거"
   }
 }

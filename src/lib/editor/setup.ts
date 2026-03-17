@@ -6,8 +6,8 @@
  * parsing/serialization.
  */
 
-import { EditorState, Plugin, PluginKey, TextSelection } from 'prosemirror-state';
-import { EditorView } from 'prosemirror-view';
+import { EditorState, Plugin, PluginKey, Selection, TextSelection, NodeSelection } from 'prosemirror-state';
+import { EditorView, Decoration, DecorationSet } from 'prosemirror-view';
 import { keymap } from 'prosemirror-keymap';
 import { history } from 'prosemirror-history';
 import { baseKeymap, toggleMark, setBlockType, joinForward } from 'prosemirror-commands';
@@ -24,6 +24,7 @@ import { parseMarkdown, serializeMarkdown } from './markdown';
 import { createEnterHandlerPlugin } from './plugins/enter-handler';
 import { createEditorPropsPlugin } from './plugins/editor-props-plugin';
 import { createCursorSyntaxPlugin } from './plugins/cursor-syntax';
+import { createLinkTextPlugin } from './plugins/link-text-plugin';
 
 // ── Tier 1: Enhancement plugins (dynamic imports, loaded in parallel) ──
 
@@ -67,6 +68,31 @@ export function preloadEnhancementPlugins(): Promise<Tier1Plugins> {
   });
 
   return tier1Loading;
+}
+
+// ── Image Selection Highlight ───────────────────────────────────
+// When a range selection covers image nodes, add a decoration class
+// so CSS can show a blue overlay (images don't get browser text-selection highlight).
+
+function createImageSelectionPlugin(): Plugin {
+  return new Plugin({
+    key: new PluginKey('image-selection'),
+    props: {
+      decorations(state) {
+        const { from, to } = state.selection;
+        if (from === to) return DecorationSet.empty; // cursor, no range
+        const decos: Decoration[] = [];
+        state.doc.nodesBetween(from, to, (node, pos) => {
+          if (node.type.name === 'image') {
+            decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'image-in-selection' }));
+          } else if (node.type.name === 'html_inline' && /^<img\s/i.test(node.attrs.value as string)) {
+            decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'image-in-selection' }));
+          }
+        });
+        return decos.length ? DecorationSet.create(state.doc, decos) : DecorationSet.empty;
+      },
+    },
+  });
 }
 
 // ── Input Rules ─────────────────────────────────────────────────
@@ -214,6 +240,18 @@ function buildInputRules(tier1: Tier1Plugins) {
     },
   ));
 
+  // Link: [text](url) — typed in visual mode becomes a proper link mark.
+  // This prevents the serializer from escaping brackets (issue: []() → \[\]()).
+  rules.push(new InputRule(
+    /\[([^\]]+)\]\(([^)]+)\)$/,
+    (state, match, start, end) => {
+      const [, text, url] = match;
+      if (!text || !url) return null;
+      const linkMark = schema.marks.link.create({ href: url });
+      return state.tr.replaceWith(start, end, schema.text(text, [linkMark]));
+    },
+  ));
+
   // Definition list input rule
   if (tier1.defListInputRule) {
     rules.push(tier1.defListInputRule);
@@ -285,32 +323,114 @@ function buildKeymap() {
       return true;
     },
 
-    // Backspace: when cursor is at the end of a paragraph right after an
-    // atom node (image / html_inline) and a next block exists, join forward
-    // (merge with next paragraph) instead of deleting the atom.
-    // This gives the user a chance to remove the paragraph break first,
-    // then delete the image with a second backspace.
+    // Backspace: protect block atom nodes (math_block, etc.) from deletion.
+    //
+    // WebKit contenteditable bug: when the caret is at the end of a textblock
+    // adjacent to a contenteditable="false" block (atom node), the browser's
+    // native Backspace deletes that block instead of the previous character.
+    // All ProseMirror built-in handlers return false for this position, so
+    // native behavior runs unchecked. We must handle it ourselves.
     'Backspace': (state, dispatch) => {
       const sel = state.selection;
+
+      // Case 1: NodeSelection on a block atom (via arrow keys) — move cursor
+      // to nearest previous text position instead of deleting the atom.
+      if (sel instanceof NodeSelection && sel.node.isBlock && sel.node.type.spec.atom) {
+        const before = Selection.findFrom(state.doc.resolve(sel.from), -1, true);
+        if (before && dispatch) {
+          dispatch(state.tr.setSelection(before).scrollIntoView());
+        }
+        return true;
+      }
+
+      // Remaining cases need an empty TextSelection with a cursor
       if (!sel.empty || !(sel instanceof TextSelection)) return false;
       const $cursor = sel.$cursor;
       if (!$cursor) return false;
-
       const { parent, parentOffset } = $cursor;
+
+      // Case 2: Cursor at END of a textblock, next sibling is a block atom.
+      // This is the main WebKit bug fix: delete the previous character via
+      // ProseMirror transaction instead of letting native Backspace run.
+      if (parent.isTextblock && parentOffset === parent.content.size && parent.content.size > 0) {
+        const afterPos = $cursor.after();
+        if (afterPos < state.doc.content.size) {
+          const nextNode = state.doc.resolve(afterPos).nodeAfter;
+          if (nextNode && nextNode.isBlock && nextNode.type.spec.atom) {
+            if (dispatch) {
+              const before = $cursor.nodeBefore;
+              if (before) {
+                // Text node → delete 1 char; inline atom → delete entire node
+                const delSize = before.isText ? 1 : before.nodeSize;
+                dispatch(state.tr.delete(sel.from - delSize, sel.from).scrollIntoView());
+              }
+            }
+            return true;
+          }
+        }
+      }
+
+      // Case 3: Cursor at START of a textblock, previous sibling is a block atom.
+      // Move cursor to nearest text position before the atom instead of
+      // letting selectNodeBackward select-then-delete the atom.
+      if (parent.isTextblock && parentOffset === 0) {
+        const beforePos = $cursor.before();
+        if (beforePos > 0) {
+          const prevNode = state.doc.resolve(beforePos).nodeBefore;
+          if (prevNode && prevNode.isBlock && prevNode.type.spec.atom) {
+            const target = Selection.findFrom(
+              state.doc.resolve(beforePos - prevNode.nodeSize), -1, true
+            );
+            if (target && dispatch) {
+              dispatch(state.tr.setSelection(target).scrollIntoView());
+            }
+            return true;
+          }
+        }
+      }
+
+      // Case 4: End of paragraph after an inline atom — join forward
       if (parent.type.name !== 'paragraph') return false;
-      // Must be at the end of the paragraph
       if (parentOffset !== parent.content.size) return false;
-      // Node before cursor must be an atom (image, html_inline)
       const nodeBefore = $cursor.nodeBefore;
       if (!nodeBefore || !nodeBefore.isAtom) return false;
-      // There must be a next sibling block to join with
-      const afterPos = $cursor.after();
-      if (afterPos >= state.doc.content.size) return false;
-      const nextNode = state.doc.resolve(afterPos).nodeAfter;
-      if (!nextNode || !nextNode.isBlock) return false;
-
-      // Join forward: merge next block into current paragraph
+      const afterPos2 = $cursor.after();
+      if (afterPos2 >= state.doc.content.size) return false;
+      const nextNode2 = state.doc.resolve(afterPos2).nodeAfter;
+      if (!nextNode2 || !nextNode2.isBlock) return false;
       return joinForward(state, dispatch);
+    },
+
+    // Delete: protect block atom nodes from deletion.
+    // Same WebKit bug applies: native Delete at start of textblock before
+    // a contenteditable="false" block can remove it.
+    'Delete': (state, dispatch) => {
+      const sel = state.selection;
+
+      // NodeSelection on block atom → move to next text position
+      if (sel instanceof NodeSelection && sel.node.isBlock && sel.node.type.spec.atom) {
+        const after = Selection.findFrom(state.doc.resolve(sel.to), 1, true);
+        if (after && dispatch) {
+          dispatch(state.tr.setSelection(after).scrollIntoView());
+        }
+        return true;
+      }
+
+      // TextSelection at end of textblock, next sibling is block atom → consume
+      if (sel.empty && sel instanceof TextSelection && sel.$cursor) {
+        const $c = sel.$cursor;
+        if ($c.parent.isTextblock && $c.parentOffset === $c.parent.content.size) {
+          const ap = $c.after();
+          if (ap < state.doc.content.size) {
+            const nn = state.doc.resolve(ap).nodeAfter;
+            if (nn && nn.isBlock && nn.type.spec.atom) {
+              return true; // consume — don't delete the atom
+            }
+          }
+        }
+      }
+
+      return false;
     },
   });
 }
@@ -434,6 +554,12 @@ export async function createEditor(options: EditorOptions): Promise<MorayaEditor
 
     // Cursor-activated source syntax display (Typora-style)
     createCursorSyntaxPlugin(),
+
+    // Link text decorations + auto-convert [text](url) to link mark on cursor leave
+    createLinkTextPlugin(),
+
+    // Image selection highlight (blue overlay when images are within a range selection)
+    createImageSelectionPlugin(),
   ];
 
   // Change detection

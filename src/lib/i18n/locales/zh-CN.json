@@ -225,7 +225,7 @@
     "saveAsKB": "保存为知识库"
   },
   "ai": {
-    "title": "AI 助手",
+    "title": "AI",
     "modelShort": {
       "none": "未配置任何模型",
       "chat": "对话",
@@ -451,8 +451,21 @@
         "filesystem": "读取、搜索和管理本地文件",
         "fetch": "抓取网页并转换为 Markdown",
         "git": "读取和搜索 Git 仓库",
-        "memory": "AI 持久化知识图谱记忆"
+        "memory": "AI 持久化知识图谱记忆",
+        "puppeteer": "浏览器自动化和网页抓取",
+        "sqlite": "查询和管理 SQLite 数据库",
+        "slack": "读取和搜索 Slack 频道和消息",
+        "googleMaps": "地理编码、路线规划和地点搜索",
+        "sequentialThinking": "逐步推理和问题解决",
+        "everything": "Windows 文件搜索（Everything）"
       },
+      "presetEnvTitle": "环境变量",
+      "presetEnvDesc": {
+        "slackBotToken": "Slack Bot OAuth Token (xoxb-...)",
+        "slackTeamId": "Slack 团队/工作区 ID（可选）",
+        "googleMapsApiKey": "Google Maps API 密钥"
+      },
+      "presetAdd": "添加并连接",
       "formMode": "表单",
       "jsonMode": "JSON 导入",
       "jsonPlaceholder": "粘贴 JSON 配置，例如：\n{\n  \"mcpServers\": {\n    \"名称\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@.../server-xxx\"]\n    }\n  }\n}",
@@ -667,7 +680,18 @@
     "aboutMoraya": "关于 Moraya",
     "feedback": "反馈",
     "settings": "设置...",
-    "versionInfo": "版本信息"
+    "versionInfo": "版本信息",
+    "workflow": "工作流",
+    "seoOptimization": "SEO 优化",
+    "aiImageGeneration": "AI 图片生成",
+    "publish": "发布",
+    "mcpTools": "MCP 工具",
+    "noMCPTools": "无已连接的 MCP 工具"
+  },
+  "contextMenu": {
+    "cut": "剪切",
+    "copy": "复制",
+    "paste": "粘贴"
   },
   "search": {
     "findPlaceholder": "查找...",
@@ -878,7 +902,12 @@
     "progressPublishing": "正在上传...",
     "progressRss": "正在更新 RSS...",
     "progressDone": "发布成功",
-    "progressFailed": "发布失败"
+    "progressFailed": "发布失败",
+    "enableSEO": "SEO 优化",
+    "enableSEOHint": "发布前生成标题、摘要、标签和元描述",
+    "nextSEO": "下一步：SEO →",
+    "backToTargets": "返回",
+    "seoNoProvider": "未配置 AI 服务提供商，请在设置中配置。"
   },
   "update": {
     "title": "版本信息",
@@ -960,6 +989,25 @@
       "search": "搜索模板...",
       "back": "返回",
       "start": "开始"
+    },
+    "myTemplates": {
+      "name": "我的模板",
+      "desc": "您导入或创建的自定义模板"
+    },
+    "manage": {
+      "title": "管理模板",
+      "import": "导入模板",
+      "export": "导出模板",
+      "manage": "管理模板",
+      "delete": "删除",
+      "deleteConfirm": "确认删除？",
+      "importSuccess": "已导入 {count} 个模板",
+      "exportSuccess": "模板导出成功",
+      "noCustomTemplates": "暂无自定义模板",
+      "sourceGlobal": "全局",
+      "sourceKb": "知识库",
+      "invalidFormat": "无效的模板格式",
+      "selectTemplates": "选择要导出的模板"
     },
     "error": {
       "noDocument": "请先输入一些内容",
@@ -1488,5 +1536,9 @@
     "unsavedMsg": "「{fileName}」有未保存的更改。",
     "save": "保存",
     "discard": "放弃"
+  },
+  "link": {
+    "open": "打开链接",
+    "remove": "移除链接"
   }
 }

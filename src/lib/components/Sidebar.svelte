@@ -297,7 +297,15 @@
   }
 
   function getDisplayName(name: string): string {
+    // In tree mode, show full file name with extension
+    if (viewMode === 'tree') return name;
     return name.replace(/\.md$/, '').replace(/\.markdown$/, '');
+  }
+
+  /** Get file extension (lowercase, without dot) */
+  function getFileExt(name: string): string {
+    const dot = name.lastIndexOf('.');
+    return dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
   }
 
   let viewModeToggling = false;
@@ -306,6 +314,8 @@
     viewModeToggling = true;
     const newMode = viewMode === 'tree' ? 'list' : 'tree';
     filesStore.setSidebarViewMode(newMode);
+    // Refresh file tree: tree mode shows all files, list mode shows only .md
+    if (folderPath) refreshFileTree(folderPath);
     // Throttle: allow next toggle only after current frame renders
     requestAnimationFrame(() => { viewModeToggling = false; });
   }
@@ -383,7 +393,8 @@
   }
 
   // Derived filtered data (search + reserved dir filter + MORAYA.md pinned to top)
-  let filteredTree = $derived(pinMorayaMd(filterTree(filterReserved(fileTree), searchQuery)));
+  // In tree mode, show reserved directories (with visual differentiation); in list mode, hide them.
+  let filteredTree = $derived(pinMorayaMd(filterTree(viewMode === 'tree' ? fileTree : filterReserved(fileTree), searchQuery)));
   // List view: filter previews whose path is inside images/ directory
   let filteredPreviews = $derived(
     filterPreviews(
@@ -469,8 +480,8 @@
 
   function handleRename() {
     const name = contextMenu.targetName;
-    // Strip .md extension so the user never sees/edits it; re-appended on submit
-    const displayName = name.endsWith('.md') ? name.slice(0, -3) : name;
+    // In tree mode, show full name including extension; in list mode, strip .md
+    const displayName = viewMode === 'tree' ? name : (name.endsWith('.md') ? name.slice(0, -3) : name);
     inputDialog = {
       mode: 'rename',
       value: displayName,
@@ -492,10 +503,19 @@
 
     if (inputDialog.mode === 'new-file') {
       try {
-        const newPath = await invoke<string>('create_markdown_file', {
-          dirPath: inputDialog.targetPath,
-          fileName: value,
-        });
+        let newPath: string;
+        if (viewMode === 'tree') {
+          // Tree mode: user types the full filename — create as-is, no .md auto-append
+          const fullPath = `${inputDialog.targetPath}/${value}`;
+          await invoke('write_file', { path: fullPath, content: '' });
+          newPath = fullPath;
+        } else {
+          // List mode: auto-append .md via dedicated command
+          newPath = await invoke<string>('create_markdown_file', {
+            dirPath: inputDialog.targetPath,
+            fileName: value,
+          });
+        }
         if (folderPath) await refreshFileTree(folderPath);
         onFileSelect(newPath);
       } catch (e) {
@@ -519,8 +539,9 @@
       }
     } else {
       const oldPath = inputDialog.targetPath;
-      // Re-append .md if the original file was .md (user edited without seeing the extension)
-      const finalValue = oldPath.endsWith('.md') ? `${value}.md` : value;
+      // In list mode, re-append .md since user edited without seeing the extension.
+      // In tree mode, user sees the full name including extension — use as-is.
+      const finalValue = viewMode === 'tree' ? value : (oldPath.endsWith('.md') ? `${value}.md` : value);
       // Reject renaming a directory to the reserved name "images"
       const isDir = !oldPath.endsWith('.md') && !oldPath.endsWith('.markdown');
       if (isDir && finalValue.toLowerCase() === 'images') {
@@ -837,14 +858,14 @@
           title={viewMode === 'tree' ? $t('sidebar.listView') : $t('sidebar.treeView')}
         >
           {#if viewMode === 'tree'}
-            <!-- List icon -->
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M2 4h12v1H2zm0 3.5h12v1H2zm0 3.5h12v1H2z"/>
-            </svg>
-          {:else}
-            <!-- Tree icon -->
+            <!-- List/card view icon -->
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
               <path d="M1 1h4v4H1zm6 0h8v1.5H7zm0 2.5h6v1H7zM1 7h4v4H1zm6 0h8v1.5H7zm0 2.5h6v1H7z"/>
+            </svg>
+          {:else}
+            <!-- Tree hierarchy icon -->
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2 1h3v3H2V1zm0 5h3v3H2V6zm5 0h3v3H7V6zm0 5h3v3H7v-3zM3.5 4v2H3v1h.5V4zM3 7h4v.5H7V9h.5v2H7V9H3V7zm5 2v2h-.5V9H8z"/>
             </svg>
           {/if}
         </button>
@@ -965,8 +986,10 @@
     <button
       class="tree-item"
       class:is-dir={entry.is_dir}
+      class:reserved-dir={entry.is_dir && isReservedDir(entry)}
       class:drop-target={entry.is_dir && dropTargetPath === entry.path}
       style="padding-inline-start: {0.75 + depth * 1}rem"
+      title={entry.is_dir ? undefined : entry.name}
       data-folder-path={entry.is_dir ? entry.path : undefined}
       data-file-path={!entry.is_dir ? entry.path : undefined}
       onclick={() => handleFileClick(entry)}
@@ -980,10 +1003,27 @@
           </svg>
         </span>
       {:else}
-        <span class="tree-icon file-icon">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" opacity="0.5">
-            <path d="M2 1h5l3 3v7H2V1zm5 0v3h3"/>
-          </svg>
+        {@const ext = getFileExt(entry.name)}
+        <span class="tree-icon file-icon file-ext-{ext || 'default'}">
+          {#if ext === 'md' || ext === 'markdown'}
+            <!-- Markdown icon -->
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" opacity="0.6"><path d="M1.5 2.5h9v7h-9v-7zm1 1v5h1.5l1.5-2 1.5 2H8.5v-5H7v3l-1.5-2L4 8.5V3.5z"/></svg>
+          {:else if ext === 'json' || ext === 'yaml' || ext === 'yml' || ext === 'toml'}
+            <!-- Config icon -->
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" opacity="0.6"><path d="M4 1C2.5 1 2 2 2 3v1.5C2 5.3 1.3 5.5 1 5.5v1c.3 0 1 .2 1 1V9c0 1 .5 2 2 2h1V10H4c-.5 0-1-.2-1-1V7.5C3 6.8 2.5 6.3 2.2 6c.3-.3.8-.8.8-1.5V3c0-.8.5-1 1-1h1V1zm4 0c1.5 0 2 1 2 2v1.5c0 .8.7 1 1 1v1c-.3 0-1 .2-1 1V9c0 1-.5 2-2 2H7v-1h1c.5 0 1-.2 1-1V7.5c0-.7.5-1.2.8-1.5-.3-.3-.8-.8-.8-1.5V3c0-.8-.5-1-1-1H7V1z"/></svg>
+          {:else if ext === 'js' || ext === 'ts' || ext === 'jsx' || ext === 'tsx' || ext === 'svelte' || ext === 'vue'}
+            <!-- Code icon -->
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" opacity="0.6"><path d="M4.5 2.5L1.5 6l3 3.5L3.5 10.5 0 6l3.5-4.5zm3 0L11 6 7.5 10.5 8.5 9.5 11 6 8.5 2.5z"/><path d="M5 10l2-8 .8.2-2 8z"/></svg>
+          {:else if ext === 'html' || ext === 'htm' || ext === 'css' || ext === 'scss'}
+            <!-- Web icon -->
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" opacity="0.6"><path d="M1 2h10v8H1V2zm1 1v6h8V3H2zm1 1h2v1H3zm0 2h4v1H3z"/></svg>
+          {:else if ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'gif' || ext === 'svg' || ext === 'webp' || ext === 'ico'}
+            <!-- Image icon -->
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" opacity="0.6"><path d="M1 2h10v8H1V2zm1 1v4.5l2-2 2 2 1.5-1.5L10 8.5V3H2zm2.5 1a1 1 0 100 2 1 1 0 000-2z"/></svg>
+          {:else}
+            <!-- Default document icon -->
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" opacity="0.5"><path d="M2 1h5l3 3v7H2V1zm5 0v3h3"/></svg>
+          {/if}
         </span>
       {/if}
       <span class="tree-name" class:moraya-rule={!entry.is_dir && entry.name === 'MORAYA.md'}>
@@ -993,7 +1033,7 @@
   {/if}
 
   {#if entry.is_dir && entry.children && expandedDirs.has(entry.path)}
-    {#each entry.children.filter(c => !isReservedDir(c)) as child}
+    {#each entry.children as child}
       {@render fileTreeItem(child, depth + 1)}
     {/each}
     {#if inputDialog && inputDialog.mode !== 'rename' && inputDialog.targetPath === entry.path}
@@ -1313,6 +1353,39 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+  /* Reserved directory (e.g. images/) — dimmed with accent tint */
+  .tree-item.reserved-dir {
+    opacity: 0.55;
+  }
+  .tree-item.reserved-dir .tree-name {
+    font-style: italic;
+  }
+
+  /* File type icon colors (tree mode) */
+  .file-icon.file-ext-md,
+  .file-icon.file-ext-markdown { color: #519aba; }
+  .file-icon.file-ext-json { color: #cbcb41; }
+  .file-icon.file-ext-yaml,
+  .file-icon.file-ext-yml,
+  .file-icon.file-ext-toml { color: #a074c4; }
+  .file-icon.file-ext-js,
+  .file-icon.file-ext-jsx { color: #cbcb41; }
+  .file-icon.file-ext-ts,
+  .file-icon.file-ext-tsx { color: #519aba; }
+  .file-icon.file-ext-svelte,
+  .file-icon.file-ext-vue { color: #e34c26; }
+  .file-icon.file-ext-html,
+  .file-icon.file-ext-htm { color: #e34c26; }
+  .file-icon.file-ext-css,
+  .file-icon.file-ext-scss { color: #563d7c; }
+  .file-icon.file-ext-png,
+  .file-icon.file-ext-jpg,
+  .file-icon.file-ext-jpeg,
+  .file-icon.file-ext-gif,
+  .file-icon.file-ext-svg,
+  .file-icon.file-ext-webp,
+  .file-icon.file-ext-ico { color: #a074c4; }
 
   /* List View */
   .list-view {

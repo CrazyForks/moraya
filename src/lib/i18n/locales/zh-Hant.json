@@ -225,7 +225,7 @@
     "saveAsKB": "儲存為知識庫"
   },
   "ai": {
-    "title": "AI 助手",
+    "title": "AI",
     "rulesActive": "MORAYA.md 規則已啟用（{count} 個段落）",
     "clearChat": "清空對話",
     "unconfigured": "AI 未設定。",
@@ -399,8 +399,21 @@
         "filesystem": "讀取、搜尋和管理本機檔案",
         "fetch": "抓取網頁並轉換為 Markdown",
         "git": "讀取和搜尋 Git 儲存庫",
-        "memory": "AI 持久化知識圖譜記憶"
+        "memory": "AI 持久化知識圖譜記憶",
+        "puppeteer": "瀏覽器自動化和網頁擷取",
+        "sqlite": "查詢和管理 SQLite 資料庫",
+        "slack": "讀取和搜尋 Slack 頻道和訊息",
+        "googleMaps": "地理編碼、路線規劃和地點搜尋",
+        "sequentialThinking": "逐步推理和問題解決",
+        "everything": "Windows 檔案搜尋（Everything）"
       },
+      "presetEnvTitle": "環境變數",
+      "presetEnvDesc": {
+        "slackBotToken": "Slack Bot OAuth Token (xoxb-...)",
+        "slackTeamId": "Slack 團隊/工作區 ID（可選）",
+        "googleMapsApiKey": "Google Maps API 金鑰"
+      },
+      "presetAdd": "新增並連線",
       "formMode": "表單",
       "jsonMode": "JSON 匯入",
       "jsonPlaceholder": "貼上 JSON 設定，例如：\n{\n  \"mcpServers\": {\n    \"名稱\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@.../server-xxx\"]\n    }\n  }\n}",
@@ -615,7 +628,18 @@
     "aboutMoraya": "關於 Moraya",
     "feedback": "意見回饋",
     "settings": "設定...",
-    "versionInfo": "版本資訊"
+    "versionInfo": "版本資訊",
+    "workflow": "工作流",
+    "seoOptimization": "SEO 優化",
+    "aiImageGeneration": "AI 圖片生成",
+    "publish": "發佈",
+    "mcpTools": "MCP 工具",
+    "noMCPTools": "無已連接的 MCP 工具"
+  },
+  "contextMenu": {
+    "cut": "剪下",
+    "copy": "複製",
+    "paste": "貼上"
   },
   "search": {
     "findPlaceholder": "尋找...",
@@ -826,7 +850,12 @@
     "progressPublishing": "正在上傳...",
     "progressRss": "正在更新 RSS...",
     "progressDone": "發佈成功",
-    "progressFailed": "發佈失敗"
+    "progressFailed": "發佈失敗",
+    "enableSEO": "SEO 優化",
+    "enableSEOHint": "發佈前生成標題、摘要、標籤和元描述",
+    "nextSEO": "下一步：SEO →",
+    "backToTargets": "返回",
+    "seoNoProvider": "未配置 AI 服務提供商，請在設定中配置。"
   },
   "update": {
     "title": "版本資訊",
@@ -908,6 +937,25 @@
       "search": "搜尋範本...",
       "back": "返回",
       "start": "開始"
+    },
+    "myTemplates": {
+      "name": "我的模板",
+      "desc": "您匯入或建立的自訂模板"
+    },
+    "manage": {
+      "title": "管理模板",
+      "import": "匯入模板",
+      "export": "匯出模板",
+      "manage": "管理模板",
+      "delete": "刪除",
+      "deleteConfirm": "確認刪除？",
+      "importSuccess": "已匯入 {count} 個模板",
+      "exportSuccess": "模板匯出成功",
+      "noCustomTemplates": "暫無自訂模板",
+      "sourceGlobal": "全域",
+      "sourceKb": "知識庫",
+      "invalidFormat": "無效的模板格式",
+      "selectTemplates": "選擇要匯出的模板"
     },
     "error": {
       "noDocument": "請先輸入一些內容",
@@ -1409,5 +1457,9 @@
     "unsavedMsg": "「{fileName}」有未儲存的變更。",
     "save": "儲存",
     "discard": "捨棄"
+  },
+  "link": {
+    "open": "開啟連結",
+    "remove": "移除連結"
   }
 }

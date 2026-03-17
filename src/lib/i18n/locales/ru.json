@@ -225,7 +225,7 @@
     "saveAsKB": "Сохранить как базу знаний"
   },
   "ai": {
-    "title": "AI Ассистент",
+    "title": "AI",
     "rulesActive": "Правила MORAYA.md активны ({count} разделов)",
     "clearChat": "Очистить чат",
     "unconfigured": "AI не настроен.",
@@ -399,8 +399,21 @@
         "filesystem": "Чтение, поиск и управление локальными файлами",
         "fetch": "Загрузка веб-страниц и конвертация в Markdown",
         "git": "Чтение и поиск по Git-репозиториям",
-        "memory": "Постоянный граф знаний для памяти AI"
+        "memory": "Постоянный граф знаний для памяти AI",
+        "puppeteer": "Автоматизация браузера и веб-скрейпинг",
+        "sqlite": "Запросы и управление базами данных SQLite",
+        "slack": "Чтение и поиск каналов и сообщений Slack",
+        "googleMaps": "Геокодирование, маршруты и поиск мест",
+        "sequentialThinking": "Пошаговое рассуждение и решение задач",
+        "everything": "Поиск файлов в Windows через Everything"
       },
+      "presetEnvTitle": "Переменные окружения",
+      "presetEnvDesc": {
+        "slackBotToken": "Slack Bot OAuth Token (xoxb-...)",
+        "slackTeamId": "ID команды/рабочего пространства Slack (необязательно)",
+        "googleMapsApiKey": "Ключ API Google Maps"
+      },
+      "presetAdd": "Добавить и подключить",
       "formMode": "Форма",
       "jsonMode": "JSON",
       "jsonPlaceholder": "Вставьте JSON-конфигурацию, напр.:\n{\n  \"mcpServers\": {\n    \"name\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@.../server-xxx\"]\n    }\n  }\n}",
@@ -615,7 +628,18 @@
     "aboutMoraya": "О Moraya",
     "feedback": "Обратная связь",
     "settings": "Настройки...",
-    "versionInfo": "Информация о версии"
+    "versionInfo": "Информация о версии",
+    "workflow": "Рабочий процесс",
+    "seoOptimization": "SEO-оптимизация",
+    "aiImageGeneration": "Генерация изображений ИИ",
+    "publish": "Опубликовать",
+    "mcpTools": "Инструменты MCP",
+    "noMCPTools": "Нет подключённых инструментов MCP"
+  },
+  "contextMenu": {
+    "cut": "Вырезать",
+    "copy": "Копировать",
+    "paste": "Вставить"
   },
   "search": {
     "findPlaceholder": "Найти...",
@@ -826,7 +850,12 @@
     "progressPublishing": "Загрузка...",
     "progressRss": "Обновление RSS...",
     "progressDone": "Готово",
-    "progressFailed": "Ошибка"
+    "progressFailed": "Ошибка",
+    "enableSEO": "SEO-оптимизация",
+    "enableSEOHint": "Сгенерировать заголовок, отрывок, теги и мета-описание перед публикацией",
+    "nextSEO": "Далее: SEO →",
+    "backToTargets": "Назад",
+    "seoNoProvider": "Поставщик ИИ не настроен. Пожалуйста, настройте поставщика ИИ в настройках."
   },
   "update": {
     "title": "Информация о версии",
@@ -908,6 +937,25 @@
       "search": "Поиск шаблонов...",
       "back": "Назад",
       "start": "Начать"
+    },
+    "myTemplates": {
+      "name": "Мои шаблоны",
+      "desc": "Пользовательские шаблоны, импортированные или созданные вами"
+    },
+    "manage": {
+      "title": "Управление шаблонами",
+      "import": "Импортировать шаблон",
+      "export": "Экспортировать шаблоны",
+      "manage": "Управление шаблонами",
+      "delete": "Удалить",
+      "deleteConfirm": "Подтвердить?",
+      "importSuccess": "Импортировано шаблонов: {count}",
+      "exportSuccess": "Шаблоны успешно экспортированы",
+      "noCustomTemplates": "Пользовательских шаблонов пока нет",
+      "sourceGlobal": "Глобальный",
+      "sourceKb": "База знаний",
+      "invalidFormat": "Недопустимый формат шаблона",
+      "selectTemplates": "Выберите шаблоны для экспорта"
     },
     "error": {
       "noDocument": "Сначала напишите какой-нибудь текст",
@@ -1409,5 +1457,9 @@
     "unsavedMsg": "«{fileName}» содержит несохранённые изменения.",
     "save": "Сохранить",
     "discard": "Отменить"
+  },
+  "link": {
+    "open": "Открыть ссылку",
+    "remove": "Удалить ссылку"
   }
 }

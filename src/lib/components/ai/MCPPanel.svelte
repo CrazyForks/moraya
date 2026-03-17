@@ -22,7 +22,7 @@
     type MarketplaceSource,
   } from '$lib/services/mcp';
   import { t } from '$lib/i18n';
-  import { isIPadOS } from '$lib/utils/platform';
+  import { isIPadOS, isWindows, isMacOS, isLinux } from '$lib/utils/platform';
   import { ask } from '@tauri-apps/plugin-dialog';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { containerStore, type DynamicService } from '$lib/services/mcp/container-store';
@@ -398,12 +398,65 @@
   }
 
   // Presets
+  let presetInstalling = $state<typeof MCP_PRESETS[0] | null>(null);
+  let presetEnvValues = $state<Record<string, string>>({});
+
+  function isPresetVisibleOnPlatform(preset: typeof MCP_PRESETS[0]): boolean {
+    if (!preset.platform) return true;
+    if (preset.platform === 'windows') return isWindows;
+    if (preset.platform === 'macos') return isMacOS;
+    if (preset.platform === 'linux') return isLinux;
+    return true;
+  }
+
   function addFromPreset(preset: typeof MCP_PRESETS[0]) {
+    if (preset.envVars && preset.envVars.length > 0) {
+      // Show env config dialog
+      presetInstalling = preset;
+      presetEnvValues = {};
+      for (const ev of preset.envVars) {
+        presetEnvValues[ev.name] = '';
+      }
+      return;
+    }
+    // No envVars — one-click add
     const config: MCPServerConfig = {
       id: `preset-${preset.id}`,
       ...preset.createConfig(),
     };
     mcpStore.addServer(config);
+    connectServer(config).catch(() => {});
+  }
+
+  function cancelPresetInstall() {
+    presetInstalling = null;
+    presetEnvValues = {};
+  }
+
+  async function confirmPresetInstall() {
+    if (!presetInstalling) return;
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(presetEnvValues)) {
+      if (v.trim()) env[k] = v.trim();
+    }
+    // Validate required env vars
+    if (presetInstalling.envVars) {
+      for (const ev of presetInstalling.envVars) {
+        if (ev.required && !env[ev.name]) return;
+      }
+    }
+    const config: MCPServerConfig = {
+      id: `preset-${presetInstalling.id}`,
+      ...presetInstalling.createConfig(env),
+    };
+    mcpStore.addServer(config);
+    presetInstalling = null;
+    presetEnvValues = {};
+    try {
+      await connectServer(config);
+    } catch {
+      // Added but connection failed — user can retry
+    }
   }
 
   function isPresetAdded(presetId: string): boolean {
@@ -619,12 +672,12 @@
   {#if activeTab === 'servers'}
     <div class="tab-content">
       <!-- Presets section -->
-      {#if MCP_PRESETS.some(p => !isPresetAdded(p.id))}
+      {#if MCP_PRESETS.some(p => !isPresetAdded(p.id) && isPresetVisibleOnPlatform(p))}
         <div class="presets-section">
           <div class="section-label">{$t('mcp.servers.presets')}</div>
           <div class="presets-grid">
             {#each MCP_PRESETS as preset}
-              {#if !isPresetAdded(preset.id)}
+              {#if !isPresetAdded(preset.id) && isPresetVisibleOnPlatform(preset)}
                 <button class="preset-item" onclick={() => addFromPreset(preset)}>
                   <div class="preset-info">
                     <span class="preset-name">{preset.name}</span>
@@ -638,7 +691,48 @@
         </div>
       {/if}
 
-      {#if servers.filter(s => !s.id.startsWith('ai-svc-')).length === 0 && !showAddServer && MCP_PRESETS.every(p => !isPresetAdded(p.id))}
+      <!-- Preset env config dialog -->
+      {#if presetInstalling}
+        <div class="mp-install-panel">
+          <div class="mp-install-header">
+            <span class="mp-install-name">{presetInstalling.name}</span>
+            <!-- svelte-ignore a11y_missing_attribute -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <span class="mp-install-close" onclick={cancelPresetInstall} onkeydown={() => {}}>×</span>
+          </div>
+          <p class="mp-install-desc">{$t(presetInstalling.descriptionKey)}</p>
+
+          {#if presetInstalling.envVars && presetInstalling.envVars.length > 0}
+            <div class="mp-env-section">
+              <div class="section-label">{$t('mcp.servers.presetEnvTitle')}</div>
+              {#each presetInstalling.envVars as ev}
+                <div class="mp-env-row">
+                  <label class="mp-env-label">
+                    {ev.name}
+                    {#if ev.required}<span class="mp-env-secret">*</span>{/if}
+                  </label>
+                  <input
+                    type={ev.isSecret ? 'password' : 'text'}
+                    class="form-input"
+                    placeholder={$t(ev.descriptionKey)}
+                    value={presetEnvValues[ev.name] || ''}
+                    oninput={(e) => { presetEnvValues[ev.name] = (e.target as HTMLInputElement).value; presetEnvValues = presetEnvValues; }}
+                  />
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          <div class="form-actions">
+            <button class="btn-sm" onclick={cancelPresetInstall}>{$t('mcp.marketplace.cancel')}</button>
+            <button class="btn-sm primary" onclick={confirmPresetInstall}>
+              {$t('mcp.servers.presetAdd')}
+            </button>
+          </div>
+        </div>
+      {/if}
+
+      {#if servers.filter(s => !s.id.startsWith('ai-svc-')).length === 0 && !showAddServer && MCP_PRESETS.every(p => !isPresetAdded(p.id) || !isPresetVisibleOnPlatform(p))}
         <div class="empty-state">
           <p>{$t('mcp.servers.empty')}</p>
           <button class="add-btn" onclick={() => showAddServer = true}>
@@ -646,7 +740,7 @@
           </button>
         </div>
       {:else}
-        {#each servers.filter(s => !s.id.startsWith('ai-svc-')) as server}
+        {#each servers.filter(s => !s.id.startsWith('ai-svc-')).sort((a, b) => (connectedServers.has(b.id) ? 1 : 0) - (connectedServers.has(a.id) ? 1 : 0)) as server}
           {#if editingServerId === server.id}
             <div class="add-form">
               <input

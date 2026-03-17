@@ -1,11 +1,36 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
-    menu::{CheckMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu},
+    menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu},
     AppHandle, Wry,
 };
 #[cfg(target_os = "macos")]
 use tauri::menu::AboutMetadata;
+
+/// MCP tool info for dynamic menu updates from frontend.
+#[derive(serde::Deserialize, Clone)]
+pub struct MCPMenuTool {
+    pub name: String,
+    pub description: String,
+}
+
+/// MCP server info for dynamic menu updates from frontend.
+#[derive(serde::Deserialize, Clone)]
+pub struct MCPMenuServer {
+    pub name: String,
+    pub tools: Vec<MCPMenuTool>,
+}
+
+/// Truncate a string to max_chars, appending "…" if truncated.
+fn truncate_str(s: &str, max_chars: usize) -> String {
+    let char_count = s.chars().count();
+    if char_count <= max_chars {
+        s.to_string()
+    } else {
+        let truncated: String = s.chars().take(max_chars).collect();
+        format!("{}…", truncated)
+    }
+}
 
 /// Guard flag: true while `update_mode_checks` is running.
 /// On Linux (GTK), `set_checked()` synchronously triggers the "activate" signal,
@@ -190,6 +215,29 @@ pub fn create_menu(app: &AppHandle) -> Result<Menu<Wry>, tauri::Error> {
         ],
     )?;
 
+    // Workflow menu
+    let workflow_menu = Submenu::with_id_and_items(
+        app,
+        "menu_workflow",
+        "Workflow",
+        true,
+        &[
+            &MenuItem::with_id(app, "wf_seo", "SEO Optimization", true, None::<&str>)?,
+            &MenuItem::with_id(app, "wf_image_gen", "AI Image Generation", true, None::<&str>)?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "wf_publish", "Publish", true, None::<&str>)?,
+            &Submenu::with_id_and_items(
+                app,
+                "wf_mcp",
+                "MCP Tools",
+                true,
+                &[
+                    &MenuItem::with_id(app, "wf_mcp_empty", "No MCP Tools Connected", false, None::<&str>)?,
+                ],
+            )?,
+        ],
+    )?;
+
     // Window menu (macOS standard: Minimize, Zoom + auto window list via set_as_windows_menu_for_nsapp)
     let window_menu = Submenu::with_id_and_items(
         app,
@@ -267,6 +315,7 @@ pub fn create_menu(app: &AppHandle) -> Result<Menu<Wry>, tauri::Error> {
                 &paragraph_menu,
                 &format_menu,
                 &view_menu,
+                &workflow_menu,
                 &window_menu,
                 &help_menu,
             ],
@@ -284,6 +333,7 @@ pub fn create_menu(app: &AppHandle) -> Result<Menu<Wry>, tauri::Error> {
                 &paragraph_menu,
                 &format_menu,
                 &view_menu,
+                &workflow_menu,
                 &window_menu,
                 &help_menu,
             ],
@@ -411,6 +461,75 @@ fn update_labels_recursive(items: &[MenuItemKind<Wry>], labels: &HashMap<String,
                 }
             }
             _ => {}
+        }
+    }
+}
+
+/// Update the MCP Tools submenu with connected server tools.
+/// Called from frontend whenever MCP connections change.
+/// `no_tools_label` is the i18n-resolved placeholder text for when no tools are connected.
+pub fn update_mcp_submenu(app: &AppHandle, servers: &[MCPMenuServer], no_tools_label: &str) {
+    let Some(menu) = app.menu() else { return };
+    let Ok(items) = menu.items() else { return };
+
+    // Find the workflow submenu → MCP submenu
+    for item in &items {
+        if let MenuItemKind::Submenu(workflow) = item {
+            if workflow.id().0.as_str() == "menu_workflow" {
+                if let Ok(wf_items) = workflow.items() {
+                    for wf_item in &wf_items {
+                        if let MenuItemKind::Submenu(mcp_sub) = wf_item {
+                            if mcp_sub.id().0.as_str() == "wf_mcp" {
+                                rebuild_mcp_items(app, mcp_sub, servers, no_tools_label);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn rebuild_mcp_items(app: &AppHandle, submenu: &Submenu<Wry>, servers: &[MCPMenuServer], no_tools_label: &str) {
+    // Remove all existing items
+    while submenu.remove_at(0).ok().flatten().is_some() {}
+
+    if servers.is_empty() {
+        if let Ok(item) = MenuItem::with_id(app, "wf_mcp_empty", no_tools_label, false, None::<&str>) {
+            let _ = submenu.append(&item);
+        }
+        return;
+    }
+
+    for (si, server) in servers.iter().enumerate() {
+        if si > 0 {
+            if let Ok(sep) = PredefinedMenuItem::separator(app) {
+                let _ = submenu.append(&sep);
+            }
+        }
+
+        // Build tool items for this server
+        let mut tool_items: Vec<MenuItem<Wry>> = Vec::new();
+        for (ti, tool) in server.tools.iter().enumerate() {
+            let tool_id = format!("wf_mcp_{}_{}", si, ti);
+            let tool_label = if tool.description.is_empty() {
+                tool.name.clone()
+            } else {
+                format!("{} — {}", tool.name, truncate_str(&tool.description, 50))
+            };
+            if let Ok(item) = MenuItem::with_id(app, &tool_id, &tool_label, true, None::<&str>) {
+                tool_items.push(item);
+            }
+        }
+
+        let refs: Vec<&dyn IsMenuItem<Wry>> = tool_items.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
+        let server_submenu_id = format!("wf_mcp_s{}", si);
+        let tool_word = if server.tools.len() == 1 { "tool" } else { "tools" };
+        let server_label = format!("{} ({} {})", server.name, server.tools.len(), tool_word);
+
+        if let Ok(server_sub) = Submenu::with_id_and_items(app, &server_submenu_id, &server_label, true, &refs) {
+            let _ = submenu.append(&server_sub);
         }
     }
 }

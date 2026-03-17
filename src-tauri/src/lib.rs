@@ -112,6 +112,12 @@ fn set_menu_check(_app: tauri::AppHandle, _id: String, _checked: bool) {
     menu::set_check_item(&_app, &_id, _checked);
 }
 
+#[tauri::command]
+fn update_mcp_menu(_app: tauri::AppHandle, _servers: Vec<menu::MCPMenuServer>, _no_tools_label: String) {
+    #[cfg(not(target_os = "ios"))]
+    menu::update_mcp_submenu(&_app, &_servers, &_no_tools_label);
+}
+
 /// Called by the frontend once it's ready; returns the file path to open (if any).
 /// For new windows created via drag-drop, looks up PendingFiles by window label.
 /// For the main window, falls back to OpenedFiles (startup CLI args / file association).
@@ -587,6 +593,7 @@ pub fn run() {
             set_editor_mode_menu,
             update_menu_labels,
             set_menu_check,
+            update_mcp_menu,
             get_opened_file,
             open_file_in_new_window,
             create_new_window,
@@ -674,6 +681,10 @@ pub fn run() {
                             if let Some(checked) = menu::get_check_state(&app_handle_for_events, id) {
                                 let _ = app_handle_for_events.emit_to(&label, &event_name, checked);
                             }
+                        }
+                        // Dynamic MCP tool items: emit dedicated event with tool ID as payload
+                        _ if id.starts_with("wf_mcp_") && id != "wf_mcp_empty" => {
+                            let _ = app_handle_for_events.emit_to(&label, "mcp-tool-clicked", id.to_string());
                         }
                         _ => {
                             let _ = app_handle_for_events.emit_to(&label, &event_name, ());

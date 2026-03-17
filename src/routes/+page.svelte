@@ -33,10 +33,10 @@
   import { settingsStore, initSettingsStore } from '$lib/stores/settings-store';
   import { filesStore, type FileEntry } from '$lib/stores/files-store';
   import { initAIStore, aiStore, sendChatMessage } from '$lib/services/ai';
-  import { initMCPStore, connectAllServers, type MCPTool, type MCPServerConfig } from '$lib/services/mcp';
+  import { initMCPStore, connectAllServers, mcpStore } from '$lib/services/mcp';
   import { initContainerManager } from '$lib/services/mcp/container-manager';
   import { preloadEnhancementPlugins } from '$lib/editor/setup';
-  import { openFile, saveFile, saveFileAs, loadFile, getFileNameFromPath, readImageAsBlobUrl, migrateTempImages } from '$lib/services/file-service';
+  import { openFile, saveFile, saveFileAs, loadFile, getFileNameFromPath, readImageAsBlobUrl, migrateTempImages, isImageFile } from '$lib/services/file-service';
   import { exportDocument, type ExportFormat } from '$lib/services/export-service';
   import { checkForUpdate, shouldCheckToday, getTodayDateString } from '$lib/services/update-service';
   import { listen, emitTo, type UnlistenFn } from '@tauri-apps/api/event';
@@ -182,9 +182,13 @@ ${tr('welcome.tip')}
   let settingsInitialTab = $state<'general' | 'ai' | 'voice'>('general');
   let showAIPanel = $state(false);
   let showOutline = $state(false);
+  let outlineWidth = $state(200);
   let showImageDialog = $state(false);
   let showSearch = $state(false);
   let showReplace = $state(false);
+  // Image tab preview state — derived from active tab
+  let activeImageTab = $state<import('$lib/stores/tabs-store').TabItem | null>(null);
+  let imagePreviewUrl = $state<string | null>(null);
   let showTouchToolbar = $state(isIPadOS);
   let searchMatchCount = $state(0);
   let searchCurrentMatch = $state(0);
@@ -219,7 +223,6 @@ ${tr('welcome.tip')}
   });
 
   // Publish workflow state
-  let showWorkflow = $state(false);
   let showSEOPanel = $state(false);
   let showImageGenDialog = $state(false);
   let imageGenDialogMounted = $state(false);
@@ -243,7 +246,6 @@ ${tr('welcome.tip')}
   let publishProgress = $state<PublishProgressItem[]>([]);
 
   function resetWorkflowState() {
-    showWorkflow = false;
     showSEOPanel = false;
     showImageGenDialog = false;
     imageGenDialogMounted = false;
@@ -272,12 +274,9 @@ ${tr('welcome.tip')}
 
   function handleEditorReady(editor: MorayaEditor) {
     morayaEditor = editor;
-    // Ensure the editor receives keyboard focus, especially in new windows
-    // where WebView2 on Windows may not forward input events until the
-    // contenteditable element has explicit focus.
-    requestAnimationFrame(() => {
-      try { editor.view.focus(); } catch { /* editor may have been destroyed */ }
-    });
+    // Focus is handled by Editor.svelte's onMount (cursor restore + focus).
+    // Do not duplicate focus here — racing RAFs can cause focus to be lost
+    // in new windows where the WebView is still initializing.
   }
 
   /** Get the current document content on-demand.
@@ -527,6 +526,7 @@ ${tr('welcome.tip')}
   const unsubSettings = settingsStore.subscribe(state => {
     showSidebar = state.showSidebar;
     showOutline = state.showOutline;
+    if (state.outlineWidth !== outlineWidth) outlineWidth = state.outlineWidth;
   });
 
   // Track previous values to skip redundant work in hot subscriber path.
@@ -595,6 +595,28 @@ ${tr('welcome.tip')}
       prevActiveTabId = state.activeTabId;
       const tab = state.tabs.find(t => t.id === state.activeTabId);
       if (tab) {
+        // Image tab: load blob URL for preview
+        if (tab.isImage) {
+          activeImageTab = tab;
+          currentFileName = tab.fileName;
+          if (tab.filePath) {
+            readImageAsBlobUrl(tab.filePath).then(url => {
+              // Only apply if still the active tab
+              if (tabsStore.getState().activeTabId === tab.id) {
+                if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+                imagePreviewUrl = url;
+              } else {
+                URL.revokeObjectURL(url);
+              }
+            }).catch(() => { imagePreviewUrl = null; });
+          }
+          return;
+        }
+
+        // Non-image tab: clear image preview
+        activeImageTab = null;
+        if (imagePreviewUrl) { URL.revokeObjectURL(imagePreviewUrl); imagePreviewUrl = null; }
+
         console.log('[TabsSub] activeTab changed, setting content length:', tab.content.length, 'preview:', JSON.stringify(tab.content.slice(0, 80)));
         content = tab.content;
         currentFileName = tab.fileName;
@@ -609,11 +631,39 @@ ${tr('welcome.tip')}
     }
   });
 
+  // MCP: sync native Workflow → MCP Tools submenu when connections change
+  // Store a flat mapping of connected server tools for resolving menu clicks.
+  let mcpMenuMapping: Array<{ serverId: string; serverName: string; tools: Array<{ name: string; description: string }> }> = [];
+  let prevMcpToolsJson = '';
+
+  const unsubMCP = mcpStore.subscribe(state => {
+    if (!isTauri) return;
+    // Build the server+tools structure for connected servers that have tools
+    const serversWithTools = state.servers
+      .filter(s => state.connectedServers.has(s.id))
+      .map(s => ({
+        serverId: s.id,
+        serverName: s.name,
+        tools: state.tools.filter(t => t.serverId === s.id).map(t => ({ name: t.name, description: t.description || '' })),
+      }))
+      .filter(s => s.tools.length > 0);
+
+    // Only call invoke when the data actually changes
+    const json = JSON.stringify(serversWithTools);
+    if (json === prevMcpToolsJson) return;
+    prevMcpToolsJson = json;
+    mcpMenuMapping = serversWithTools;
+
+    const menuServers = serversWithTools.map(s => ({ name: s.serverName, tools: s.tools }));
+    invoke('update_mcp_menu', { servers: menuServers, noToolsLabel: $t('menu.noMCPTools') }).catch(() => {});
+  });
+
   onDestroy(() => {
     unsubAI();
     unsubSettings();
     unsubEditor();
     unsubTabs();
+    unsubMCP();
   });
 
   // Sync native menu checkmarks when editor mode changes (all desktop platforms).
@@ -671,6 +721,7 @@ ${tr('welcome.tip')}
       menu_paragraph: tr('menu.paragraph'),
       menu_format: tr('menu.format'),
       menu_view: tr('menu.view'),
+      menu_workflow: tr('menu.workflow'),
       menu_window: tr('menu.window'),
       menu_help: tr('menu.help'),
       // File menu
@@ -722,6 +773,12 @@ ${tr('welcome.tip')}
       help_website: tr('menu.officialWebsite'),
       help_about: tr('menu.aboutMoraya'),
       help_feedback: tr('menu.feedback'),
+      // Workflow menu
+      wf_seo: tr('menu.seoOptimization'),
+      wf_image_gen: tr('menu.aiImageGeneration'),
+      wf_publish: tr('menu.publish'),
+      wf_mcp: tr('menu.mcpTools'),
+      wf_mcp_empty: tr('menu.noMCPTools'),
       // Edit — search
       edit_find: tr('menu.find'),
       edit_replace: tr('menu.replace'),
@@ -1255,12 +1312,21 @@ ${tr('welcome.tip')}
   async function doFileSelect(path: string, mySerial: number) {
     if (mySerial !== fileSelectSerial) return;
     if (mySerial !== fileSelectSerial) return; // Superseded by a newer click
+
+    const fileName = getFileNameFromPath(path);
+
+    // Image files: open as image tab (read-only preview)
+    if (isImageFile(fileName)) {
+      tabsStore.syncFromEditor();
+      tabsStore.openFileTab(path, fileName, '', null, true, true);
+      return;
+    }
+
     // Sync current tab state BEFORE loadFile() — loadFile calls editorStore.setContent()
     // which would pollute the old tab if syncFromEditor runs after it.
     tabsStore.syncFromEditor();
     const fileContent = await loadFile(path);
     if (mySerial !== fileSelectSerial) return; // Superseded while IPC was in-flight
-    const fileName = getFileNameFromPath(path);
     // Fetch mtime for external change detection
     let mtime: number | null = null;
     try {
@@ -1335,13 +1401,8 @@ ${tr('welcome.tip')}
 
   // ── Publish Workflow Handlers ─────────────────────────
 
-  function handlePublishWorkflow() {
-    showWorkflow = !showWorkflow;
-  }
-
   function handleWorkflowSEO() {
     getCurrentContent(); // Ensure content is fresh for SEO analysis
-    showWorkflow = false;
     showSEOPanel = true;
   }
 
@@ -1351,23 +1412,12 @@ ${tr('welcome.tip')}
     // (visual editor doesn't update `content` on every keystroke). Explicitly assigning
     // here is safe: applySyncToEditor guards against replacement when content is unchanged.
     content = getCurrentContent();
-    showWorkflow = false;
     imageGenDialogMounted = true;
     showImageGenDialog = true;
   }
 
   function handleWorkflowPublish() {
-    showWorkflow = false;
     showPublishConfirm = true;
-  }
-
-  async function handleWorkflowMCPTool(tool: MCPTool, server: MCPServerConfig) {
-    showWorkflow = false;
-    showAIPanel = true;
-    const message = $t('ai.prompts.mcpToolPrompt', { toolName: tool.name, serverName: server.name });
-    try {
-      await sendChatMessage(message, getCurrentContent());
-    } catch { /* handled by store */ }
   }
 
   function handleSEOApply(data: SEOData) {
@@ -1923,6 +1973,11 @@ ${tr('welcome.tip')}
           settingsStore.update({ fontSize: 16 });
           document.documentElement.style.setProperty('--font-size-base', '16px');
         },
+        // Workflow
+        'menu:wf_seo': () => handleWorkflowSEO(),
+        'menu:wf_image_gen': () => handleWorkflowImageGen(),
+        'menu:wf_publish': () => handleWorkflowPublish(),
+        // wf_mcp is now a Submenu — tool clicks handled by 'mcp-tool-clicked' listener
         // Help
         'menu:help_version_info': () => { showUpdateDialog = true; },
         'menu:help_changelog': () => { openUrl('https://github.com/zouwei/moraya/releases'); },
@@ -1946,6 +2001,27 @@ ${tr('welcome.tip')}
       Object.entries(menuHandlers).forEach(([event, handler]) => {
         listen(event, (e) => handler(e.payload)).then(unlisten => menuUnlisteners.push(unlisten));
       });
+
+      // Listen for MCP tool clicks from native Workflow → MCP Tools submenu
+      listen<string>('mcp-tool-clicked', async (event) => {
+        const toolId = event.payload; // format: "wf_mcp_{serverIdx}_{toolIdx}"
+        const match = toolId.match(/^wf_mcp_(\d+)_(\d+)$/);
+        if (!match) return;
+        const si = parseInt(match[1], 10);
+        const ti = parseInt(match[2], 10);
+        const server = mcpMenuMapping[si];
+        if (!server) return;
+        const tool = server.tools[ti];
+        if (!tool) return;
+
+        showAIPanel = true;
+        const message = $t('ai.prompts.mcpToolPrompt', { toolName: tool.name, serverName: server.serverName });
+        try {
+          await sendChatMessage(message, getCurrentContent());
+        } catch (e) {
+          console.warn('[MCP Menu] Failed to send tool message:', e);
+        }
+      }).then(unlisten => menuUnlisteners.push(unlisten));
 
       // Helper: load a file by path and open in a tab
       async function openFileByPath(filePath: string) {
@@ -2101,10 +2177,12 @@ ${tr('welcome.tip')}
           await checkExternalChanges();
           // Refresh sidebar file tree when window gains focus (another window
           // may have saved a new file to the same knowledge base directory)
-          const folderPath = filesStore.getState().openFolderPath;
+          const fsState = filesStore.getState();
+          const folderPath = fsState.openFolderPath;
           if (folderPath) {
+            const allFiles = fsState.sidebarViewMode === 'tree';
             const tree = await invoke<import('$lib/stores/files-store').FileEntry[]>(
-              'read_dir_recursive', { path: folderPath, depth: 3 }
+              'read_dir_recursive', { path: folderPath, depth: 3, allFiles }
             );
             filesStore.setFileTree(tree);
           }
@@ -2157,17 +2235,26 @@ ${tr('welcome.tip')}
     {/if}
 
     <main class="editor-area">
-      {#if editorMode === 'visual'}
-        <Editor bind:this={visualEditorRef} bind:content {showOutline} onEditorReady={handleEditorReady} onNotify={showToast} />
+      {#if activeImageTab}
+        <!-- Image tab preview (read-only) -->
+        <div class="image-preview-container">
+          <div class="image-preview-body">
+            {#if imagePreviewUrl}
+              <img src={imagePreviewUrl} alt={activeImageTab.fileName} class="image-preview-img" draggable="false" />
+            {/if}
+          </div>
+        </div>
+      {:else if editorMode === 'visual'}
+        <Editor bind:this={visualEditorRef} bind:content {showOutline} {outlineWidth} onEditorReady={handleEditorReady} onNotify={showToast} onOutlineWidthChange={(w) => settingsStore.update({ outlineWidth: w })} onWorkflowSEO={handleWorkflowSEO} onWorkflowImageGen={handleWorkflowImageGen} onWorkflowPublish={handleWorkflowPublish} />
       {:else if editorMode === 'source'}
-        <SourceEditor bind:this={sourceEditorRef} bind:content {showOutline} onContentChange={handleContentChange} />
+        <SourceEditor bind:this={sourceEditorRef} bind:content {showOutline} {outlineWidth} onContentChange={handleContentChange} onOutlineWidthChange={(w) => settingsStore.update({ outlineWidth: w })} />
       {:else if editorMode === 'split'}
         <div class="split-container">
           <div class="split-source" bind:this={splitSourceEl}>
             <SourceEditor bind:this={splitSourceRef} bind:content onContentChange={handleContentChange} hideScrollbar />
           </div>
           <div class="split-visual" bind:this={splitVisualEl}>
-            <Editor bind:this={splitVisualRef} bind:content onEditorReady={handleEditorReady} onContentChange={handleContentChange} onNotify={showToast} />
+            <Editor bind:this={splitVisualRef} bind:content onEditorReady={handleEditorReady} onContentChange={handleContentChange} onNotify={showToast} onWorkflowSEO={handleWorkflowSEO} onWorkflowImageGen={handleWorkflowImageGen} onWorkflowPublish={handleWorkflowPublish} />
           </div>
         </div>
       {/if}
@@ -2206,11 +2293,11 @@ ${tr('welcome.tip')}
   {/if}
 
   <StatusBar
-    onPublishWorkflow={handlePublishWorkflow}
     onShowUpdateDialog={() => showUpdateDialog = true}
     onToggleAI={() => showAIPanel = !showAIPanel}
     onModeChange={(mode) => { editorMode = mode; editorStore.setEditorMode(mode); }}
     currentMode={editorMode}
+    hideModeSwitcher={!!activeImageTab}
     aiPanelOpen={showAIPanel}
     {aiConfigured}
     {aiLoading}
@@ -2233,20 +2320,6 @@ ${tr('welcome.tip')}
     <ImageInsertDialog
       onInsert={handleInsertImage}
       onClose={() => showImageDialog = false}
-    />
-  {/await}
-{/if}
-
-{#if showWorkflow}
-  {#await import('$lib/components/PublishWorkflow.svelte') then { default: PublishWorkflow }}
-    <PublishWorkflow
-      onClose={() => showWorkflow = false}
-      onSEO={handleWorkflowSEO}
-      onImageGen={handleWorkflowImageGen}
-      onPublish={handleWorkflowPublish}
-      onMCPTool={handleWorkflowMCPTool}
-      {seoCompleted}
-      {imageGenCompleted}
     />
   {/await}
 {/if}
@@ -2279,6 +2352,9 @@ ${tr('welcome.tip')}
     <PublishConfirm
       onClose={() => showPublishConfirm = false}
       onConfirm={handlePublishConfirm}
+      {currentSEOData}
+      onSEODataChange={(data) => { currentSEOData = data; seoCompleted = true; }}
+      documentContent={getCurrentContent()}
     />
   {/await}
 {/if}
@@ -2502,5 +2578,31 @@ ${tr('welcome.tip')}
 
   :global([dir="rtl"]) .progress-status {
     text-align: left;
+  }
+
+  /* ── Image file preview ── */
+  .image-preview-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .image-preview-body {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    padding: 24px;
+    background: var(--bg-secondary, var(--bg-primary));
+  }
+
+  .image-preview-img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
 </style>

@@ -27,7 +27,7 @@ export type {
   SyncConfig,
   SyncStatus,
 } from './types';
-export { MCP_PRESETS, type MCPPreset } from './presets';
+export { MCP_PRESETS, type MCPPreset, type MCPPresetEnvVar } from './presets';
 export {
   searchMarketplace,
   loadMarketplaceSource,

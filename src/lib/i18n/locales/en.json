@@ -225,7 +225,7 @@
     "saveAsKB": "Save as Knowledge Base"
   },
   "ai": {
-    "title": "AI Assistant",
+    "title": "AI",
     "modelShort": {
       "none": "No models configured",
       "chat": "Chat",
@@ -451,8 +451,21 @@
         "filesystem": "Read, search, and manage local files",
         "fetch": "Fetch web pages and convert to markdown",
         "git": "Read and search Git repositories",
-        "memory": "Persistent knowledge graph for AI memory"
+        "memory": "Persistent knowledge graph for AI memory",
+        "puppeteer": "Browser automation and web scraping",
+        "sqlite": "Query and manage SQLite databases",
+        "slack": "Read and search Slack channels and messages",
+        "googleMaps": "Geocoding, directions, and place search",
+        "sequentialThinking": "Step-by-step reasoning and problem solving",
+        "everything": "Windows file search via Everything"
       },
+      "presetEnvTitle": "Environment Variables",
+      "presetEnvDesc": {
+        "slackBotToken": "Slack Bot User OAuth Token (xoxb-...)",
+        "slackTeamId": "Slack Team/Workspace ID (optional)",
+        "googleMapsApiKey": "Google Maps API Key"
+      },
+      "presetAdd": "Add & Connect",
       "formMode": "Form",
       "jsonMode": "JSON",
       "jsonPlaceholder": "Paste JSON config, e.g.:\n{\n  \"mcpServers\": {\n    \"name\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@.../server-xxx\"]\n    }\n  }\n}",
@@ -667,7 +680,18 @@
     "aboutMoraya": "About Moraya",
     "feedback": "Feedback",
     "settings": "Settings...",
-    "versionInfo": "Version Info"
+    "versionInfo": "Version Info",
+    "workflow": "Workflow",
+    "seoOptimization": "SEO Optimization",
+    "aiImageGeneration": "AI Image Generation",
+    "publish": "Publish",
+    "mcpTools": "MCP Tools",
+    "noMCPTools": "No MCP Tools Connected"
+  },
+  "contextMenu": {
+    "cut": "Cut",
+    "copy": "Copy",
+    "paste": "Paste"
   },
   "search": {
     "findPlaceholder": "Find...",
@@ -878,7 +902,12 @@
     "progressPublishing": "Uploading...",
     "progressRss": "Updating RSS...",
     "progressDone": "Done",
-    "progressFailed": "Failed"
+    "progressFailed": "Failed",
+    "enableSEO": "SEO Optimization",
+    "enableSEOHint": "Generate title, excerpt, tags, and meta description before publishing",
+    "nextSEO": "Next: SEO →",
+    "backToTargets": "Back",
+    "seoNoProvider": "No AI provider configured. Please configure an AI provider in Settings."
   },
   "update": {
     "title": "Version Info",
@@ -960,6 +989,25 @@
       "search": "Search templates...",
       "back": "Back",
       "start": "Start"
+    },
+    "myTemplates": {
+      "name": "My Templates",
+      "desc": "Custom templates imported or created by you"
+    },
+    "manage": {
+      "title": "Manage Templates",
+      "import": "Import Template",
+      "export": "Export Templates",
+      "manage": "Manage Templates",
+      "delete": "Delete",
+      "deleteConfirm": "Confirm?",
+      "importSuccess": "Imported {count} template(s)",
+      "exportSuccess": "Templates exported successfully",
+      "noCustomTemplates": "No custom templates yet",
+      "sourceGlobal": "Global",
+      "sourceKb": "KB",
+      "invalidFormat": "Invalid template format",
+      "selectTemplates": "Select templates to export"
     },
     "error": {
       "noDocument": "Please write some content first",
@@ -1488,5 +1536,9 @@
     "unsavedMsg": "\"{fileName}\" has unsaved changes.",
     "save": "Save",
     "discard": "Discard"
+  },
+  "link": {
+    "open": "Open link",
+    "remove": "Remove link"
   }
 }

@@ -38,17 +38,14 @@ interface FilesState {
 const FILES_STORE_FILE = 'files-prefs.json';
 const KB_STORE_FILE = 'knowledge-bases.json';
 
-/** Persist sidebar view mode to disk so it survives across windows and restarts. */
-let viewModePersistTimer: ReturnType<typeof setTimeout> | null = null;
+/** Persist sidebar view mode to disk immediately (no debounce — toggles are infrequent). */
 function persistViewMode(mode: SidebarViewMode) {
-  if (viewModePersistTimer) clearTimeout(viewModePersistTimer);
-  viewModePersistTimer = setTimeout(async () => {
-    try {
-      const store = await load(FILES_STORE_FILE);
+  load(FILES_STORE_FILE)
+    .then(async (store) => {
       await store.set('sidebarViewMode', mode);
       await store.save();
-    } catch { /* ignore persist errors */ }
-  }, 200);
+    })
+    .catch(() => { /* ignore persist errors */ });
 }
 
 /** Persist knowledge base list to disk. */
@@ -174,9 +171,11 @@ function createFilesStore() {
       if (!kb) return { success: false, error: 'Knowledge base not found' };
 
       try {
+        const allFiles = state.sidebarViewMode === 'tree';
         const tree = await invoke<FileEntry[]>('read_dir_recursive', {
           path: kb.path,
           depth: 3,
+          allFiles,
         });
 
         const kbs = state.knowledgeBases.map(k =>

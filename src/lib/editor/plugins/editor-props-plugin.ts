@@ -4,6 +4,8 @@
  * Consolidated props:
  *  - clipboardTextParser: parse pasted plain text as Markdown (render instead of escape)
  *  - transformPastedHTML: paste language fix (copy class="language-xxx" → data-language)
+ *  - handleDOMEvents.mousedown: math_block click → prevent WebKit broken selection
+ *  - handleDOMEvents.keydown/keyup: toggle link-hover cursor class on Cmd/Ctrl
  *  - handleClickOn: image click → TextSelection (prevent NodeSelection blue highlight)
  *  - handleKeyDown: macOS Cmd+A / Ctrl+A → AllSelection fix
  *  - decorations: WKWebView caret fix for empty paragraphs
@@ -14,13 +16,49 @@
 
 import { AllSelection, Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
-import { Slice } from 'prosemirror-model';
+import { Fragment, Slice } from 'prosemirror-model';
 import { parseMarkdown } from '../markdown';
+import { editorStore } from '../../stores/editor-store';
+import { isMacOS } from '../../utils/platform';
 
 const editorPropsKey = new PluginKey('moraya-editor-props');
 
-const isMac = typeof document !== 'undefined' &&
-  document.body.classList.contains('platform-macos');
+/** Detect whether a URL is a local file path (absolute or relative). */
+function isLocalFilePath(href: string): boolean {
+  // Absolute Unix/macOS paths
+  if (href.startsWith('/')) return true;
+  // Relative paths
+  if (href.startsWith('./') || href.startsWith('../')) return true;
+  // Windows absolute paths
+  if (/^[A-Za-z]:[/\\]/.test(href)) return true;
+  // file:// protocol
+  if (href.startsWith('file://')) return true;
+  return false;
+}
+
+/** Resolve a local path href to an absolute path for opening. */
+function resolveLocalPath(href: string): string {
+  // Strip file:// protocol and decode URL-encoded characters (e.g. %E7%9F%A5 → 知)
+  let path = href;
+  if (path.startsWith('file:///')) {
+    path = path.slice(7); // file:///path → /path
+    try { path = decodeURIComponent(path); } catch { /* keep as-is */ }
+  } else if (path.startsWith('file://')) {
+    path = path.slice(5); // file://path → //path (UNC)
+    try { path = decodeURIComponent(path); } catch { /* keep as-is */ }
+  }
+
+  // Already absolute
+  if (path.startsWith('/') || /^[A-Za-z]:[/\\]/.test(path)) return path;
+
+  // Relative path: resolve against current file's directory
+  const currentFile = editorStore.getState().currentFilePath;
+  if (currentFile) {
+    const dir = currentFile.replace(/[/\\][^/\\]*$/, '');
+    return dir + '/' + path;
+  }
+  return path;
+}
 
 export function createEditorPropsPlugin(): Plugin {
   // scroll-after-paste state
@@ -37,12 +75,64 @@ export function createEditorPropsPlugin(): Plugin {
       clipboardTextParser(text, $context, plain) {
         if (plain || $context.parent.type.spec.code) return undefined!;
         const doc = parseMarkdown(text);
+        // If markdown parse produced a single empty paragraph (e.g. `[]()` → empty link
+        // with no text, dropped by parser), fall back to literal text insertion.
+        // This prevents the empty result from replacing/deleting the current selection.
+        // Note: doc.content.size === 2 means exactly one empty paragraph wrapper.
+        // Images, HRs, code blocks etc. produce size > 2 and are handled normally.
+        if (doc.textContent.length === 0 && doc.content.size <= 2) return undefined!;
         const content = doc.content;
         // Single paragraph → extract inline content so it merges into current text
         if (content.childCount === 1 && content.firstChild!.type.name === 'paragraph') {
           return new Slice(content.firstChild!.content, 0, 0);
         }
         return new Slice(content, 0, 0);
+      },
+
+      /**
+       * Safety net for degenerate pastes.
+       *
+       * Two cases handled:
+       *
+       * 1. Markdown link patterns with empty text or URL (e.g. `[]()`,
+       *    `[](url)`, `[text]()`) — the markdown parser or HTML parser may
+       *    produce an empty link that ProseMirror drops, causing the paste to
+       *    insert nothing (looks like content was "deleted").  Intercept early
+       *    and insert the raw text literally.
+       *
+       * 2. Generic empty slice — clipboard text/html produced a Slice with no
+       *    text content but clipboard text/plain is non-empty.
+       */
+      handlePaste(view, event, slice) {
+        const plain = event.clipboardData?.getData('text/plain');
+        if (!plain) return false;
+
+        // Case 1: link pattern with empty text or empty URL
+        const trimmed = plain.trim();
+        const linkMatch = /^\[([^\]]*)\]\(([^)]*)\)$/.exec(trimmed);
+        if (linkMatch && (!linkMatch[1] || !linkMatch[2])) {
+          const textNode = view.state.schema.text(plain);
+          view.dispatch(
+            view.state.tr.replaceSelection(new Slice(Fragment.from(textNode), 0, 0)),
+          );
+          pendingPaste = true;
+          return true;
+        }
+
+        // Case 2: degenerate slice (e.g. empty <a> tag from HTML clipboard)
+        try {
+          const sliceText = slice.content.textBetween(0, slice.content.size, '', '');
+          if (sliceText.trim().length === 0 && trimmed.length > 0) {
+            const textNode = view.state.schema.text(plain);
+            view.dispatch(
+              view.state.tr.replaceSelection(new Slice(Fragment.from(textNode), 0, 0)),
+            );
+            pendingPaste = true;
+            return true;
+          }
+        } catch { /* malformed slice — fall through */ }
+
+        return false;
       },
 
       /**
@@ -75,8 +165,128 @@ export function createEditorPropsPlugin(): Plugin {
       },
 
       /**
+       * Intercept mousedown on math_block at the DOM level.
+       *
+       * Why mousedown instead of handleClickOn:
+       * In WebKit (Tauri WebView), clicking on a contenteditable="false" atom
+       * block causes the browser to create a broken native range selection that
+       * extends to surrounding text (visible as blue overlay on paragraphs above
+       * the formula). ProseMirror's handleClickOn fires too late (on click, after
+       * the selection is already created), and posAtCoords often maps the click
+       * to the paragraph above instead of the math_block, so handleClickOn never
+       * receives node=math_block.
+       *
+       * By intercepting mousedown + preventDefault, we stop WebKit from creating
+       * the broken selection and place a proper TextSelection ourselves.
+       */
+      handleDOMEvents: {
+        /**
+         * Safety: prevent WebView navigation on any remaining <a> clicks.
+         * (Most <a> tags get expanded to literal text on mousedown, but this
+         * is a fallback in case the click fires before the expand.)
+         */
+        click(view, event) {
+          const me = event as MouseEvent;
+          const target = me.target as HTMLElement | null;
+          if (!target) return false;
+          const anchor = target.closest('a[href]') as HTMLAnchorElement | null;
+          if (anchor) {
+            me.preventDefault();
+          }
+          return false;
+        },
+
+        mousedown(view, event) {
+          const me = event as MouseEvent;
+          if (me.button !== 0) return false;
+          const target = me.target as HTMLElement | null;
+          if (!target) return false;
+
+          // ── Cmd/Ctrl+click on links → open externally ──
+          // Must be handled in mousedown BEFORE ProseMirror places cursor,
+          // because the link-text-plugin's appendTransaction expands link
+          // marks to literal text on cursor entry, removing <a> from DOM
+          // before the click event fires.
+          if (me.metaKey || me.ctrlKey) {
+            const anchor = target.closest('a[href]') as HTMLAnchorElement | null;
+            if (anchor) {
+              const href = anchor.getAttribute('href');
+              if (href) {
+                me.preventDefault();
+
+                if (isLocalFilePath(href)) {
+                  const resolvedPath = resolveLocalPath(href);
+                  import('@tauri-apps/plugin-opener')
+                    .then(({ openPath }) => openPath(resolvedPath))
+                    .catch((e) => { console.warn('[opener] openPath failed:', resolvedPath, e); });
+                } else {
+                  import('@tauri-apps/plugin-opener')
+                    .then(({ openUrl }) => openUrl(href))
+                    .catch((e) => { console.warn('[opener] openUrl failed:', href, e); });
+                }
+                return true; // consume — don't place cursor or expand
+              }
+            }
+          }
+
+          // ── Math block click fix ──
+          const mathBlock = target.closest('div[data-type="math_block"]');
+          if (!mathBlock) return false;
+
+          // Prevent WebKit from creating the broken range selection
+          me.preventDefault();
+
+          try {
+            // Map DOM element → document position
+            const pos = view.posAtDOM(mathBlock, 0);
+            const $pos = view.state.doc.resolve(pos);
+
+            // Walk up to find the math_block node and get its before-position
+            let beforePos = pos;
+            for (let d = $pos.depth; d > 0; d--) {
+              if ($pos.node(d).type.name === 'math_block') {
+                beforePos = $pos.before(d);
+                break;
+              }
+            }
+            // If posAtDOM returned a position right before the math_block
+            const $before = view.state.doc.resolve(beforePos);
+            if (!$before.nodeAfter || $before.nodeAfter.type.name !== 'math_block') {
+              // Fallback: check if nodeAfter at original pos is math_block
+              if ($pos.nodeAfter?.type.name === 'math_block') {
+                beforePos = pos;
+              }
+            }
+
+            const sel = TextSelection.near(view.state.doc.resolve(beforePos), -1);
+            view.dispatch(view.state.tr.setSelection(sel));
+          } catch { /* ignore — focus below is the fallback */ }
+
+          view.focus();
+          return true;
+        },
+
+        /**
+         * Cmd/Ctrl held → add 'link-hover' class for pointer cursor on links.
+         */
+        keydown(view, event) {
+          if (event.key === 'Meta' || event.key === 'Control') {
+            view.dom.classList.add('link-hover');
+          }
+          return false;
+        },
+        keyup(view, event) {
+          if (event.key === 'Meta' || event.key === 'Control') {
+            view.dom.classList.remove('link-hover');
+          }
+          return false;
+        },
+      },
+
+      /**
        * Image click handler:
        * Prevent NodeSelection (blue highlight) on image click — place TextSelection after image.
+       * (math_block is handled in handleDOMEvents.mousedown above)
        */
       handleClickOn(view, _pos, node, nodePos, event) {
         if (node.type.name !== 'image') return false;
@@ -108,7 +318,7 @@ export function createEditorPropsPlugin(): Plugin {
        * Add 'caret-empty-para' decoration to empty paragraph under cursor on macOS.
        */
       decorations(state) {
-        if (!isMac) return DecorationSet.empty;
+        if (!isMacOS) return DecorationSet.empty;
         const { selection } = state;
         if (!selection.empty) return DecorationSet.empty;
 
@@ -125,15 +335,33 @@ export function createEditorPropsPlugin(): Plugin {
     },
 
     /**
-     * Scroll-after-paste:
-     * Capture-phase paste listener detects paste, then scroll on next doc update.
+     * Scroll-after-paste + empty-doc focus recovery.
      */
     view(editorView) {
       function onPaste() { pendingPaste = true; }
       editorView.dom.addEventListener('paste', onPaste, true);
 
+      // Remove link-hover class when window loses focus (Cmd/Ctrl release won't fire)
+      function onBlur() { editorView.dom.classList.remove('link-hover'); }
+      window.addEventListener('blur', onBlur);
+
       return {
         update(view, prevState) {
+          // ── WKWebView empty-doc focus recovery ──
+          // After large deletions (select-all + delete), WKWebView may lose the
+          // native caret. Re-focus the view so the fake CSS caret shows.
+          if (isMacOS && view.state.doc !== prevState.doc) {
+            const docSize = view.state.doc.content.size;
+            const prevDocSize = prevState.doc.content.size;
+            if (docSize <= 4 && prevDocSize > 4) {
+              requestAnimationFrame(() => {
+                try {
+                  if (!view.hasFocus()) view.focus();
+                } catch { /* ignore */ }
+              });
+            }
+          }
+
           if (!pendingPaste || view.state.doc.eq(prevState.doc)) return;
           pendingPaste = false;
           requestAnimationFrame(() => {
@@ -151,6 +379,8 @@ export function createEditorPropsPlugin(): Plugin {
         },
         destroy() {
           editorView.dom.removeEventListener('paste', onPaste, true);
+          window.removeEventListener('blur', onBlur);
+          editorView.dom.classList.remove('link-hover');
         },
       };
     },

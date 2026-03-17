@@ -221,7 +221,7 @@
     "saveAsKB": "Enregistrer comme base de connaissances"
   },
   "ai": {
-    "title": "Assistant IA",
+    "title": "AI",
     "rulesActive": "Règles MORAYA.md actives ({count} sections)",
     "clearChat": "Effacer la conversation",
     "unconfigured": "L'IA n'est pas configurée.",
@@ -395,8 +395,21 @@
         "filesystem": "Lire, rechercher et gérer les fichiers locaux",
         "fetch": "Récupérer des pages web et les convertir en Markdown",
         "git": "Lire et rechercher dans les dépôts Git",
-        "memory": "Graphe de connaissances persistant pour la mémoire IA"
+        "memory": "Graphe de connaissances persistant pour la mémoire IA",
+        "puppeteer": "Automatisation du navigateur et web scraping",
+        "sqlite": "Interroger et gérer les bases de données SQLite",
+        "slack": "Lire et rechercher les canaux et messages Slack",
+        "googleMaps": "Géocodage, itinéraires et recherche de lieux",
+        "sequentialThinking": "Raisonnement étape par étape et résolution de problèmes",
+        "everything": "Recherche de fichiers Windows via Everything"
       },
+      "presetEnvTitle": "Variables d'environnement",
+      "presetEnvDesc": {
+        "slackBotToken": "Slack Bot OAuth Token (xoxb-...)",
+        "slackTeamId": "ID de l'équipe/espace de travail Slack (optionnel)",
+        "googleMapsApiKey": "Clé API Google Maps"
+      },
+      "presetAdd": "Ajouter et connecter",
       "formMode": "Formulaire",
       "jsonMode": "JSON",
       "jsonPlaceholder": "Collez la configuration JSON, ex. :\n{\n  \"mcpServers\": {\n    \"nom\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@.../server-xxx\"]\n    }\n  }\n}",
@@ -611,7 +624,18 @@
     "aboutMoraya": "À propos de Moraya",
     "feedback": "Retours",
     "settings": "Paramètres...",
-    "versionInfo": "Informations de version"
+    "versionInfo": "Informations de version",
+    "workflow": "Workflow",
+    "seoOptimization": "Optimisation SEO",
+    "aiImageGeneration": "Génération d'images IA",
+    "publish": "Publier",
+    "mcpTools": "Outils MCP",
+    "noMCPTools": "Aucun outil MCP connecté"
+  },
+  "contextMenu": {
+    "cut": "Couper",
+    "copy": "Copier",
+    "paste": "Coller"
   },
   "search": {
     "findPlaceholder": "Rechercher...",
@@ -822,7 +846,12 @@
     "progressPublishing": "Upload en cours...",
     "progressRss": "Mise à jour du RSS...",
     "progressDone": "Terminé",
-    "progressFailed": "Échec"
+    "progressFailed": "Échec",
+    "enableSEO": "Optimisation SEO",
+    "enableSEOHint": "Générer le titre, l'extrait, les tags et la méta-description avant publication",
+    "nextSEO": "Suivant : SEO →",
+    "backToTargets": "Retour",
+    "seoNoProvider": "Aucun fournisseur IA configuré. Veuillez en configurer un dans les paramètres."
   },
   "update": {
     "title": "Informations de version",
@@ -904,6 +933,25 @@
       "search": "Rechercher des modèles...",
       "back": "Retour",
       "start": "Démarrer"
+    },
+    "myTemplates": {
+      "name": "Mes modèles",
+      "desc": "Modèles personnalisés importés ou créés par vous"
+    },
+    "manage": {
+      "title": "Gérer les modèles",
+      "import": "Importer un modèle",
+      "export": "Exporter les modèles",
+      "manage": "Gérer les modèles",
+      "delete": "Supprimer",
+      "deleteConfirm": "Confirmer ?",
+      "importSuccess": "{count} modèle(s) importé(s)",
+      "exportSuccess": "Modèles exportés avec succès",
+      "noCustomTemplates": "Aucun modèle personnalisé pour le moment",
+      "sourceGlobal": "Global",
+      "sourceKb": "Base de connaissances",
+      "invalidFormat": "Format de modèle invalide",
+      "selectTemplates": "Sélectionner les modèles à exporter"
     },
     "error": {
       "noDocument": "Veuillez d'abord rédiger du contenu",
@@ -1405,5 +1453,9 @@
     "unsavedMsg": "« {fileName} » contient des modifications non enregistrées.",
     "save": "Enregistrer",
     "discard": "Abandonner"
+  },
+  "link": {
+    "open": "Ouvrir le lien",
+    "remove": "Supprimer le lien"
   }
 }

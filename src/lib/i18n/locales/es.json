@@ -221,7 +221,7 @@
     "saveAsKB": "Guardar como base de conocimientos"
   },
   "ai": {
-    "title": "Asistente de IA",
+    "title": "AI",
     "rulesActive": "Reglas MORAYA.md activas ({count} secciones)",
     "clearChat": "Limpiar chat",
     "unconfigured": "La IA no está configurada.",
@@ -395,8 +395,21 @@
         "filesystem": "Leer, buscar y gestionar archivos locales",
         "fetch": "Obtener páginas web y convertir a Markdown",
         "git": "Leer y buscar repositorios Git",
-        "memory": "Grafo de conocimiento persistente para memoria de IA"
+        "memory": "Grafo de conocimiento persistente para memoria de IA",
+        "puppeteer": "Automatización del navegador y web scraping",
+        "sqlite": "Consultar y gestionar bases de datos SQLite",
+        "slack": "Leer y buscar canales y mensajes de Slack",
+        "googleMaps": "Geocodificación, rutas y búsqueda de lugares",
+        "sequentialThinking": "Razonamiento paso a paso y resolución de problemas",
+        "everything": "Búsqueda de archivos en Windows con Everything"
       },
+      "presetEnvTitle": "Variables de entorno",
+      "presetEnvDesc": {
+        "slackBotToken": "Slack Bot OAuth Token (xoxb-...)",
+        "slackTeamId": "ID de equipo/espacio de trabajo de Slack (opcional)",
+        "googleMapsApiKey": "Clave de API de Google Maps"
+      },
+      "presetAdd": "Agregar y conectar",
       "formMode": "Formulario",
       "jsonMode": "JSON",
       "jsonPlaceholder": "Pegue la configuración JSON, ej.:\n{\n  \"mcpServers\": {\n    \"nombre\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@.../server-xxx\"]\n    }\n  }\n}",
@@ -611,7 +624,18 @@
     "aboutMoraya": "Acerca de Moraya",
     "feedback": "Comentarios",
     "settings": "Configuración...",
-    "versionInfo": "Información de versión"
+    "versionInfo": "Información de versión",
+    "workflow": "Flujo de trabajo",
+    "seoOptimization": "Optimización SEO",
+    "aiImageGeneration": "Generación de imágenes IA",
+    "publish": "Publicar",
+    "mcpTools": "Herramientas MCP",
+    "noMCPTools": "No hay herramientas MCP conectadas"
+  },
+  "contextMenu": {
+    "cut": "Cortar",
+    "copy": "Copiar",
+    "paste": "Pegar"
   },
   "search": {
     "findPlaceholder": "Buscar...",
@@ -822,7 +846,12 @@
     "progressPublishing": "Subiendo...",
     "progressRss": "Actualizando RSS...",
     "progressDone": "Listo",
-    "progressFailed": "Fallido"
+    "progressFailed": "Fallido",
+    "enableSEO": "Optimización SEO",
+    "enableSEOHint": "Generar título, extracto, etiquetas y meta descripción antes de publicar",
+    "nextSEO": "Siguiente: SEO →",
+    "backToTargets": "Volver",
+    "seoNoProvider": "No se ha configurado un proveedor de IA. Por favor, configure uno en Ajustes."
   },
   "update": {
     "title": "Información de versión",
@@ -904,6 +933,25 @@
       "search": "Buscar plantillas...",
       "back": "Atrás",
       "start": "Iniciar"
+    },
+    "myTemplates": {
+      "name": "Mis plantillas",
+      "desc": "Plantillas personalizadas importadas o creadas por usted"
+    },
+    "manage": {
+      "title": "Gestionar plantillas",
+      "import": "Importar plantilla",
+      "export": "Exportar plantillas",
+      "manage": "Gestionar plantillas",
+      "delete": "Eliminar",
+      "deleteConfirm": "¿Confirmar?",
+      "importSuccess": "{count} plantilla(s) importada(s)",
+      "exportSuccess": "Plantillas exportadas exitosamente",
+      "noCustomTemplates": "Aún no hay plantillas personalizadas",
+      "sourceGlobal": "Global",
+      "sourceKb": "Base de conocimiento",
+      "invalidFormat": "Formato de plantilla no válido",
+      "selectTemplates": "Seleccionar plantillas para exportar"
     },
     "error": {
       "noDocument": "Por favor escriba algo de contenido primero",
@@ -1405,5 +1453,9 @@
     "unsavedMsg": "\"{fileName}\" tiene cambios sin guardar.",
     "save": "Guardar",
     "discard": "Descartar"
+  },
+  "link": {
+    "open": "Abrir enlace",
+    "remove": "Eliminar enlace"
   }
 }

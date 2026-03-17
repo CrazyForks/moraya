@@ -168,6 +168,156 @@ function loadLocalImageSrc(img: HTMLImageElement, src: string): void {
   });
 }
 
+// ── Media (video/audio) helpers ──────────────────────────────────
+
+/** MIME types for audio and video files. */
+const mediaMimeMap: Record<string, string> = {
+  mp4: 'video/mp4', webm: 'video/webm', ogg: 'video/ogg', ogv: 'video/ogg',
+  mov: 'video/quicktime', avi: 'video/x-msvideo',
+  mp3: 'audio/mpeg', wav: 'audio/wav', flac: 'audio/flac', aac: 'audio/aac',
+  m4a: 'audio/mp4', oga: 'audio/ogg', opus: 'audio/opus', weba: 'audio/webm',
+};
+
+/** Load a local media file via Tauri IPC and set element src to blob URL. */
+function loadLocalMediaSrc(el: HTMLMediaElement | HTMLSourceElement, filePath: string): void {
+  const cached = localImageBlobCache.get(filePath);
+  if (cached) {
+    el.src = cached;
+    if (el instanceof HTMLMediaElement) el.load();
+    return;
+  }
+  import('@tauri-apps/api/core').then(({ invoke }) => {
+    invoke<number[]>('read_file_binary', { path: filePath }).then(data => {
+      const bytes = new Uint8Array(data);
+      const ext = filePath.split('.').pop()?.toLowerCase() || '';
+      const mime = mediaMimeMap[ext] || 'application/octet-stream';
+      const blob = new Blob([bytes], { type: mime });
+      const blobUrl = URL.createObjectURL(blob);
+      localImageBlobCache.set(filePath, blobUrl);
+      el.src = blobUrl;
+      if (el instanceof HTMLMediaElement) el.load();
+    }).catch(() => { /* media load failed silently */ });
+  });
+}
+
+/**
+ * Load a remote media URL via Tauri HTTP plugin (bypasses WebKit mixed content
+ * blocking in the secure tauri:// context) and set element src to a blob URL.
+ */
+function loadRemoteMediaSrc(el: HTMLMediaElement | HTMLSourceElement, url: string): void {
+  const cached = localImageBlobCache.get(url);
+  if (cached) {
+    el.src = cached;
+    if (el instanceof HTMLMediaElement) el.load();
+    return;
+  }
+  import('@tauri-apps/plugin-http').then(async ({ fetch: tauriFetch }) => {
+    try {
+      const resp = await tauriFetch(url);
+      if (!resp.ok) {
+        console.warn('[media-proxy] HTTP', resp.status, url);
+        return;
+      }
+      const buffer = await resp.arrayBuffer();
+      const contentType = resp.headers.get('content-type') || '';
+      // Reject non-media responses (e.g., CDN returning HTML error page for expired URLs)
+      if (contentType.startsWith('text/html')) {
+        console.warn('[media-proxy] CDN returned HTML instead of media — URL may have expired:', url);
+        return;
+      }
+      let mime = contentType;
+      if (!mime || mime === 'application/octet-stream') {
+        const ext = url.split(/[?#]/)[0].split('.').pop()?.toLowerCase() || '';
+        mime = mediaMimeMap[ext] || 'application/octet-stream';
+      }
+      const blob = new Blob([buffer], { type: mime });
+      const blobUrl = URL.createObjectURL(blob);
+      localImageBlobCache.set(url, blobUrl);
+      el.src = blobUrl;
+      if (el instanceof HTMLMediaElement) el.load();
+    } catch (e) {
+      console.warn('[media-proxy] fetch failed:', e);
+    }
+  });
+}
+
+/** Set src on a media/source element, handling local file paths via blob URL. */
+function setMediaSrc(el: HTMLMediaElement | HTMLSourceElement, src: string): void {
+  if (isAbsoluteFilePath(src)) {
+    loadLocalMediaSrc(el, src);
+  } else if (isRelativePath(src)) {
+    loadLocalMediaSrc(el, resolveRelativePath(src));
+  } else if (/^https?:\/\//i.test(src)) {
+    loadRemoteMediaSrc(el, src);
+  } else {
+    el.src = src;
+  }
+}
+
+/**
+ * Create a <video> or <audio> element from raw HTML, rendering it as an
+ * actual media player. Attributes from the original HTML tag are preserved.
+ * Child <source> elements are extracted and created programmatically.
+ * Event handler attributes (on*) are stripped for XSS prevention.
+ */
+function createMediaElement(tagName: 'video' | 'audio', value: string): HTMLElement {
+  const wrapper = document.createElement('span');
+  wrapper.dataset.type = 'html-inline';
+  wrapper.dataset.value = value;
+  wrapper.className = 'html-media-wrapper';
+  wrapper.contentEditable = 'false';
+
+  const el = document.createElement(tagName);
+
+  // Extract opening tag to parse attributes
+  const openTagMatch = value.match(new RegExp(`^<${tagName}\\b[^>]*>`, 'i'));
+  const openTag = openTagMatch ? openTagMatch[0] : '';
+  const attrs = extractAllHtmlAttrs(openTag);
+
+  // Apply key=value attributes (skip src — handled separately; skip event handlers — XSS)
+  for (const [key, val] of Object.entries(attrs)) {
+    if (key === 'src') continue;
+    if (key.startsWith('on')) continue;
+    el.setAttribute(key, val);
+  }
+
+  // Boolean attributes that may appear without a value (e.g. <video controls>).
+  // Strip quoted values from the tag first so we don't false-match a word
+  // that happens to appear inside an attribute value.
+  const strippedTag = openTag.replace(/=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/g, '');
+  const boolAttrs = ['controls', 'autoplay', 'loop', 'muted', 'playsinline'];
+  for (const attr of boolAttrs) {
+    if (!(attr in attrs) && new RegExp(`\\b${attr}\\b`, 'i').test(strippedTag)) {
+      el.setAttribute(attr, '');
+    }
+  }
+
+  // Ensure audio has preload so the browser fetches metadata
+  if (tagName === 'audio' && !attrs.preload) {
+    el.setAttribute('preload', 'auto');
+  }
+
+  // Extract and create <source> child elements FIRST (before setting main src)
+  const sourceRe = /<source\b[^>]*\/?>/gi;
+  let srcMatch: RegExpExecArray | null;
+  while ((srcMatch = sourceRe.exec(value)) !== null) {
+    const srcAttrs = extractAllHtmlAttrs(srcMatch[0]);
+    if (!srcAttrs.src) continue;
+    const source = document.createElement('source');
+    if (srcAttrs.type) source.type = srcAttrs.type;
+    setMediaSrc(source, srcAttrs.src);
+    el.appendChild(source);
+  }
+
+  // Set src on the element after sources are added
+  if (attrs.src) {
+    setMediaSrc(el, attrs.src);
+  }
+
+  wrapper.appendChild(el);
+  return wrapper;
+}
+
 // ── Node Specs ──────────────────────────────────────────────────
 
 const doc: NodeSpec = {
@@ -474,6 +624,10 @@ const html_inline: NodeSpec = {
       }
       return wrapper;
     }
+
+    // Render <video>/<audio> tags as actual media players.
+    if (/^<video\b/i.test(value)) return createMediaElement('video', value);
+    if (/^<audio\b/i.test(value)) return createMediaElement('audio', value);
 
     // Default: invisible span for other inline HTML (<font>, <br>, etc.)
     return ['span', { 'data-type': 'html-inline', 'data-value': value }];

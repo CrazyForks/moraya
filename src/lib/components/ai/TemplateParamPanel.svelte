@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
+  import { getTemplateName, getParamLabel, getOptionLabel } from '$lib/services/ai';
   import type { AITemplate } from '$lib/services/ai';
 
   let {
@@ -43,7 +44,7 @@
 <div class="param-panel">
   <div class="param-header">
     <span class="param-icon">{template.icon}</span>
-    <span class="param-title">{$t(template.nameKey)}</span>
+    <span class="param-title">{getTemplateName(template, $t)}</span>
     <button class="close-btn" aria-label={$t('common.close')} onclick={onCancel}>
       <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
         <path d="M9.5 2.5l-7 7m0-7l7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
@@ -55,7 +56,7 @@
     <div class="params-body">
       {#each template.params as param}
         <div class="param-group">
-          <div class="param-label">{$t(param.labelKey)}</div>
+          <div class="param-label">{getParamLabel(param, $t)}</div>
           {#if param.type === 'select'}
             <select
               class="param-select"
@@ -63,7 +64,7 @@
               onchange={(e) => { paramValues[param.key] = (e.target as HTMLSelectElement).value; }}
             >
               {#each param.options as opt}
-                <option value={opt.value}>{$t(opt.labelKey)}</option>
+                <option value={opt.value}>{getOptionLabel(opt, $t)}</option>
               {/each}
             </select>
           {:else}
@@ -77,7 +78,7 @@
                     checked={paramValues[param.key] === opt.value}
                     onchange={() => { paramValues[param.key] = opt.value; }}
                   />
-                  <span>{$t(opt.labelKey)}</span>
+                  <span>{getOptionLabel(opt, $t)}</span>
                 </label>
               {/each}
             </div>
@@ -87,13 +88,13 @@
     </div>
   {/if}
 
-  {#if template.inputHintKey}
+  {#if template.inputHintKey || template.inputHint}
     <div class="input-section">
       <textarea
         class="param-input"
         bind:value={inputText}
         onkeydown={handleKeydown}
-        placeholder={$t(template.inputHintKey)}
+        placeholder={template.inputHint ?? (template.inputHintKey ? $t(template.inputHintKey) : '')}
         rows={3}
       ></textarea>
     </div>

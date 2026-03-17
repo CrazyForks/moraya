@@ -225,7 +225,7 @@
     "saveAsKB": "حفظ كقاعدة معرفة"
   },
   "ai": {
-    "title": "مساعد AI",
+    "title": "AI",
     "rulesActive": "قواعد MORAYA.md نشطة ({count} أقسام)",
     "clearChat": "مسح المحادثة",
     "unconfigured": "لم يتم تكوين AI.",
@@ -399,8 +399,21 @@
         "filesystem": "قراءة وبحث وإدارة الملفات المحلية",
         "fetch": "جلب صفحات الويب وتحويلها إلى Markdown",
         "git": "قراءة وبحث مستودعات Git",
-        "memory": "رسم بياني معرفي دائم لذاكرة AI"
+        "memory": "رسم بياني معرفي دائم لذاكرة AI",
+        "puppeteer": "أتمتة المتصفح وكشط الويب",
+        "sqlite": "استعلام وإدارة قواعد بيانات SQLite",
+        "slack": "قراءة وبحث قنوات ورسائل Slack",
+        "googleMaps": "الترميز الجغرافي والاتجاهات وبحث الأماكن",
+        "sequentialThinking": "التفكير التسلسلي وحل المشكلات",
+        "everything": "بحث ملفات Windows عبر Everything"
       },
+      "presetEnvTitle": "متغيرات البيئة",
+      "presetEnvDesc": {
+        "slackBotToken": "Slack Bot OAuth Token (xoxb-...)",
+        "slackTeamId": "معرف فريق/مساحة عمل Slack (اختياري)",
+        "googleMapsApiKey": "مفتاح Google Maps API"
+      },
+      "presetAdd": "إضافة وتوصيل",
       "formMode": "نموذج",
       "jsonMode": "JSON",
       "jsonPlaceholder": "الصق تكوين JSON، مثال:\n{\n  \"mcpServers\": {\n    \"name\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@.../server-xxx\"]\n    }\n  }\n}",
@@ -615,7 +628,18 @@
     "aboutMoraya": "حول Moraya",
     "feedback": "ملاحظات",
     "settings": "الإعدادات...",
-    "versionInfo": "معلومات الإصدار"
+    "versionInfo": "معلومات الإصدار",
+    "workflow": "سير العمل",
+    "seoOptimization": "تحسين SEO",
+    "aiImageGeneration": "توليد صور AI",
+    "publish": "نشر",
+    "mcpTools": "أدوات MCP",
+    "noMCPTools": "لا توجد أدوات MCP متصلة"
+  },
+  "contextMenu": {
+    "cut": "قص",
+    "copy": "نسخ",
+    "paste": "لصق"
   },
   "search": {
     "findPlaceholder": "بحث...",
@@ -826,7 +850,12 @@
     "progressPublishing": "جارٍ الرفع...",
     "progressRss": "جارٍ تحديث RSS...",
     "progressDone": "تم",
-    "progressFailed": "فشل"
+    "progressFailed": "فشل",
+    "enableSEO": "تحسين SEO",
+    "enableSEOHint": "توليد العنوان والمقتطف والعلامات ووصف الميتا قبل النشر",
+    "nextSEO": "التالي: SEO →",
+    "backToTargets": "رجوع",
+    "seoNoProvider": "لم يتم تكوين مزود AI. يرجى تكوين مزود AI في الإعدادات."
   },
   "update": {
     "title": "معلومات الإصدار",
@@ -908,6 +937,25 @@
       "search": "البحث في القوالب...",
       "back": "رجوع",
       "start": "بدء"
+    },
+    "myTemplates": {
+      "name": "قوالبي",
+      "desc": "القوالب المخصصة التي قمت باستيرادها أو إنشائها"
+    },
+    "manage": {
+      "title": "إدارة القوالب",
+      "import": "استيراد قالب",
+      "export": "تصدير القوالب",
+      "manage": "إدارة القوالب",
+      "delete": "حذف",
+      "deleteConfirm": "تأكيد الحذف؟",
+      "importSuccess": "تم استيراد {count} قالب(قوالب)",
+      "exportSuccess": "تم تصدير القوالب بنجاح",
+      "noCustomTemplates": "لا توجد قوالب مخصصة بعد",
+      "sourceGlobal": "عام",
+      "sourceKb": "قاعدة المعرفة",
+      "invalidFormat": "تنسيق قالب غير صالح",
+      "selectTemplates": "حدد القوالب للتصدير"
     },
     "error": {
       "noDocument": "يرجى كتابة بعض المحتوى أولاً",
@@ -1409,5 +1457,9 @@
     "unsavedMsg": "\"{fileName}\" يحتوي على تغييرات غير محفوظة.",
     "save": "حفظ",
     "discard": "تجاهل"
+  },
+  "link": {
+    "open": "فتح الرابط",
+    "remove": "إزالة الرابط"
   }
 }

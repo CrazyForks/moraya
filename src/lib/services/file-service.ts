@@ -119,8 +119,10 @@ export async function openImageFile(): Promise<string | null> {
 export async function readImageAsBlobUrl(filePath: string): Promise<string> {
   const ext = filePath.split('.').pop()?.toLowerCase() ?? 'png';
   const mime = MIME_MAP[ext] ?? 'image/png';
-  const bytes = await readFile(filePath);
-  const blob = new Blob([bytes], { type: mime });
+  // Use Rust read_file_binary (validate_path allows ~/…) instead of Tauri fs
+  // plugin readFile which is restricted to narrower scopes.
+  const bytes = await invoke<number[]>('read_file_binary', { path: filePath });
+  const blob = new Blob([new Uint8Array(bytes)], { type: mime });
   return URL.createObjectURL(blob);
 }
 
@@ -189,7 +191,7 @@ export async function migrateTempImages(
 
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif', 'tiff', 'tif']);
 
-function isImageFile(name: string): boolean {
+export function isImageFile(name: string): boolean {
   const ext = name.split('.').pop()?.toLowerCase() ?? '';
   return IMAGE_EXTENSIONS.has(ext);
 }
