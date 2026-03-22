@@ -100,7 +100,7 @@ export function createEnterHandlerPlugin(): Plugin {
 
     props: {
       handleKeyDown(view, event) {
-        if (event.key !== 'Enter') return false;
+        if (event.isComposing || event.key !== 'Enter') return false;
 
         const { $from } = view.state.selection;
 
