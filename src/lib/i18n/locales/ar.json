@@ -1481,6 +1481,7 @@
     "reindexAll": "إعادة فهرسة الكل",
     "deleteConfirm": "هل أنت متأكد أنك تريد حذف الفهرس؟",
     "useSameAsAI": "استخدام نفس إعدادات محادثة الذكاء الاصطناعي",
+    "onlineModel": "نموذج عبر الإنترنت",
     "dimensionWarning": "الحد الأقصى لهذا النموذج: {max}. المستخدم: {actual}.",
     "status": {
       "indexed": "مفهرس ({chunks} أجزاء، {files} ملفات)",
@@ -1494,7 +1495,12 @@
       "indexing": "جارٍ بناء الفهرس...",
       "done": "تم"
     },
-    "providerNoEmbedding": "مزود دردشة الذكاء الاصطناعي الحالي لا يدعم Embedding. يرجى اختيار مزود Embedding أعلاه."
+    "providerNoEmbedding": "مزود دردشة الذكاء الاصطناعي الحالي لا يدعم Embedding. يرجى اختيار مزود Embedding أعلاه.",
+    "localModels": "النماذج المحلية",
+    "downloadModel": "تحميل",
+    "deleteModel": "حذف النموذج",
+    "selectLocalModel": "اختر نموذجاً محملاً",
+    "noLocalModels": "لا توجد نماذج محملة. حمّل نموذجاً أدناه."
   },
   "commandPalette": {
     "placeholder": "البحث في الملفات أو الأوامر أو قاعدة المعرفة...",

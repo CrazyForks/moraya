@@ -1560,6 +1560,7 @@
     "reindexAll": "Re-index All",
     "deleteConfirm": "Are you sure you want to delete the index?",
     "useSameAsAI": "Use same as AI Chat",
+    "onlineModel": "Online Model",
     "dimensionWarning": "Max for this model: {max}. Using {actual}.",
     "status": {
       "indexed": "Indexed ({chunks} chunks, {files} files)",
@@ -1573,7 +1574,12 @@
       "indexing": "Building index...",
       "done": "Done"
     },
-    "providerNoEmbedding": "Current AI Chat provider does not support embedding. Please select an embedding provider above."
+    "providerNoEmbedding": "Current AI Chat provider does not support embedding. Please select an embedding provider above.",
+    "localModels": "Local Models",
+    "downloadModel": "Download",
+    "deleteModel": "Delete Model",
+    "selectLocalModel": "Select a downloaded model",
+    "noLocalModels": "No models downloaded. Download one below."
   },
   "commandPalette": {
     "placeholder": "Search files, commands, or knowledge base...",

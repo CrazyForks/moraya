@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+  import { invoke } from '@tauri-apps/api/core';
   import { t } from '$lib/i18n';
   import { settingsStore } from '$lib/stores/settings-store';
   import { filesStore } from '$lib/stores/files-store';
@@ -24,20 +25,20 @@
 
   let knowledgeBases = $state<KnowledgeBase[]>([]);
 
-  const PROVIDERS = [
-    { value: '', label: 'kb.useSameAsAI' },
-    { value: 'openai', label: 'OpenAI' },
-    { value: 'gemini', label: 'Gemini' },
-    { value: 'ollama', label: 'Ollama' },
-    { value: 'glm', label: 'GLM' },
-    { value: 'doubao', label: 'Doubao' },
-    { value: 'deepseek', label: 'DeepSeek' },
+  const SOURCE_OPTIONS = [
+    { value: 'online', labelKey: 'kb.onlineModel' },
+    { value: 'local', labelKey: 'kb.localModels' },
   ];
 
+  // Online provider list for the model dropdown
+  const ONLINE_PROVIDERS = ['openai', 'gemini', 'ollama', 'glm', 'doubao', 'deepseek'];
+
+  let embeddingSource = $state<'online' | 'local'>('online');
   let embeddingProvider = $state('');
   let embeddingModel = $state('');
   let embeddingDimensions = $state(1024);
   let autoIndexOnSave = $state(false);
+  let localEmbeddingModelId = $state('');
   let showModelDropdown = $state(false);
 
   let indexStatus: IndexStatus | null = $state(null);
@@ -50,9 +51,9 @@
   let activeKBPath = $state('');
   let activeKBName = $state('');
 
-  // Effective provider (resolved from AI chat if not explicitly set)
+  // Effective provider (resolved from settings or AI chat)
   let effectiveProvider = $derived(
-    embeddingProvider || aiStore.getActiveConfig()?.provider || 'openai',
+    embeddingSource === 'local' ? 'local' : (embeddingProvider || aiStore.getActiveConfig()?.provider || 'openai'),
   );
 
   // Available models for the effective provider
@@ -76,9 +77,11 @@
 
   // Load settings
   const unsubSettings = settingsStore.subscribe((s) => {
-    embeddingProvider = s.embeddingProvider || '';
+    embeddingSource = s.embeddingProvider === 'local' ? 'local' : 'online';
+    embeddingProvider = (s.embeddingProvider && s.embeddingProvider !== 'local') ? s.embeddingProvider : '';
     embeddingDimensions = s.embeddingDimensions || 1024;
     autoIndexOnSave = s.autoIndexOnSave || false;
+    localEmbeddingModelId = s.localEmbeddingModelId || '';
     // Auto-fill model with provider default if empty
     if (s.embeddingModel) {
       embeddingModel = s.embeddingModel;
@@ -170,7 +173,8 @@
 
   function handleWindowClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
-    if (!target.closest('.model-combo')) {
+    // Close dropdown when clicking outside .model-combo, but not on inline download buttons
+    if (!target.closest('.model-combo') && !target.closest('.btn-inline-dl')) {
       showModelDropdown = false;
     }
   }
@@ -189,12 +193,70 @@
       progressTotal = event.payload.total;
       progressFileName = event.payload.file_name;
     });
+    loadModels();
+    downloadUnlisten = await listen<{
+      model_id: string; received: number; total: number; progress: number;
+    }>('model-download-progress', (event) => {
+      if (event.payload.model_id === downloadingModelId) {
+        downloadProgress = event.payload.progress;
+      }
+    });
   });
+
+  // --------------- Local models ---------------
+  interface LocalModel {
+    id: string;
+    name: string;
+    dimensions: number;
+    size: number;
+    language: string;
+    description: string;
+    downloaded: boolean;
+  }
+  let localModels: LocalModel[] = $state([]);
+  let downloadingModelId = $state('');
+  let downloadProgress = $state(0);
+  let downloadUnlisten: UnlistenFn | null = null;
+
+  async function loadModels() {
+    try {
+      localModels = await invoke<LocalModel[]>('kb_list_local_models');
+    } catch { /* ignore */ }
+  }
+
+  async function handleDownloadModel(modelId: string) {
+    downloadingModelId = modelId;
+    downloadProgress = 0;
+    try {
+      await invoke<string>('kb_download_model', { modelId });
+      await loadModels();
+    } catch (e: any) {
+      console.error('[KB] Model download failed:', e);
+    } finally {
+      downloadingModelId = '';
+      downloadProgress = 0;
+    }
+  }
+
+  async function handleDeleteModel(modelId: string) {
+    try {
+      await invoke('kb_delete_model', { modelId });
+      await loadModels();
+    } catch (e: any) {
+      console.error('[KB] Model delete failed:', e);
+    }
+  }
+
+  function formatSize(bytes: number): string {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
+  }
 
   onDestroy(() => {
     unsubSettings();
     unsubFiles();
     progressUnlisten?.();
+    downloadUnlisten?.();
     window.removeEventListener('click', handleWindowClick);
   });
 </script>
@@ -214,16 +276,15 @@
 
   <div class="setting-group">
     <label class="setting-label">{$t('kb.provider')}</label>
-    <select class="setting-input" value={embeddingProvider} onchange={handleProviderChange}>
-      {#each PROVIDERS as p}
-        <option value={p.value}>{p.value === '' ? $t(p.label) : p.label}</option>
+    <select class="setting-input" value={embeddingSource} onchange={(e) => {
+      const val = (e.target as HTMLSelectElement).value as 'online' | 'local';
+      embeddingSource = val;
+      settingsStore.update({ embeddingProvider: val === 'local' ? 'local' : (embeddingProvider || null) });
+    }}>
+      {#each SOURCE_OPTIONS as opt}
+        <option value={opt.value}>{$t(opt.labelKey)}</option>
       {/each}
     </select>
-    {#if !embeddingProvider && !providerSupportsEmbedding}
-      <div class="provider-warning">
-        {$t('kb.providerNoEmbedding')}
-      </div>
-    {/if}
   </div>
 
   <div class="setting-group">
@@ -232,35 +293,84 @@
       <input
         class="setting-input model-input"
         type="text"
-        value={embeddingModel}
-        placeholder={availableModels[0]?.model || 'text-embedding-3-small'}
+        value={embeddingSource === 'local' ? (localModels.find(m => m.id === localEmbeddingModelId)?.name || '') : embeddingModel}
+        placeholder={embeddingSource === 'local' ? $t('kb.selectLocalModel') : (availableModels[0]?.model || 'text-embedding-3-small')}
         onfocus={() => showModelDropdown = true}
-        oninput={(e) => { embeddingModel = (e.target as HTMLInputElement).value; showModelDropdown = true; }}
-        onchange={handleModelChange}
+        onblur={() => { setTimeout(() => { if (!document.activeElement?.closest('.model-combo')) showModelDropdown = false; }, 200); }}
+        oninput={(e) => {
+          if (embeddingSource !== 'local') {
+            embeddingModel = (e.target as HTMLInputElement).value;
+          }
+          showModelDropdown = true;
+        }}
+        onchange={(e) => {
+          if (embeddingSource !== 'local') handleModelChange(e);
+        }}
         onkeydown={(e) => { if (e.key === 'Escape') showModelDropdown = false; }}
+        readonly={embeddingSource === 'local'}
       />
-      {#if showModelDropdown && filteredModels.length > 0}
+      {#if showModelDropdown}
         <div class="model-dropdown">
-          {#each filteredModels as m}
-            <button
-              class="model-option"
-              class:active={embeddingModel === m.model}
-              onmousedown={(e) => {
-                e.preventDefault();
-                embeddingModel = m.model;
-                settingsStore.update({ embeddingModel: m.model });
-                showModelDropdown = false;
-              }}
-            >
-              <span class="model-name">{m.model}</span>
-              <span class="model-dim">max {m.maxDim}d</span>
-            </button>
-          {/each}
+          {#if embeddingSource === 'local'}
+            <!-- Local models: downloaded ones selectable, others show download button -->
+            {#each localModels as m}
+              {#if m.downloaded}
+                <button
+                  class="model-option"
+                  class:active={localEmbeddingModelId === m.id}
+                  onmousedown={(e) => {
+                    e.preventDefault();
+                    localEmbeddingModelId = m.id;
+                    settingsStore.update({ localEmbeddingModelId: m.id });
+                    showModelDropdown = false;
+                  }}
+                >
+                  <span class="model-name">{m.name}</span>
+                  <span class="model-dim">{m.dimensions}d · ✓</span>
+                </button>
+              {:else}
+                <div class="model-option model-not-downloaded">
+                  <span class="model-name">{m.name}</span>
+                  {#if downloadingModelId === m.id}
+                    <span class="model-dim">{downloadProgress}%</span>
+                  {:else}
+                    <button class="btn-inline-dl" onmousedown={(e) => { e.preventDefault(); e.stopPropagation(); handleDownloadModel(m.id); }}>
+                      {$t('kb.downloadModel')} ({formatSize(m.size)})
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+            {/each}
+          {:else}
+            <!-- Online models: grouped by provider -->
+            {#each ONLINE_PROVIDERS as prov}
+              {#if EMBEDDING_MODELS[prov]}
+                <div class="model-group-label">{prov}</div>
+                {#each EMBEDDING_MODELS[prov] as m}
+                  <button
+                    class="model-option"
+                    class:active={embeddingModel === m.model && embeddingProvider === prov}
+                    onmousedown={(e) => {
+                      e.preventDefault();
+                      embeddingModel = m.model;
+                      embeddingProvider = prov;
+                      settingsStore.update({ embeddingModel: m.model, embeddingProvider: prov });
+                      showModelDropdown = false;
+                    }}
+                  >
+                    <span class="model-name">{m.model}</span>
+                    <span class="model-dim">max {m.maxDim}d</span>
+                  </button>
+                {/each}
+              {/if}
+            {/each}
+          {/if}
         </div>
       {/if}
     </div>
   </div>
 
+  {#if embeddingSource !== 'local'}
   <div class="setting-group">
     <label class="setting-label" for="kb-dimensions">{$t('kb.dimensions')}</label>
     <input
@@ -279,6 +389,7 @@
       </div>
     {/if}
   </div>
+  {/if}
 
   <div class="setting-group">
     <label class="setting-label setting-checkbox">
@@ -342,6 +453,41 @@
           </button>
         {/if}
       </div>
+    </div>
+  {/if}
+
+  {#if localModels.length > 0}
+    <div class="section-divider"></div>
+    <div class="local-models-section">
+      <div class="section-title">{$t('kb.localModels')}</div>
+      {#each localModels as model}
+        <div class="model-row">
+          <div class="model-info">
+            <div class="model-name-row">
+              <span class="model-model-name">{model.name}</span>
+              <span class="model-lang-tag" class:lang-multilingual={model.language === 'multilingual'} class:lang-chinese={model.language === 'chinese'} class:lang-english={model.language === 'english'}>
+                {model.language}
+              </span>
+            </div>
+            <div class="model-meta">{model.dimensions}d · {formatSize(model.size)}</div>
+          </div>
+          <div class="model-actions">
+            {#if model.downloaded}
+              <span class="model-installed">✓</span>
+              <button class="btn-icon btn-delete-model" onclick={() => handleDeleteModel(model.id)} title={$t('kb.deleteModel')}>✕</button>
+            {:else if downloadingModelId === model.id}
+              <div class="model-dl-progress">
+                <div class="model-dl-bar">
+                  <div class="model-dl-fill" style="width: {downloadProgress}%"></div>
+                </div>
+                <span class="model-dl-pct">{downloadProgress}%</span>
+              </div>
+            {:else}
+              <button class="btn btn-sm" onclick={() => handleDownloadModel(model.id)}>{$t('kb.downloadModel')}</button>
+            {/if}
+          </div>
+        </div>
+      {/each}
     </div>
   {/if}
 </div>
@@ -441,6 +587,35 @@
     color: var(--text-secondary);
     flex-shrink: 0;
     margin-left: 8px;
+  }
+
+  .model-group-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 6px 10px 2px;
+    letter-spacing: 0.5px;
+  }
+
+  .model-not-downloaded {
+    opacity: 0.7;
+    cursor: default;
+  }
+
+  .btn-inline-dl {
+    border: 1px solid var(--accent-color, #4a9eff);
+    background: transparent;
+    color: var(--accent-color, #4a9eff);
+    font-size: 11px;
+    padding: 1px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .btn-inline-dl:hover {
+    background: var(--accent-color, #4a9eff);
+    color: white;
   }
 
   .setting-group {
@@ -559,5 +734,122 @@
     background: transparent;
     border: 1px solid var(--text-danger, #e53e3e);
     color: var(--text-danger, #e53e3e);
+  }
+
+  .local-models-section {
+    margin-top: 4px;
+  }
+
+  .model-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-light, #eee);
+    gap: 8px;
+  }
+
+  .model-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .model-name-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .model-model-name {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .model-lang-tag {
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+  }
+
+  .lang-multilingual { background: #e8f5e9; color: #2e7d32; }
+  .lang-chinese { background: #fff3e0; color: #e65100; }
+  .lang-english { background: #e3f2fd; color: #1565c0; }
+
+  .model-meta {
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+
+  .model-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .model-installed {
+    color: var(--color-success, #38a169);
+    font-size: 14px;
+    font-weight: bold;
+  }
+
+  .btn-icon {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+
+  .btn-icon:hover {
+    background: var(--bg-hover);
+    color: var(--text-danger, #e53e3e);
+  }
+
+  .btn-sm {
+    padding: 3px 10px;
+    border: 1px solid var(--accent-color, #4a9eff);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--accent-color, #4a9eff);
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+  }
+
+  .btn-sm:hover {
+    background: var(--accent-color, #4a9eff);
+    color: white;
+  }
+
+  .model-dl-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .model-dl-bar {
+    width: 60px;
+    height: 4px;
+    background: var(--border-light);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .model-dl-fill {
+    height: 100%;
+    background: var(--accent-color, #4a9eff);
+    transition: width 0.3s ease;
+  }
+
+  .model-dl-pct {
+    font-size: 10px;
+    color: var(--text-secondary);
+    min-width: 30px;
   }
 </style>

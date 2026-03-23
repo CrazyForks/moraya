@@ -1560,6 +1560,7 @@
     "reindexAll": "重新索引全部",
     "deleteConfirm": "确定要删除索引吗？",
     "useSameAsAI": "使用与 AI 对话相同的配置",
+    "onlineModel": "在线模型",
     "dimensionWarning": "此模型最高支持：{max}。当前使用：{actual}。",
     "status": {
       "indexed": "已索引（{chunks} 个片段，{files} 个文件）",
@@ -1573,7 +1574,12 @@
       "indexing": "正在构建索引...",
       "done": "完成"
     },
-    "providerNoEmbedding": "当前 AI 对话服务商不支持 Embedding，请在上方选择一个 Embedding 服务商。"
+    "providerNoEmbedding": "当前 AI 对话服务商不支持 Embedding，请在上方选择一个 Embedding 服务商。",
+    "localModels": "本地模型",
+    "downloadModel": "下载",
+    "deleteModel": "删除模型",
+    "selectLocalModel": "选择已下载的模型",
+    "noLocalModels": "尚未下载模型，请在下方下载。"
   },
   "commandPalette": {
     "placeholder": "搜索文件、命令或知识库...",

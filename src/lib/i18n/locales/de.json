@@ -1481,6 +1481,7 @@
     "reindexAll": "Alles neu indexieren",
     "deleteConfirm": "Möchten Sie den Index wirklich löschen?",
     "useSameAsAI": "Gleiche Einstellungen wie AI-Chat verwenden",
+    "onlineModel": "Online-Modell",
     "dimensionWarning": "Maximum für dieses Modell: {max}. Verwendet: {actual}.",
     "status": {
       "indexed": "Indexiert ({chunks} Chunks, {files} Dateien)",
@@ -1494,7 +1495,12 @@
       "indexing": "Index wird aufgebaut...",
       "done": "Fertig"
     },
-    "providerNoEmbedding": "Der aktuelle AI-Chat-Anbieter unterstützt kein Embedding. Bitte wählen Sie oben einen Embedding-Anbieter aus."
+    "providerNoEmbedding": "Der aktuelle AI-Chat-Anbieter unterstützt kein Embedding. Bitte wählen Sie oben einen Embedding-Anbieter aus.",
+    "localModels": "Lokale Modelle",
+    "downloadModel": "Herunterladen",
+    "deleteModel": "Modell löschen",
+    "selectLocalModel": "Heruntergeladenes Modell auswählen",
+    "noLocalModels": "Keine Modelle heruntergeladen. Laden Sie unten eines herunter."
   },
   "commandPalette": {
     "placeholder": "Dateien, Befehle oder Wissensdatenbank durchsuchen...",

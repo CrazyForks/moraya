@@ -1481,6 +1481,7 @@
     "reindexAll": "Переиндексировать всё",
     "deleteConfirm": "Вы уверены, что хотите удалить индекс?",
     "useSameAsAI": "Использовать те же настройки, что и в AI-чате",
+    "onlineModel": "Онлайн модель",
     "dimensionWarning": "Максимум для этой модели: {max}. Используется: {actual}.",
     "status": {
       "indexed": "Проиндексировано ({chunks} фрагментов, {files} файлов)",
@@ -1494,7 +1495,12 @@
       "indexing": "Построение индекса...",
       "done": "Готово"
     },
-    "providerNoEmbedding": "Текущий провайдер AI-чата не поддерживает embedding. Выберите провайдер embedding выше."
+    "providerNoEmbedding": "Текущий провайдер AI-чата не поддерживает embedding. Выберите провайдер embedding выше.",
+    "localModels": "Локальные модели",
+    "downloadModel": "Скачать",
+    "deleteModel": "Удалить модель",
+    "selectLocalModel": "Выбрать загруженную модель",
+    "noLocalModels": "Модели не загружены. Загрузите модель ниже."
   },
   "commandPalette": {
     "placeholder": "Поиск файлов, команд или базы знаний...",

@@ -11,22 +11,29 @@ export function getEmbeddingConfig(): EmbeddingConfig | null {
   const aiState = aiStore.getState();
   const activeAIConfig = aiStore.getActiveConfig();
 
-  // Determine provider: use dedicated embedding provider, or AI chat provider
-  // (only if it supports embedding — has presets in EMBEDDING_MODELS)
+  // Local model mode
+  if (s.embeddingProvider === 'local') {
+    const modelId = s.localEmbeddingModelId;
+    if (!modelId) return null;
+    return {
+      configId: '',
+      provider: 'local',
+      model: modelId,
+      dimensions: 0, // determined by local model
+    };
+  }
+
+  // Online API mode: use dedicated embedding provider or fall back to AI chat provider
   let provider = s.embeddingProvider || '';
   if (!provider) {
     const aiProvider = activeAIConfig?.provider || '';
     if (aiProvider && EMBEDDING_MODELS[aiProvider]) {
-      // AI chat provider supports embeddings (e.g. openai, gemini, ollama)
       provider = aiProvider;
     } else {
-      // AI chat provider doesn't support embeddings (e.g. claude, grok)
-      // Return null — user needs to configure embedding in Settings > Knowledge Base
       return null;
     }
   }
 
-  // Determine model
   let model = s.embeddingModel;
   if (!model) {
     const preset = getDefaultEmbeddingModel(provider);
@@ -34,15 +41,10 @@ export function getEmbeddingConfig(): EmbeddingConfig | null {
     model = preset.model;
   }
 
-  // Determine dimensions with auto-downgrade
   const maxDim = getMaxDimension(provider, model);
   const userDim = s.embeddingDimensions || 1024;
   const dimensions = Math.min(userDim, maxDim);
-
-  // Determine config ID: use explicit embedding config, or AI chat config
-  // (works when AI chat uses the same provider, e.g. both are 'openai')
   const configId = s.embeddingConfigId || aiState.activeConfigId || '';
-
   const baseUrl = s.embeddingBaseUrl || undefined;
 
   return { configId, provider, model, dimensions, baseUrl };

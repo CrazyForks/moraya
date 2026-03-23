@@ -1,6 +1,6 @@
 [package]
 name = "moraya"
-version = "0.26.6"
+version = "0.27.0"
 description = "A minimal, AI-ready Markdown editor"
 authors = ["Moraya Contributors"]
 edition = "2021"
@@ -36,6 +36,12 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 hnsw_rs = "0.3"
 anndists = "0.1"
+# Phase 4: local embedding inference (ort has upstream VitisAI bug — defer to future version)
+# ort = { version = "2.0.0-rc.12", default-features = false, features = ["load-dynamic", "ndarray", "std"] }
+tokenizers = { version = "0.22", default-features = false, features = ["onig"] }
+ndarray = "0.16"
+flate2 = "1"
+tar = "0.4"
 open = "5"
 tauri-plugin-global-shortcut = "2"
 

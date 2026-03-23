@@ -1477,6 +1477,7 @@
     "reindexAll": "Tout réindexer",
     "deleteConfirm": "Êtes-vous sûr de vouloir supprimer l'index ?",
     "useSameAsAI": "Utiliser la même configuration que le chat IA",
+    "onlineModel": "Modèle en Ligne",
     "dimensionWarning": "Maximum pour ce modèle : {max}. Utilisation actuelle : {actual}.",
     "status": {
       "indexed": "Indexé ({chunks} fragments, {files} fichiers)",
@@ -1490,7 +1491,12 @@
       "indexing": "Construction de l'index...",
       "done": "Terminé"
     },
-    "providerNoEmbedding": "Le fournisseur de chat AI actuel ne prend pas en charge l'embedding. Veuillez sélectionner un fournisseur d'embedding ci-dessus."
+    "providerNoEmbedding": "Le fournisseur de chat AI actuel ne prend pas en charge l'embedding. Veuillez sélectionner un fournisseur d'embedding ci-dessus.",
+    "localModels": "Modèles Locaux",
+    "downloadModel": "Télécharger",
+    "deleteModel": "Supprimer le Modèle",
+    "selectLocalModel": "Sélectionner un modèle téléchargé",
+    "noLocalModels": "Aucun modèle téléchargé. Téléchargez-en un ci-dessous."
   },
   "commandPalette": {
     "placeholder": "Rechercher des fichiers, commandes ou base de connaissances...",

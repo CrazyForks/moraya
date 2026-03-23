@@ -1800,6 +1800,330 @@ pub async fn kb_index_single_file(
 }
 
 // ---------------------------------------------------------------------------
+// Local model management (Phase 4)
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct LocalModelInfo {
+    pub id: String,
+    pub name: String,
+    pub dimensions: u32,
+    pub size: u64,
+    pub language: String,
+    pub description: String,
+    pub model_url: String,
+    pub tokenizer_url: String,
+    pub downloaded: bool,
+}
+
+#[derive(Clone, Serialize, Debug)]
+pub struct DownloadProgress {
+    pub model_id: String,
+    pub received: u64,
+    pub total: u64,
+    pub progress: u32,
+}
+
+/// Default manifest of available embedding models
+fn default_manifest() -> Vec<LocalModelInfo> {
+    vec![
+        LocalModelInfo {
+            id: "all-MiniLM-L6-v2-q8".to_string(),
+            name: "All MiniLM L6 v2 (quantized)".to_string(),
+            dimensions: 384,
+            size: 23_000_000,
+            language: "english".to_string(),
+            description: "Fast English embedding, quantized INT8, 23MB".to_string(),
+            model_url: "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model_qint8_arm64.onnx".to_string(),
+            tokenizer_url: "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/tokenizer.json".to_string(),
+            downloaded: false,
+        },
+        LocalModelInfo {
+            id: "all-MiniLM-L6-v2".to_string(),
+            name: "All MiniLM L6 v2".to_string(),
+            dimensions: 384,
+            size: 90_000_000,
+            language: "english".to_string(),
+            description: "English embedding, fp32, 90MB".to_string(),
+            model_url: "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx".to_string(),
+            tokenizer_url: "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/tokenizer.json".to_string(),
+            downloaded: false,
+        },
+        LocalModelInfo {
+            id: "bge-small-zh-v1.5".to_string(),
+            name: "BGE Small Chinese v1.5".to_string(),
+            dimensions: 512,
+            size: 95_000_000,
+            language: "chinese".to_string(),
+            description: "Chinese-optimized embedding, 95MB".to_string(),
+            model_url: "https://huggingface.co/onnx-community/bge-small-zh-v1.5-ONNX/resolve/main/onnx/model.onnx".to_string(),
+            tokenizer_url: "https://huggingface.co/onnx-community/bge-small-zh-v1.5-ONNX/resolve/main/tokenizer.json".to_string(),
+            downloaded: false,
+        },
+    ]
+}
+
+fn models_dir() -> Result<std::path::PathBuf, String> {
+    let home = dirs::home_dir().ok_or("No home directory")?;
+    let dir = home.join(".moraya").join("models");
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir).map_err(|_| "Cannot create models directory".to_string())?;
+    }
+    Ok(dir)
+}
+
+fn ort_dylib_path() -> Result<std::path::PathBuf, String> {
+    let dir = models_dir()?.join("ort");
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir).map_err(|_| "Cannot create ORT directory".to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    let name = "libonnxruntime.dylib";
+    #[cfg(target_os = "linux")]
+    let name = "libonnxruntime.so";
+    #[cfg(target_os = "windows")]
+    let name = "onnxruntime.dll";
+    Ok(dir.join(name))
+}
+
+/// List available models, marking which are downloaded
+#[tauri::command]
+pub fn kb_list_local_models() -> Result<Vec<LocalModelInfo>, String> {
+    let base = models_dir()?;
+    let mut models = default_manifest();
+    for m in &mut models {
+        let model_dir = base.join(&m.id);
+        m.downloaded = model_dir.join("model.onnx").exists()
+            && model_dir.join("tokenizer.json").exists();
+    }
+    Ok(models)
+}
+
+/// Download a model (model.onnx + tokenizer.json) to ~/.moraya/models/{model_id}/
+#[tauri::command]
+pub async fn kb_download_model(
+    app: tauri::AppHandle,
+    model_id: String,
+) -> Result<String, String> {
+    let models = default_manifest();
+    let model = models
+        .iter()
+        .find(|m| m.id == model_id)
+        .ok_or("Unknown model ID")?;
+
+    let base = models_dir()?;
+    let model_dir = base.join(&model_id);
+    if !model_dir.exists() {
+        std::fs::create_dir_all(&model_dir)
+            .map_err(|_| "Cannot create model directory".to_string())?;
+    }
+
+    // Download model.onnx
+    download_file(
+        &app,
+        &model_id,
+        &model.model_url,
+        &model_dir.join("model.onnx"),
+    )
+    .await?;
+
+    // Download tokenizer.json
+    download_file(
+        &app,
+        &model_id,
+        &model.tokenizer_url,
+        &model_dir.join("tokenizer.json"),
+    )
+    .await?;
+
+    Ok(model_dir.to_string_lossy().to_string())
+}
+
+/// Delete a downloaded model
+#[tauri::command]
+pub fn kb_delete_model(model_id: String) -> Result<(), String> {
+    let base = models_dir()?;
+    let model_dir = base.join(&model_id);
+    if model_dir.exists() {
+        std::fs::remove_dir_all(&model_dir)
+            .map_err(|_| "Failed to delete model".to_string())?;
+    }
+    Ok(())
+}
+
+/// Download ONNX Runtime dylib to ~/.moraya/models/ort/
+#[tauri::command]
+pub async fn kb_download_ort_runtime(app: tauri::AppHandle) -> Result<String, String> {
+    let dylib = ort_dylib_path()?;
+    if dylib.exists() {
+        return Ok(dylib.to_string_lossy().to_string());
+    }
+
+    // Platform-specific download URL
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    let (url, inner_path) = (
+        "https://github.com/microsoft/onnxruntime/releases/download/v1.21.0/onnxruntime-osx-arm64-1.21.0.tgz",
+        "onnxruntime-osx-arm64-1.21.0/lib/libonnxruntime.dylib",
+    );
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    let (url, inner_path) = (
+        "https://github.com/microsoft/onnxruntime/releases/download/v1.21.0/onnxruntime-osx-x86_64-1.21.0.tgz",
+        "onnxruntime-osx-x86_64-1.21.0/lib/libonnxruntime.dylib",
+    );
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    let (url, inner_path) = (
+        "https://github.com/microsoft/onnxruntime/releases/download/v1.21.0/onnxruntime-linux-x64-1.21.0.tgz",
+        "onnxruntime-linux-x64-1.21.0/lib/libonnxruntime.so",
+    );
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    let (url, inner_path) = (
+        "https://github.com/microsoft/onnxruntime/releases/download/v1.21.0/onnxruntime-linux-aarch64-1.21.0.tgz",
+        "onnxruntime-linux-aarch64-1.21.0/lib/libonnxruntime.so",
+    );
+    #[cfg(target_os = "windows")]
+    let (url, inner_path) = (
+        "https://github.com/microsoft/onnxruntime/releases/download/v1.21.0/onnxruntime-win-x64-1.21.0.zip",
+        "onnxruntime-win-x64-1.21.0/lib/onnxruntime.dll",
+    );
+
+    // Download archive to temp
+    let tmp = dylib.parent().unwrap().join("ort_download_tmp");
+    download_file(&app, "ort-runtime", url, &tmp).await?;
+
+    // Extract the dylib from the archive
+    let data = std::fs::read(&tmp).map_err(|_| "Failed to read download".to_string())?;
+    let _ = std::fs::remove_file(&tmp);
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::io::Read;
+        let decoder = flate2::read::GzDecoder::new(std::io::Cursor::new(data));
+        let mut archive = tar::Archive::new(decoder);
+        for entry in archive.entries().map_err(|_| "Failed to read archive".to_string())? {
+            let mut entry = entry.map_err(|_| "Archive entry error".to_string())?;
+            let path = entry.path().map_err(|_| "Path error".to_string())?;
+            if path.to_string_lossy().contains(inner_path.rsplit('/').next().unwrap_or("libonnxruntime")) {
+                let mut out = Vec::new();
+                entry.read_to_end(&mut out).map_err(|_| "Read error".to_string())?;
+                std::fs::write(&dylib, out).map_err(|_| "Write error".to_string())?;
+                break;
+            }
+        }
+    }
+
+    if !dylib.exists() {
+        return Err("Failed to extract ONNX Runtime from archive".to_string());
+    }
+
+    Ok(dylib.to_string_lossy().to_string())
+}
+
+/// Check if ONNX Runtime is available
+#[tauri::command]
+pub fn kb_check_ort_available() -> bool {
+    ort_dylib_path().map(|p| p.exists()).unwrap_or(false)
+}
+
+/// Run local ONNX embedding inference
+#[tauri::command]
+pub async fn kb_embed_local(
+    texts: Vec<String>,
+    model_id: String,
+) -> Result<Vec<Vec<f32>>, String> {
+    let base = models_dir()?;
+    let model_dir = base.join(&model_id);
+    let model_path = model_dir.join("model.onnx");
+    let tokenizer_path = model_dir.join("tokenizer.json");
+
+    if !model_path.exists() || !tokenizer_path.exists() {
+        return Err("Model not downloaded".to_string());
+    }
+
+    let dylib = ort_dylib_path()?;
+    if !dylib.exists() {
+        return Err("ONNX Runtime not installed. Download it in Settings.".to_string());
+    }
+
+    // Run inference in blocking thread (CPU-intensive)
+    tokio::task::spawn_blocking(move || {
+        run_onnx_inference(&dylib, &model_path, &tokenizer_path, &texts)
+    })
+    .await
+    .map_err(|e| format!("Inference task failed: {}", e))?
+}
+
+fn run_onnx_inference(
+    _dylib_path: &std::path::Path,
+    _model_path: &std::path::Path,
+    _tokenizer_path: &std::path::Path,
+    _texts: &[String],
+) -> Result<Vec<Vec<f32>>, String> {
+    // TODO: ort crate has upstream VitisAI compilation bug (ort-sys vs ORT 1.24).
+    // Local ONNX inference will be enabled when ort releases a fix.
+    // Models can still be downloaded and managed; inference uses API providers for now.
+    Err("Local ONNX inference is not yet available. Please use an API provider for embedding.".to_string())
+}
+
+/// Streaming file download with progress events
+async fn download_file(
+    app: &tauri::AppHandle,
+    model_id: &str,
+    url: &str,
+    dest: &std::path::Path,
+) -> Result<(), String> {
+    use futures_util::StreamExt;
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(600))
+        .user_agent("Moraya/1.0")
+        .build()
+        .map_err(|_| "HTTP client error".to_string())?;
+
+    let resp = client.get(url).send().await.map_err(|e| {
+        if e.is_timeout() {
+            "Download timed out".to_string()
+        } else {
+            format!("Download failed: {}", e)
+        }
+    })?;
+
+    if !resp.status().is_success() {
+        return Err(format!("Download error ({})", resp.status().as_u16()));
+    }
+
+    let total = resp.content_length().unwrap_or(0);
+    let mut received: u64 = 0;
+    let mut file = tokio::fs::File::create(dest)
+        .await
+        .map_err(|_| "Cannot create file".to_string())?;
+
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|_| "Download stream error".to_string())?;
+        tokio::io::AsyncWriteExt::write_all(&mut file, &chunk)
+            .await
+            .map_err(|_| "Write error".to_string())?;
+        received += chunk.len() as u64;
+        let progress = if total > 0 {
+            (received as f64 / total as f64 * 100.0) as u32
+        } else {
+            0
+        };
+        let _ = app.emit(
+            "model-download-progress",
+            DownloadProgress {
+                model_id: model_id.to_string(),
+                received,
+                total,
+                progress,
+            },
+        );
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

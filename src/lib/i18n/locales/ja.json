@@ -1481,6 +1481,7 @@
     "reindexAll": "全て再インデックス",
     "deleteConfirm": "インデックスを削除してもよろしいですか？",
     "useSameAsAI": "AI チャットと同じ設定を使用",
+    "onlineModel": "オンラインモデル",
     "dimensionWarning": "このモデルの最大値: {max}。使用中: {actual}。",
     "status": {
       "indexed": "インデックス済み（{chunks} チャンク、{files} ファイル）",
@@ -1494,7 +1495,12 @@
       "indexing": "インデックスを構築中...",
       "done": "完了"
     },
-    "providerNoEmbedding": "現在のAIチャットプロバイダーはEmbeddingに対応していません。上でEmbeddingプロバイダーを選択してください。"
+    "providerNoEmbedding": "現在のAIチャットプロバイダーはEmbeddingに対応していません。上でEmbeddingプロバイダーを選択してください。",
+    "localModels": "ローカルモデル",
+    "downloadModel": "ダウンロード",
+    "deleteModel": "モデルを削除",
+    "selectLocalModel": "ダウンロード済みモデルを選択",
+    "noLocalModels": "モデルがダウンロードされていません。下でダウンロードしてください。"
   },
   "commandPalette": {
     "placeholder": "ファイル、コマンド、ナレッジベースを検索...",

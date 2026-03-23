@@ -1481,6 +1481,7 @@
     "reindexAll": "Reindexar tudo",
     "deleteConfirm": "Tem certeza de que deseja excluir o índice?",
     "useSameAsAI": "Usar a mesma configuração do chat de IA",
+    "onlineModel": "Modelo Online",
     "dimensionWarning": "Máximo para este modelo: {max}. Usando: {actual}.",
     "status": {
       "indexed": "Indexado ({chunks} fragmentos, {files} arquivos)",
@@ -1494,7 +1495,12 @@
       "indexing": "Construindo índice...",
       "done": "Concluído"
     },
-    "providerNoEmbedding": "O provedor de chat AI atual não suporta embedding. Selecione um provedor de embedding acima."
+    "providerNoEmbedding": "O provedor de chat AI atual não suporta embedding. Selecione um provedor de embedding acima.",
+    "localModels": "Modelos Locais",
+    "downloadModel": "Baixar",
+    "deleteModel": "Excluir Modelo",
+    "selectLocalModel": "Selecionar um modelo baixado",
+    "noLocalModels": "Nenhum modelo baixado. Baixe um abaixo."
   },
   "commandPalette": {
     "placeholder": "Pesquisar arquivos, comandos ou base de conhecimento...",
