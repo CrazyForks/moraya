@@ -23,6 +23,7 @@
   import { settingsStore } from '../stores/settings-store';
   import { readImageAsBlobUrl } from '../services/file-service';
   import { uploadImage, fetchImageAsBlob, targetToConfig } from '../services/image-hosting';
+  import { aiStore } from '../services/ai';
   import type { ImageHostConfig } from '../services/image-hosting';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
@@ -65,6 +66,7 @@
     onWorkflowImageGen,
     onWorkflowPublish,
     onCursorLineChange,
+    onForceShowAIPanel,
   }: {
     content?: string;
     showOutline?: boolean;
@@ -77,6 +79,7 @@
     onWorkflowImageGen?: () => void;
     onWorkflowPublish?: () => void;
     onCursorLineChange?: (lineIndex: number) => void;
+    onForceShowAIPanel?: () => void;
   } = $props();
 
   let editorLineWidth = $state(settingsStore.getState().editorLineWidth);
@@ -611,13 +614,20 @@
         // Direct position — from context menu right-click
         const node = view.state.doc.nodeAt(targetPos);
         if (node && node.type.name === 'image') {
+          const shortName = (node.attrs.src as string || '').split('/').pop() || 'image';
           view.dispatch(
             view.state.tr.setNodeMarkup(targetPos, undefined, {
               ...node.attrs,
               src: result.url,
             }),
           );
-          onNotify?.('Image uploaded', 'success');
+          onForceShowAIPanel?.();
+          aiStore.addMessage({
+            role: 'assistant',
+            content: get(t)('contextMenu.uploadImageSuccess').replace('{name}', shortName),
+            timestamp: Date.now(),
+            isSuccess: true,
+          });
           return;
         }
       }
@@ -630,12 +640,27 @@
         }
       });
       if (tr.docChanged) {
+        const shortName = imageSrc.split('/').pop() || 'image';
         view.dispatch(tr);
-        onNotify?.('Image uploaded', 'success');
+        onForceShowAIPanel?.();
+        aiStore.addMessage({
+          role: 'assistant',
+          content: get(t)('contextMenu.uploadImageSuccess').replace('{name}', shortName),
+          timestamp: Date.now(),
+          isSuccess: true,
+        });
       }
     } catch (e) {
       console.warn('[Image] uploadAndReplace failed:', e);
-      onNotify?.(String(e instanceof Error ? e.message : e), 'error');
+      const errMsg = e instanceof Error ? e.message : String(e);
+      const shortName = imageSrc.split('/').pop() || 'image';
+      onForceShowAIPanel?.();
+      aiStore.addMessage({
+        role: 'assistant',
+        content: get(t)('contextMenu.uploadImageFailed').replace('{name}', shortName).replace('{error}', errMsg),
+        timestamp: Date.now(),
+        isError: true,
+      });
     }
   }
 
@@ -848,6 +873,227 @@
     const target = settingsStore.getDefaultImageHostTarget();
     if (!target) return;
     uploadAndReplace(imageMenuSrc, targetToConfig(target), contextMenuTargetPos);
+  }
+
+  /** Check if document contains at least one image (markdown image node or HTML img tag) */
+  function hasDocumentImages(): boolean {
+    if (!editor) return false;
+    let found = false;
+    editor.view.state.doc.descendants(node => {
+      if (found) return false;
+      if (node.type.name === 'image') { found = true; return false; }
+      // html_inline atom with <img> tag
+      if (node.type.name === 'html_inline') {
+        const val = node.attrs.value as string;
+        if (/^<img\s/i.test(val)) { found = true; return false; }
+      }
+      // html_block containing <img> tags
+      if (node.type.name === 'html_block') {
+        if (/<img\s/i.test(node.textContent)) { found = true; return false; }
+      }
+    });
+    return found;
+  }
+
+  /** Resolve an image source to a Blob for upload */
+  async function resolveImageBlob(src: string): Promise<Blob> {
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      return fetchImageAsBlob(src);
+    }
+    if (src.startsWith('blob:') || src.startsWith('data:')) {
+      return fetchImageAsBlob(src);
+    }
+    // Local path — resolve relative to current document
+    const currentFilePath = editorStore.getState().currentFilePath || '';
+    const dir = currentFilePath ? currentFilePath.split('/').slice(0, -1).join('/') : '';
+    const absPath = !src.startsWith('/') && dir
+      ? `${dir}/${src.replace(/^\.\//, '')}`
+      : src;
+    const blobUrl = await readImageAsBlobUrl(absPath);
+    const res = await fetch(blobUrl);
+    URL.revokeObjectURL(blobUrl);
+    return res.blob();
+  }
+
+  /** Upload all images in the document to the configured image host */
+  async function handleUploadAllImages() {
+    if (!editor) return;
+    const target = settingsStore.getDefaultImageHostTarget();
+    if (!target) {
+      onForceShowAIPanel?.();
+      aiStore.addMessage({
+        role: 'assistant',
+        content: get(t)('contextMenu.uploadNoConfig'),
+        timestamp: Date.now(),
+        isError: true,
+      });
+      return;
+    }
+    const config = targetToConfig(target);
+    const view = editor.view;
+
+    // 1. Collect all uploadable image sources (deduplicate)
+    interface ImageEntry {
+      src: string;
+      name: string;
+      type: 'markdown' | 'html_inline' | 'html_block';
+    }
+    const seen = new Set<string>();
+    const imageList: ImageEntry[] = [];
+
+    view.state.doc.descendants((node) => {
+      if (node.type.name === 'image') {
+        const src = node.attrs.src as string;
+        if (src && !seen.has(src)) {
+          seen.add(src);
+          imageList.push({ src, name: src.split('/').pop() || 'image', type: 'markdown' });
+        }
+      }
+      if (node.type.name === 'html_inline') {
+        const val = node.attrs.value as string;
+        if (/^<img\s/i.test(val)) {
+          const m = val.match(/src=["']([^"']+)["']/i);
+          if (m && !seen.has(m[1])) {
+            seen.add(m[1]);
+            imageList.push({ src: m[1], name: m[1].split('/').pop() || 'image', type: 'html_inline' });
+          }
+        }
+      }
+      if (node.type.name === 'html_block') {
+        const html = node.textContent;
+        const imgRegex = /<img\s[^>]*src=["']([^"']+)["'][^>]*>/gi;
+        let match;
+        while ((match = imgRegex.exec(html)) !== null) {
+          if (!seen.has(match[1])) {
+            seen.add(match[1]);
+            imageList.push({ src: match[1], name: match[1].split('/').pop() || 'image', type: 'html_block' });
+          }
+        }
+      }
+    });
+
+    if (imageList.length === 0) return;
+
+    // 2. Show AI panel immediately with "starting upload" message
+    onForceShowAIPanel?.();
+    const startTs = Date.now();
+    aiStore.addMessage({
+      role: 'assistant',
+      content: get(t)('contextMenu.uploadStarting'),
+      timestamp: startTs,
+    });
+
+    // 3. Upload each unique source, build old→new URL map
+    const urlMap = new Map<string, string>(); // oldSrc → newUrl
+    let successCount = 0;
+    let firstResult = true;
+
+    for (const img of imageList) {
+      try {
+        const blob = await resolveImageBlob(img.src);
+        const result = await uploadImage(blob, config);
+        urlMap.set(img.src, result.url);
+        successCount++;
+
+        // Remove "starting" message on first result
+        if (firstResult) {
+          aiStore.removeMessageByTimestamp(startTs);
+          firstResult = false;
+        }
+        aiStore.addMessage({
+          role: 'assistant',
+          content: get(t)('contextMenu.uploadImageSuccess').replace('{name}', img.name),
+          timestamp: Date.now(),
+          isSuccess: true,
+        });
+      } catch (e) {
+        if (firstResult) {
+          aiStore.removeMessageByTimestamp(startTs);
+          firstResult = false;
+        }
+        const errMsg = e instanceof Error ? e.message : String(e);
+        aiStore.addMessage({
+          role: 'assistant',
+          content: get(t)('contextMenu.uploadImageFailed').replace('{name}', img.name).replace('{error}', errMsg),
+          timestamp: Date.now(),
+          isError: true,
+        });
+      }
+    }
+
+    // 4. Replace all matched URLs in the document in one transaction
+    if (urlMap.size > 0) {
+      const tr = view.state.tr;
+      // Collect replacements first, apply in reverse position order for html_block/html_inline
+      const htmlReplacements: { pos: number; node: import('prosemirror-model').Node; newContent: string }[] = [];
+
+      view.state.doc.descendants((node, pos) => {
+        // Markdown image nodes: setNodeMarkup (no size change)
+        if (node.type.name === 'image') {
+          const oldSrc = node.attrs.src as string;
+          const newUrl = urlMap.get(oldSrc);
+          if (newUrl) {
+            tr.setNodeMarkup(tr.mapping.map(pos), undefined, { ...node.attrs, src: newUrl });
+          }
+        }
+        // html_inline: replace src in the value attribute
+        if (node.type.name === 'html_inline') {
+          const val = node.attrs.value as string;
+          if (/^<img\s/i.test(val)) {
+            let newVal = val;
+            for (const [oldSrc, newUrl] of urlMap) {
+              if (newVal.includes(oldSrc)) {
+                newVal = newVal.split(oldSrc).join(newUrl);
+              }
+            }
+            if (newVal !== val) {
+              htmlReplacements.push({ pos, node, newContent: newVal });
+            }
+          }
+        }
+        // html_block: replace src in text content
+        if (node.type.name === 'html_block') {
+          const html = node.textContent;
+          let newHtml = html;
+          for (const [oldSrc, newUrl] of urlMap) {
+            if (newHtml.includes(oldSrc)) {
+              newHtml = newHtml.split(oldSrc).join(newUrl);
+            }
+          }
+          if (newHtml !== html) {
+            htmlReplacements.push({ pos, node, newContent: newHtml });
+          }
+        }
+      });
+
+      // Apply HTML replacements in reverse order (to preserve positions)
+      htmlReplacements.sort((a, b) => b.pos - a.pos);
+      for (const rep of htmlReplacements) {
+        const mappedPos = tr.mapping.map(rep.pos);
+        if (rep.node.type.name === 'html_inline') {
+          // Atom node: replace with new node that has updated value attr
+          tr.setNodeMarkup(mappedPos, undefined, { ...rep.node.attrs, value: rep.newContent });
+        } else {
+          // html_block: replace text content
+          const from = mappedPos + 1; // inside the node
+          const to = mappedPos + rep.node.nodeSize - 1;
+          tr.replaceWith(from, to, schema.text(rep.newContent));
+        }
+      }
+
+      if (tr.docChanged) {
+        view.dispatch(tr);
+      }
+    }
+
+    // 5. Summary message
+    aiStore.addMessage({
+      role: 'assistant',
+      content: get(t)('contextMenu.uploadAllComplete')
+        .replace('{success}', String(successCount))
+        .replace('{total}', String(imageList.length)),
+      timestamp: Date.now(),
+    });
   }
 
   function handleImageEditAlt() {
@@ -2210,6 +2456,7 @@
 {#if showEditorContextMenu}
   <EditorContextMenu
     position={editorContextMenuPosition}
+    hasImages={hasDocumentImages()}
     onCut={() => { document.execCommand('cut'); }}
     onCopy={() => { document.execCommand('copy'); }}
     onPaste={async () => {
@@ -2223,6 +2470,7 @@
         );
       } catch { /* clipboard permission denied */ }
     }}
+    onUploadAllImages={handleUploadAllImages}
     onSEO={() => { onWorkflowSEO?.(); }}
     onImageGen={() => { onWorkflowImageGen?.(); }}
     onPublish={() => { onWorkflowPublish?.(); }}

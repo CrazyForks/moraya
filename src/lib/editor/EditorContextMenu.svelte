@@ -4,18 +4,22 @@
 
   let {
     position,
+    hasImages = false,
     onCut,
     onCopy,
     onPaste,
+    onUploadAllImages,
     onSEO,
     onImageGen,
     onPublish,
     onClose,
   }: {
     position: { top: number; left: number };
+    hasImages?: boolean;
     onCut: () => void;
     onCopy: () => void;
     onPaste: () => void;
+    onUploadAllImages?: () => void;
     onSEO: () => void;
     onImageGen: () => void;
     onPublish: () => void;
@@ -74,6 +78,12 @@
 
     <div class="menu-divider"></div>
 
+    <button class="menu-item" disabled={!hasImages} onclick={() => { if (onUploadAllImages) handleAction(onUploadAllImages); }}>
+      {$t('contextMenu.uploadAllImages')}
+    </button>
+
+    <div class="menu-divider"></div>
+
     <button class="menu-item" onclick={() => handleAction(onSEO)}>
       {$t('menu.seoOptimization')}
     </button>
@@ -121,8 +131,14 @@
     text-align: left;
   }
 
-  .menu-item:hover {
+  .menu-item:hover:not(:disabled) {
     background: var(--bg-hover);
+  }
+
+  .menu-item:disabled {
+    color: var(--text-muted);
+    cursor: default;
+    opacity: 0.5;
   }
 
   .shortcut {

@@ -643,7 +643,13 @@
   "contextMenu": {
     "cut": "Ausschneiden",
     "copy": "Kopieren",
-    "paste": "Einfügen"
+    "paste": "Einfügen",
+    "uploadAllImages": "Alle Bilder zum Bildhosting hochladen",
+    "uploadStarting": "Bilder werden zum Bildhosting hochgeladen...",
+    "uploadImageSuccess": "Hochgeladen: {name}",
+    "uploadImageFailed": "Fehlgeschlagen: {name} — {error}",
+    "uploadAllComplete": "Upload abgeschlossen: {success}/{total} erfolgreich",
+    "uploadNoConfig": "Bitte konfigurieren Sie zuerst einen Bildhoster in den Einstellungen"
   },
   "search": {
     "findPlaceholder": "Suchen...",

@@ -639,7 +639,13 @@
   "contextMenu": {
     "cut": "Couper",
     "copy": "Copier",
-    "paste": "Coller"
+    "paste": "Coller",
+    "uploadAllImages": "Téléverser toutes les images vers l'hébergeur",
+    "uploadStarting": "Téléversement des images en cours...",
+    "uploadImageSuccess": "Téléversé : {name}",
+    "uploadImageFailed": "Échec : {name} — {error}",
+    "uploadAllComplete": "Téléversement terminé : {success}/{total} réussis",
+    "uploadNoConfig": "Veuillez d'abord configurer un hébergeur d'images dans les Paramètres"
   },
   "search": {
     "findPlaceholder": "Rechercher...",

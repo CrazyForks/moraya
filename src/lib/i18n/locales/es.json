@@ -639,7 +639,13 @@
   "contextMenu": {
     "cut": "Cortar",
     "copy": "Copiar",
-    "paste": "Pegar"
+    "paste": "Pegar",
+    "uploadAllImages": "Subir todas las imágenes al alojamiento",
+    "uploadStarting": "Subiendo imágenes al alojamiento...",
+    "uploadImageSuccess": "Subida exitosa: {name}",
+    "uploadImageFailed": "Error al subir: {name} — {error}",
+    "uploadAllComplete": "Subida completa: {success}/{total} exitosas",
+    "uploadNoConfig": "Por favor, configure un alojamiento de imágenes en Ajustes primero"
   },
   "search": {
     "findPlaceholder": "Buscar...",

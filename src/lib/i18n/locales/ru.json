@@ -643,7 +643,13 @@
   "contextMenu": {
     "cut": "Вырезать",
     "copy": "Копировать",
-    "paste": "Вставить"
+    "paste": "Вставить",
+    "uploadAllImages": "Загрузить все изображения на хостинг",
+    "uploadStarting": "Загрузка изображений на хостинг...",
+    "uploadImageSuccess": "Загружено: {name}",
+    "uploadImageFailed": "Ошибка: {name} — {error}",
+    "uploadAllComplete": "Загрузка завершена: {success}/{total} успешно",
+    "uploadNoConfig": "Сначала настройте хостинг изображений в Настройках"
   },
   "search": {
     "findPlaceholder": "Найти...",

@@ -643,7 +643,13 @@
   "contextMenu": {
     "cut": "काटें",
     "copy": "कॉपी करें",
-    "paste": "चिपकाएँ"
+    "paste": "चिपकाएँ",
+    "uploadAllImages": "सभी छवियाँ इमेज होस्ट पर अपलोड करें",
+    "uploadStarting": "इमेज होस्ट पर छवियाँ अपलोड हो रही हैं...",
+    "uploadImageSuccess": "अपलोड सफल: {name}",
+    "uploadImageFailed": "अपलोड विफल: {name} — {error}",
+    "uploadAllComplete": "अपलोड पूर्ण: {success}/{total} सफल",
+    "uploadNoConfig": "कृपया पहले सेटिंग्स में इमेज होस्ट कॉन्फ़िगर करें"
   },
   "search": {
     "findPlaceholder": "खोजें...",

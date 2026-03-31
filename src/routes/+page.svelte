@@ -2531,7 +2531,7 @@ ${tr('welcome.tip')}
           </div>
         </div>
       {:else if editorMode === 'visual'}
-        <Editor bind:this={visualEditorRef} bind:content {showOutline} {outlineWidth} onEditorReady={handleEditorReady} onNotify={showToast} onOutlineWidthChange={(w) => settingsStore.update({ outlineWidth: w })} onWorkflowSEO={handleWorkflowSEO} onWorkflowImageGen={handleWorkflowImageGen} onWorkflowPublish={handleWorkflowPublish} />
+        <Editor bind:this={visualEditorRef} bind:content {showOutline} {outlineWidth} onEditorReady={handleEditorReady} onNotify={showToast} onOutlineWidthChange={(w) => settingsStore.update({ outlineWidth: w })} onWorkflowSEO={handleWorkflowSEO} onWorkflowImageGen={handleWorkflowImageGen} onWorkflowPublish={handleWorkflowPublish} onForceShowAIPanel={() => { showAIPanel = true; }} />
       {:else if editorMode === 'source'}
         <SourceEditor bind:this={sourceEditorRef} bind:content {showOutline} {outlineWidth} onContentChange={handleContentChange} onOutlineWidthChange={(w) => settingsStore.update({ outlineWidth: w })} />
       {:else if editorMode === 'split'}
@@ -2540,7 +2540,7 @@ ${tr('welcome.tip')}
             <SourceEditor bind:this={splitSourceRef} bind:content onContentChange={handleContentChange} hideScrollbar />
           </div>
           <div class="split-visual" bind:this={splitVisualEl}>
-            <Editor bind:this={splitVisualRef} bind:content onEditorReady={handleEditorReady} onContentChange={handleContentChange} onNotify={showToast} onWorkflowSEO={handleWorkflowSEO} onWorkflowImageGen={handleWorkflowImageGen} onWorkflowPublish={handleWorkflowPublish} onCursorLineChange={(line) => splitSourceRef?.setHighlightLine(line)} />
+            <Editor bind:this={splitVisualRef} bind:content onEditorReady={handleEditorReady} onContentChange={handleContentChange} onNotify={showToast} onWorkflowSEO={handleWorkflowSEO} onWorkflowImageGen={handleWorkflowImageGen} onWorkflowPublish={handleWorkflowPublish} onCursorLineChange={(line) => splitSourceRef?.setHighlightLine(line)} onForceShowAIPanel={() => { showAIPanel = true; }} />
           </div>
         </div>
       {/if}

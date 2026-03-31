@@ -695,7 +695,13 @@
   "contextMenu": {
     "cut": "Cut",
     "copy": "Copy",
-    "paste": "Paste"
+    "paste": "Paste",
+    "uploadAllImages": "Upload All Images to Image Host",
+    "uploadStarting": "Uploading images to image host...",
+    "uploadImageSuccess": "Uploaded: {name}",
+    "uploadImageFailed": "Failed: {name} — {error}",
+    "uploadAllComplete": "Upload complete: {success}/{total} succeeded",
+    "uploadNoConfig": "Please configure an image host in Settings first"
   },
   "search": {
     "findPlaceholder": "Find...",

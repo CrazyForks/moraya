@@ -643,7 +643,13 @@
   "contextMenu": {
     "cut": "Recortar",
     "copy": "Copiar",
-    "paste": "Colar"
+    "paste": "Colar",
+    "uploadAllImages": "Enviar todas as imagens para o hospedeiro",
+    "uploadStarting": "Enviando imagens para o hospedeiro...",
+    "uploadImageSuccess": "Enviado: {name}",
+    "uploadImageFailed": "Falha: {name} — {error}",
+    "uploadAllComplete": "Envio concluído: {success}/{total} com sucesso",
+    "uploadNoConfig": "Por favor, configure um hospedeiro de imagens nas Configurações primeiro"
   },
   "search": {
     "findPlaceholder": "Localizar...",

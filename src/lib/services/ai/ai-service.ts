@@ -467,6 +467,12 @@ function createAIStore() {
         chatHistory: [...state.chatHistory, message],
       }));
     },
+    removeMessageByTimestamp(timestamp: number) {
+      update(state => ({
+        ...state,
+        chatHistory: state.chatHistory.filter(m => m.timestamp !== timestamp),
+      }));
+    },
     setLastResponse(content: string) {
       update(state => ({ ...state, lastResponse: content, isLoading: false }));
     },

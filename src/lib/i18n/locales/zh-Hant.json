@@ -643,7 +643,13 @@
   "contextMenu": {
     "cut": "剪下",
     "copy": "複製",
-    "paste": "貼上"
+    "paste": "貼上",
+    "uploadAllImages": "上傳所有圖片至圖床",
+    "uploadStarting": "正在上傳圖片至圖床...",
+    "uploadImageSuccess": "上傳成功：{name}",
+    "uploadImageFailed": "上傳失敗：{name} — {error}",
+    "uploadAllComplete": "上傳完成：{success}/{total} 張成功",
+    "uploadNoConfig": "請先在設定中配置圖床"
   },
   "search": {
     "findPlaceholder": "尋找...",

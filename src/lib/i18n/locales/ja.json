@@ -643,7 +643,13 @@
   "contextMenu": {
     "cut": "切り取り",
     "copy": "コピー",
-    "paste": "貼り付け"
+    "paste": "貼り付け",
+    "uploadAllImages": "すべての画像を画像ホストにアップロード",
+    "uploadStarting": "画像をホストにアップロード中...",
+    "uploadImageSuccess": "アップロード成功：{name}",
+    "uploadImageFailed": "アップロード失敗：{name} — {error}",
+    "uploadAllComplete": "アップロード完了：{success}/{total} 件成功",
+    "uploadNoConfig": "先に設定で画像ホストを設定してください"
   },
   "search": {
     "findPlaceholder": "検索...",

@@ -695,7 +695,13 @@
   "contextMenu": {
     "cut": "剪切",
     "copy": "复制",
-    "paste": "粘贴"
+    "paste": "粘贴",
+    "uploadAllImages": "上传所有图片至图床",
+    "uploadStarting": "正在上传图片至图床...",
+    "uploadImageSuccess": "上传成功：{name}",
+    "uploadImageFailed": "上传失败：{name} — {error}",
+    "uploadAllComplete": "上传完成：{success}/{total} 张成功",
+    "uploadNoConfig": "请先在设置中配置图床"
   },
   "search": {
     "findPlaceholder": "查找...",

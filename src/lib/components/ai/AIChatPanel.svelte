@@ -1780,7 +1780,7 @@
         {:else if msg.role === 'system'}
           <!-- skip system messages in display -->
         {:else}
-          <div class="message {msg.role}">
+          <div class="message {msg.role}" class:notify-success={msg.isSuccess} class:notify-error={msg.isError}>
             <div class="message-header">
               <span class="message-role">{msg.role === 'user' ? $t('ai.you') : $t('ai.assistant')}</span>
             </div>
@@ -2525,6 +2525,18 @@
     -webkit-user-select: text;
     user-select: text;
     cursor: text;
+  }
+
+  .message.notify-success {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #166534;
+  }
+
+  .message.notify-error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
   }
   .error-text {
     word-break: break-word;

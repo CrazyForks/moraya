@@ -643,7 +643,13 @@
   "contextMenu": {
     "cut": "قص",
     "copy": "نسخ",
-    "paste": "لصق"
+    "paste": "لصق",
+    "uploadAllImages": "رفع جميع الصور إلى خدمة الاستضافة",
+    "uploadStarting": "جارٍ رفع الصور إلى خدمة الاستضافة...",
+    "uploadImageSuccess": "تم الرفع: {name}",
+    "uploadImageFailed": "فشل الرفع: {name} — {error}",
+    "uploadAllComplete": "اكتمل الرفع: {success}/{total} نجحت",
+    "uploadNoConfig": "يرجى إعداد خدمة استضافة الصور في الإعدادات أولاً"
   },
   "search": {
     "findPlaceholder": "بحث...",

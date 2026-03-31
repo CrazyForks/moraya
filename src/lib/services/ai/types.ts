@@ -131,6 +131,7 @@ export interface ChatMessage {
   toolCallId?: string;
   toolName?: string;
   isError?: boolean;
+  isSuccess?: boolean;
 }
 
 export interface ToolCallRequest {
