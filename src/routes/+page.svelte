@@ -2056,7 +2056,22 @@ ${tr('welcome.tip')}
 
     // Restore persisted settings, AI config, and MCP servers (Tauri-only: uses plugin-store)
     if (isTauri) {
-      Promise.all([initSettingsStore(), initAIStore(), initMCPStore(), filesStore.loadPersistedPrefs()])
+      // Start loading the opened file in PARALLEL with store initialization.
+      // File read (IPC) is fast; store init (Tauri plugin-store load × 4) is slow.
+      // By the time Promise.all resolves, the file content is already available.
+      let openedFileData: { filePath: string; fileContent: string; fileName: string; mtime: number | null } | null = null;
+      const openedFilePromise = invoke<string | null>('get_opened_file').then(async (filePath) => {
+        if (!filePath) return;
+        const [fileContent, mtimeResult] = await Promise.all([
+          loadFile(filePath),
+          invoke('get_files_mtime', { paths: [filePath] }).catch(() => []) as Promise<[string, number][]>,
+        ]);
+        const fileName = getFileNameFromPath(filePath);
+        const mtime = (mtimeResult as [string, number][]).length > 0 ? (mtimeResult as [string, number][])[0][1] : null;
+        openedFileData = { filePath, fileContent, fileName, mtime };
+      }).catch(() => {});
+
+      Promise.all([initSettingsStore(), initAIStore(), initMCPStore(), filesStore.loadPersistedPrefs(), openedFilePromise])
         .then(() => {
           // Auto-connect all enabled MCP servers
           connectAllServers().catch(() => {});
@@ -2087,33 +2102,26 @@ ${tr('welcome.tip')}
               });
           }
 
-          // Check if a file was passed via OS file association on startup
-          // Use initWithContent to replace the initial empty Untitled tab (not openFileByPath which adds a new tab)
-          // Placed here (inside Promise.all.then) to ensure knowledgeBases are loaded before adjustSidebarForFile
-          invoke<string | null>('get_opened_file').then(async (filePath) => {
-            if (filePath) {
-              const fileContent = await loadFile(filePath);
-              const fileName = getFileNameFromPath(filePath);
-              let mtime: number | null = null;
-              try {
-                const result = await invoke('get_files_mtime', { paths: [filePath] }) as [string, number][];
-                if (result.length > 0) mtime = result[0][1];
-              } catch { /* ignore */ }
-              tabsStore.initWithContent(fileContent, filePath, fileName);
-              if (mtime !== null) {
-                const state = tabsStore.getState();
-                tabsStore.updateTabMtime(state.activeTabId, mtime);
-              }
-              content = fileContent;
-              currentFileName = fileName;
-              editorStore.batchRestore({
-                filePath, content: fileContent, isDirty: false, cursorOffset: 0, scrollFraction: 0,
-              });
-              await replaceContentAndScrollToTop(fileContent);
-              resetWorkflowState();
-              adjustSidebarForFile(filePath);
+          // Check if a file was passed via OS file association on startup.
+          // File content is loaded in parallel (see openedFilePromise below),
+          // but sidebar adjustment needs knowledgeBases to be loaded (which happens in this .then),
+          // so we finalize here.
+          if (openedFileData) {
+            const { filePath, fileContent, fileName, mtime } = openedFileData;
+            tabsStore.initWithContent(fileContent, filePath, fileName);
+            if (mtime !== null) {
+              const state = tabsStore.getState();
+              tabsStore.updateTabMtime(state.activeTabId, mtime);
             }
-          });
+            content = fileContent;
+            currentFileName = fileName;
+            editorStore.batchRestore({
+              filePath, content: fileContent, isDirty: false, cursorOffset: 0, scrollFraction: 0,
+            });
+            replaceContentAndScrollToTop(fileContent);
+            resetWorkflowState();
+            adjustSidebarForFile(filePath);
+          }
 
           // Auto-check for updates (once daily)
           if (shouldCheckToday(settings.lastUpdateCheckDate)) {
