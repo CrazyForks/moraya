@@ -670,6 +670,12 @@
    * - Saved doc outside KB: save to {docDir}/images/, return relative path ./images/...
    * - Unsaved doc: always absolute path (save location unpredictable, relative would break)
    */
+  /** Normalize a file path to forward slashes (cross-platform compatibility).
+   *  Windows paths like C:\Users\... → C:/Users/... */
+  function normalizePath(p: string): string {
+    return p.replace(/\\/g, '/');
+  }
+
   async function saveImageToDisk(file: File): Promise<string | null> {
     try {
       const ext = file.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
@@ -683,13 +689,14 @@
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
       const base64 = btoa(binary);
 
-      const currentFilePath = editorStore.getState().currentFilePath || '';
+      const currentFilePath = normalizePath(editorStore.getState().currentFilePath || '');
       const kb = filesStore.getActiveKnowledgeBase?.();
+      const kbPath = kb ? normalizePath(kb.path) : '';
 
-      if (kb && currentFilePath && currentFilePath.startsWith(kb.path)) {
+      if (kbPath && currentFilePath && currentFilePath.startsWith(kbPath)) {
         // Saved doc inside knowledge base → use KB image directory convention
         const { computeImageDir } = await import('../services/ai/image-path-utils');
-        const imageDir = computeImageDir(currentFilePath, kb.path);
+        const imageDir = normalizePath(computeImageDir(currentFilePath, kbPath));
         const absPath = `${imageDir}/${filename}`;
         await invoke('write_file_binary', { path: absPath, base64Data: base64 });
 
@@ -709,16 +716,16 @@
 
       // Unsaved doc → always use absolute path (save location is unpredictable,
       // relative paths would break after the user picks an arbitrary save location)
-      if (kb) {
+      if (kbPath) {
         const { computeImageDir } = await import('../services/ai/image-path-utils');
-        const imageDir = computeImageDir(null, kb.path);
+        const imageDir = normalizePath(computeImageDir(null, kbPath));
         const absPath = `${imageDir}/${filename}`;
         await invoke('write_file_binary', { path: absPath, base64Data: base64 });
         return absPath;
       }
 
       const { tempDir } = await import('@tauri-apps/api/path');
-      const tmp = await tempDir();
+      const tmp = normalizePath(await tempDir());
       const absPath = `${tmp}moraya-images/${filename}`;
       await invoke('write_file_binary', { path: absPath, base64Data: base64 });
       return absPath;
@@ -728,10 +735,11 @@
     }
   }
 
-  /** Compute a relative path from `fromDir` to `toPath`. */
+  /** Compute a relative path from `fromDir` to `toPath`.
+   *  Both paths should be normalized to forward slashes before calling. */
   function computeRelativePath(fromDir: string, toPath: string): string {
-    const fromParts = fromDir.split('/').filter(Boolean);
-    const toParts = toPath.split('/').filter(Boolean);
+    const fromParts = normalizePath(fromDir).split('/').filter(Boolean);
+    const toParts = normalizePath(toPath).split('/').filter(Boolean);
     // Find common prefix length
     let common = 0;
     while (common < fromParts.length && common < toParts.length && fromParts[common] === toParts[common]) {

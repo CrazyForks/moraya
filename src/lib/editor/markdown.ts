@@ -209,8 +209,13 @@ const parserTokens: Record<string, import('prosemirror-markdown').ParseSpec> = {
   image: {
     node: 'image',
     getAttrs(token) {
+      // markdown-it URL-encodes backslashes in paths (\ → %5C),
+      // which breaks Windows local paths on roundtrip.
+      // Decode to preserve the original path.
+      let src = token.attrGet('src') || '';
+      try { src = decodeURIComponent(src); } catch { /* keep as-is */ }
       return {
-        src: token.attrGet('src') || '',
+        src,
         alt: (token.children || []).map(c => c.content).join('') || '',
         title: token.attrGet('title') || '',
       };
