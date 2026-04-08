@@ -605,7 +605,13 @@
   }
 </script>
 
-<div class="source-editor-outer" class:hide-scrollbar={hideScrollbar} class:has-outline={showOutline} onscroll={() => {
+<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+<div class="source-editor-outer" class:hide-scrollbar={hideScrollbar} class:has-outline={showOutline} onclick={(e) => {
+  // Click on empty area below content → refocus textarea (prevent losing focus)
+  const target = e.target as HTMLElement;
+  if (target.closest('.source-textarea') || target.closest('.outline-wrapper') || target.closest('.resize-handle')) return;
+  textareaEl?.focus();
+}} onscroll={() => {
   if (!showOutline) return;
   if (scrollRafOutline) return;
   scrollRafOutline = requestAnimationFrame(() => {

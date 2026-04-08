@@ -578,6 +578,7 @@ pub fn run() {
             commands::kb::kb_download_ort_runtime,
             commands::kb::kb_check_ort_available,
             commands::kb::kb_embed_local,
+            commands::kb::kb_suggest_filename,
             commands::update::get_platform_info,
             commands::update::exit_app,
             commands::update::download_update,

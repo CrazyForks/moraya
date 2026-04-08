@@ -124,7 +124,7 @@ pub fn create_menu(app: &AppHandle) -> Result<Menu<Wry>, tauri::Error> {
             &PredefinedMenuItem::cut(app, None)?,
             &PredefinedMenuItem::copy(app, None)?,
             &PredefinedMenuItem::paste(app, None)?,
-            &PredefinedMenuItem::select_all(app, None)?,
+            &MenuItem::with_id(app, "edit_select_all", "Select All", true, Some("CmdOrCtrl+A"))?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "edit_find", "Find", true, Some("CmdOrCtrl+F"))?,
             &MenuItem::with_id(app, "edit_replace", "Replace", true, Some("CmdOrCtrl+H"))?,

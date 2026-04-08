@@ -7,7 +7,7 @@
  *  - handleDOMEvents.mousedown: math_block click → prevent WebKit broken selection
  *  - handleDOMEvents.keydown/keyup: toggle link-hover cursor class on Cmd/Ctrl
  *  - handleClickOn: image click → TextSelection (prevent NodeSelection blue highlight)
- *  - handleKeyDown: macOS Cmd+A / Ctrl+A → AllSelection fix
+ *  - handleKeyDown: ArrowRight escape, fast AllSelection delete
  *  - decorations: WKWebView caret fix for empty paragraphs
  *  - view lifecycle: scroll-after-paste (scroll .editor-wrapper to cursor)
  *
@@ -439,20 +439,12 @@ export function createEditorPropsPlugin(): Plugin {
       },
 
       /**
-       * macOS Cmd+A / Ctrl+A fix:
-       * Intercept before native menu accelerator and dispatch proper AllSelection.
+       * Keyboard shortcuts handled here (after keymap plugins):
+       * - ArrowRight: escape formatting mark boundary
+       * - Backspace/Delete on AllSelection: fast full-doc deletion
        */
       handleKeyDown(view, event) {
         if (event.isComposing) return false;
-
-        // ── Cmd/Ctrl+A → proper AllSelection ──
-        const mod = event.metaKey || event.ctrlKey;
-        if (mod && !event.shiftKey && !event.altKey && event.key === 'a') {
-          event.preventDefault();
-          const tr = view.state.tr.setSelection(new AllSelection(view.state.doc));
-          view.dispatch(tr);
-          return true;
-        }
 
         // ── ArrowRight: escape formatting mark at right boundary ──
         // When cursor is between a formatting mark (code/strong/em/strike) and

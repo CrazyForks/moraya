@@ -503,14 +503,34 @@
 .moraya-editor pre .hljs-property { color: var(--hljs-property); }
 .moraya-editor pre .hljs-punctuation { color: var(--hljs-punctuation); }
 
+/* Operators, regex, interpolation */
+.moraya-editor pre .hljs-operator { color: var(--hljs-operator); }
+.moraya-editor pre .hljs-regexp { color: var(--hljs-regexp); }
+.moraya-editor pre .hljs-subst { color: var(--hljs-subst); }
+
+/* Sub-scope distinctions */
+.moraya-editor pre .hljs-variable.constant_ { color: var(--hljs-variable-constant); }
+.moraya-editor pre .hljs-title.class_.inherited_ { color: var(--hljs-title-class-inherited); }
+
+/* CSS selector-attr */
+.moraya-editor pre .hljs-selector-attr { color: var(--hljs-selector-attr); }
+
+/* Markdown-specific tokens */
+.moraya-editor pre .hljs-section { color: var(--hljs-section); font-weight: 600; }
+.moraya-editor pre .hljs-bullet { color: var(--hljs-bullet); }
+.moraya-editor pre .hljs-link { color: var(--hljs-link); text-decoration: underline; }
+.moraya-editor pre .hljs-quote { color: var(--hljs-quote); font-style: italic; }
+.moraya-editor pre .hljs-code { color: var(--hljs-code); }
+
+/* Diff */
 .moraya-editor pre .hljs-addition {
-  color: #22863a;
-  background: rgba(34, 134, 58, 0.1);
+  color: var(--hljs-addition-color);
+  background: var(--hljs-addition-bg);
 }
 
 .moraya-editor pre .hljs-deletion {
-  color: #b31d28;
-  background: rgba(179, 29, 40, 0.1);
+  color: var(--hljs-deletion-color);
+  background: var(--hljs-deletion-bg);
 }
 
 .moraya-editor pre .hljs-emphasis { font-style: italic; }

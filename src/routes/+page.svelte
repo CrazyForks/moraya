@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
   import type { MorayaEditor } from '$lib/editor/setup';
-  import { TextSelection } from 'prosemirror-state';
+  import { AllSelection, TextSelection } from 'prosemirror-state';
   import {
     setHeading,
     wrapInBlockquote,
@@ -362,10 +362,42 @@ ${tr('welcome.tip')}
   }
 
   /** Save with tab sync on iPad */
+  async function computeSuggestedPath(content: string): Promise<string | undefined> {
+    const settings = settingsStore.getState();
+    if (!settings.autoIndexOnSave) return undefined;
+    if (!content.trim()) return undefined;
+
+    const { suggestFileName } = await import('$lib/utils/filename-suggest');
+
+    // Check for MORAYA.md naming rules in active KB
+    let morayaContent: string | undefined;
+    const kb = filesStore.getActiveKnowledgeBase();
+    if (kb) {
+      try {
+        morayaContent = await invoke<string>('read_file', { path: `${kb.path}/MORAYA.md` });
+      } catch { /* no MORAYA.md — fine */ }
+    }
+
+    const name = await suggestFileName(content, morayaContent);
+    if (name === 'untitled') return undefined;
+
+    // If in a KB, suggest saving in the KB root directory
+    if (kb) return `${kb.path}/${name}.md`;
+    return `${name}.md`;
+  }
+
   async function handleSave(asNew = false): Promise<boolean> {
     const prevFilePath = editorStore.getState().currentFilePath;
     const latestContent = getCurrentContent();
-    const saved = asNew ? await saveFileAs(latestContent) : await saveFile(latestContent);
+
+    let saved: boolean;
+    if (asNew || !prevFilePath) {
+      // New file or Save As — try to suggest a meaningful filename
+      const suggestedPath = await computeSuggestedPath(latestContent);
+      saved = await saveFileAs(latestContent, suggestedPath);
+    } else {
+      saved = await saveFile(latestContent);
+    }
 
     if (saved) {
       const state = editorStore.getState();
@@ -2213,8 +2245,30 @@ ${tr('welcome.tip')}
             runCmd(redo);
           }
         },
-        // Select All: handled by PredefinedMenuItem::select_all (source mode)
-        // and selectAllFixPlugin in ProseMirror (visual mode).
+        // Select All: context-aware (code block vs doc vs source textarea)
+        'menu:edit_select_all': () => {
+          if (editorMode === 'source' || (editorMode === 'split' && isSourcePaneFocused())) {
+            // Source mode: select all textarea content
+            const ta = document.querySelector('.source-textarea') as HTMLTextAreaElement | null;
+            if (ta) { ta.focus(); ta.select(); }
+          } else {
+            // Visual mode: code block local select or whole-doc select
+            const view = morayaEditor?.view;
+            if (!view) return;
+            view.focus();
+            const resolvedFrom = view.state.selection.$from;
+            for (let d = resolvedFrom.depth; d > 0; d--) {
+              if (resolvedFrom.node(d).type.name === 'code_block') {
+                const tr = view.state.tr.setSelection(
+                  TextSelection.create(view.state.doc, resolvedFrom.start(d), resolvedFrom.end(d))
+                );
+                view.dispatch(tr);
+                return;
+              }
+            }
+            view.dispatch(view.state.tr.setSelection(new AllSelection(view.state.doc)));
+          }
+        },
         // Edit — search
         'menu:edit_find': () => { showSearch = true; },
         'menu:edit_replace': () => { showSearch = true; showReplace = true; },

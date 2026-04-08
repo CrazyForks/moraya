@@ -59,11 +59,11 @@ export async function saveFile(content: string): Promise<boolean> {
   return saveFileAs(content);
 }
 
-export async function saveFileAs(content: string): Promise<boolean> {
+export async function saveFileAs(content: string, suggestedPath?: string): Promise<boolean> {
   const selected = await saveDialog({
     filters: MD_FILTERS,
     title: 'Save Markdown File',
-    defaultPath: 'untitled.md',
+    defaultPath: suggestedPath || 'untitled.md',
   });
 
   if (!selected || typeof selected !== 'string') return false;

@@ -92,6 +92,7 @@
     flex-shrink: 0;
     align-self: flex-start;
     height: calc(100vh - var(--titlebar-height) - var(--statusbar-height) - 4rem);
+    user-select: none;
   }
 
   /* Inner scrollable area */
@@ -161,7 +162,7 @@
   }
 
   .outline-wrapper.dragging {
-    user-select: none;
+    cursor: col-resize;
   }
 
   /* RTL overrides */

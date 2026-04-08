@@ -318,6 +318,24 @@ function buildKeymap() {
     'Mod-Alt-5': setBlockType(schema.nodes.heading, { level: 5 }),
     'Mod-Alt-6': setBlockType(schema.nodes.heading, { level: 6 }),
 
+    // Select All: code block local select or whole-doc select
+    // Must be in buildKeymap (before baseKeymap) so it overrides ProseMirror's default selectAll.
+    'Mod-a': (state, dispatch) => {
+      const { $from } = state.selection;
+      for (let d = $from.depth; d > 0; d--) {
+        if ($from.node(d).type.name === 'code_block') {
+          if (dispatch) {
+            dispatch(state.tr.setSelection(TextSelection.create(state.doc, $from.start(d), $from.end(d))));
+          }
+          return true;
+        }
+      }
+      if (dispatch) {
+        dispatch(state.tr.setSelection(new AllSelection(state.doc)));
+      }
+      return true;
+    },
+
     // Block types
     'Mod-Alt-c': setBlockType(schema.nodes.code_block),
     'Mod-Shift-b': (state, dispatch) => {

@@ -2119,6 +2119,215 @@ async fn download_file(
 }
 
 // ---------------------------------------------------------------------------
+// Filename suggestion from document content
+// ---------------------------------------------------------------------------
+
+/// CJK stop characters — common but low-information characters.
+const CJK_STOPS: &[char] = &[
+    '的', '了', '在', '是', '我', '有', '和', '就', '不', '人',
+    '都', '一', '个', '上', '也', '很', '到', '说', '要', '去',
+    '你', '他', '她', '它', '们', '这', '那', '着', '被', '把',
+    '让', '给', '从', '与', '但', '而', '或', '及', '又', '对',
+    '还', '能', '会', '可', '以', '所', '为', '之', '等', '中',
+    '时', '没', '来', '吗', '吧', '呢', '啊', '哦', '嗯',
+];
+
+/// English stop words — common articles, prepositions, pronouns.
+const EN_STOPS: &[&str] = &[
+    "the", "be", "to", "of", "and", "in", "that", "have", "it",
+    "for", "not", "on", "with", "he", "as", "you", "do", "at",
+    "this", "but", "his", "by", "from", "they", "we", "say", "her",
+    "she", "or", "an", "my", "one", "all", "would", "there", "their",
+    "what", "so", "if", "about", "who", "get", "which", "go",
+    "when", "me", "make", "can", "like", "no", "just", "him",
+    "know", "take", "how", "than", "its", "our", "into", "are",
+    "was", "were", "been", "has", "had", "will", "may", "could",
+    "should", "did", "each", "more", "some", "these", "then",
+    "only", "also", "over", "such", "after", "any", "most",
+    "other", "very", "much", "own", "your", "them",
+];
+
+/// Build adjacent CJK bigrams from tokens produced by `tokenize()`.
+///
+/// Single-char CJK tokens are concatenated pairwise (sliding window of 2)
+/// to form meaningful compound words. Non-CJK tokens pass through as-is.
+fn build_cjk_bigrams(tokens: &[String]) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut prev_cjk: Option<&str> = None;
+
+    for token in tokens {
+        let is_single_cjk = token.chars().count() == 1
+            && token.chars().next().map(is_cjk).unwrap_or(false);
+
+        if is_single_cjk {
+            if let Some(prev) = prev_cjk {
+                result.push(format!("{}{}", prev, token));
+            }
+            prev_cjk = Some(token.as_str());
+        } else {
+            prev_cjk = None;
+            result.push(token.clone());
+        }
+    }
+    result
+}
+
+/// Suggest a filename for a markdown document based on keyword extraction.
+///
+/// Strategy:
+/// 1. Extract H1 heading text — if found, use it as primary title
+/// 2. If no H1, tokenize document, score by TF with stop-word filtering,
+///    pick top keywords and concatenate
+/// 3. Sanitize: remove special chars, replace separators with hyphens
+/// 4. Truncate to `max_length` characters
+#[tauri::command]
+pub fn kb_suggest_filename(content: String, max_length: Option<usize>) -> Result<String, String> {
+    let max_len = max_length.unwrap_or(50).max(10).min(120);
+    let clean = strip_frontmatter(&content);
+
+    if clean.trim().is_empty() {
+        return Ok("untitled".to_string());
+    }
+
+    // --- Step 1: Try H1 heading ---
+    let mut h1_text: Option<String> = None;
+    for line in clean.lines() {
+        let trimmed = line.trim();
+        // Must be exactly `# ` (H1), not `## ` (H2+)
+        if trimmed.starts_with("# ") && !trimmed.starts_with("## ") {
+            let heading = trimmed.trim_start_matches('#').trim();
+            if !heading.is_empty() {
+                h1_text = Some(heading.to_string());
+                break;
+            }
+        }
+    }
+
+    if let Some(h1) = h1_text {
+        let sanitized = sanitize_for_filename(&h1);
+        if !sanitized.is_empty() {
+            return Ok(truncate_filename(&sanitized, max_len));
+        }
+    }
+
+    // --- Step 2: Keyword extraction via TF scoring ---
+    let tokens = tokenize(&clean);
+    if tokens.is_empty() {
+        return Ok("untitled".to_string());
+    }
+
+    // Build bigrams for CJK to get meaningful compound words
+    let bigrams = build_cjk_bigrams(&tokens);
+
+    // Count term frequencies
+    let mut tf: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    for token in &bigrams {
+        *tf.entry(token.clone()).or_insert(0) += 1;
+    }
+
+    // Filter stop words
+    let cjk_stop_set: std::collections::HashSet<char> =
+        CJK_STOPS.iter().copied().collect();
+    let en_stop_set: std::collections::HashSet<&str> =
+        EN_STOPS.iter().copied().collect();
+
+    let mut scored: Vec<(String, f32)> = tf
+        .into_iter()
+        .filter(|(term, _)| {
+            // Skip single CJK stop chars
+            if term.chars().count() == 1 {
+                if let Some(ch) = term.chars().next() {
+                    if cjk_stop_set.contains(&ch) { return false; }
+                }
+            }
+            // Skip CJK bigrams containing only stop chars
+            if term.chars().count() == 2 && term.chars().all(|c| is_cjk(c)) {
+                if term.chars().all(|c| cjk_stop_set.contains(&c)) { return false; }
+            }
+            // Skip English stop words
+            if en_stop_set.contains(term.as_str()) { return false; }
+            // Skip pure numbers
+            if term.chars().all(|c| c.is_ascii_digit()) { return false; }
+            true
+        })
+        .map(|(term, count)| {
+            // Score: TF weighted by inverse frequency (favor distinctive terms)
+            let score = (count as f32) * (1.0 / (1.0 + (count as f32).ln()));
+            (term, score)
+        })
+        .collect();
+
+    // Sort by score descending, then alphabetically for stability
+    scored.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(&b.0))
+    });
+
+    // Take top keywords, aiming for a reasonable filename length
+    let mut parts: Vec<String> = Vec::new();
+    let mut current_len = 0;
+    for (term, _) in scored.iter().take(8) {
+        let term_len = term.chars().count();
+        if current_len + term_len + 1 > max_len { break; }
+        parts.push(term.clone());
+        current_len += term_len + 1; // +1 for separator
+    }
+
+    if parts.is_empty() {
+        // Fallback: first non-empty line
+        for line in clean.lines() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() && !trimmed.starts_with("```") && !trimmed.starts_with("$$") {
+                let sanitized = sanitize_for_filename(trimmed);
+                if !sanitized.is_empty() {
+                    return Ok(truncate_filename(&sanitized, max_len));
+                }
+            }
+        }
+        return Ok("untitled".to_string());
+    }
+
+    Ok(parts.join("-"))
+}
+
+/// Remove special characters and normalize separators for use as a filename.
+fn sanitize_for_filename(text: &str) -> String {
+    let mut result = String::new();
+    let mut last_was_sep = true; // start true to trim leading separators
+
+    for ch in text.chars() {
+        if ch.is_alphanumeric() || is_cjk(ch) {
+            result.push(ch);
+            last_was_sep = false;
+        } else if !last_was_sep {
+            // Any non-alnum character becomes a hyphen
+            result.push('-');
+            last_was_sep = true;
+        }
+    }
+
+    // Trim trailing hyphen
+    result.trim_end_matches('-').to_string()
+}
+
+/// Truncate a filename to `max_len` characters, breaking at a hyphen if possible.
+fn truncate_filename(name: &str, max_len: usize) -> String {
+    if name.chars().count() <= max_len {
+        return name.to_string();
+    }
+
+    let truncated: String = name.chars().take(max_len).collect();
+    // Try to break at last hyphen for cleaner names
+    if let Some(pos) = truncated.rfind('-') {
+        if pos > max_len / 3 {
+            return truncated[..pos].to_string();
+        }
+    }
+    truncated.trim_end_matches('-').to_string()
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
