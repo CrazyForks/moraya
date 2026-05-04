@@ -337,13 +337,13 @@ All API keys are stored exclusively in your OS Keychain — never in plaintext. 
 | v0.28.0 | Image Upload Auto-Naming & Storage | ✅ |
 | v0.29.0 | Anti-Clone Protection (Internal) | ✅ |
 | v0.30.0 | Git Sync Foundation — bind KB to GitHub repo, auto-commit, sync status | ✅ |
-| v0.31.0 | Team Review System — sidecar reviews, anchor matching, soft locking | 🚧 |
-| v0.32.0 | AI Review + Audit — AI reviewer, history timeline, blame, diff | 📋 |
-| v0.33.0 | Picora Image Host — recommended image host with one-click deep-link import | 📋 |
+| v0.31.0 | Team Review System — sidecar reviews, anchor matching, soft locking | ✅ |
+| v0.32.0 | AI Review + Audit — AI reviewer, history timeline, blame, diff | ✅ |
+| v0.33.0 | Picora Image Host — recommended image host with one-click deep-link import | ✅ |
 | v0.35.0 | KB ↔ Picora Doc Sync — namespace per KB, bidirectional sync, conflict UI | ✅ |
 | v0.36.0 | Cloud Resource Insert — pick Picora image/audio/video from menu & right-click | ✅ |
 | v0.37.0 | Picora Settings Tab — unified account/sync/browse panel; image-host entry de-emphasized | ✅ |
-| v0.38.0 | Apple code signing & notarization — signed/notarized macOS DMG, no xattr workaround | 🚧 |
+| v0.39.0 | Apple code signing & notarization — signed/notarized macOS DMG, no xattr workaround | ✅ |
 | v0.60.0-pre | Shared markdown core extraction (@moraya/markdown-core, npm-only boundary) | 📋 |
 | v0.60.0 | Moraya Web foundation — editor base + Connect tier (Picora storage adapter) | 📋 |
 | v0.61.0 | BYOC infrastructure + 5 storage adapters (Aliyun OSS, AWS S3, Cloudflare R2, Tencent COS, Backblaze B2) | 📋 |
