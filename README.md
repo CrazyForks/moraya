@@ -182,14 +182,6 @@ Download the latest release from [GitHub Releases](https://github.com/zouwei/mor
 | Linux (Debian) | `moraya_x.x.x_linux_amd64.deb` | `sudo dpkg -i moraya_*.deb` |
 | Linux (AppImage) | `Moraya_x.x.x_linux_amd64.AppImage` | `chmod +x` then run |
 
-> **macOS note**: The app is not code-signed. If you see *"Moraya is damaged and can't be opened"*, run this in Terminal:
->
-> ```bash
-> xattr -cr /Applications/Moraya.app  
-> ```
->
-> Then open the app again.
-
 ## Getting Started
 
 ### Prerequisites
@@ -351,6 +343,28 @@ All API keys are stored exclusively in your OS Keychain — never in plaintext. 
 | v0.35.0 | KB ↔ Picora Doc Sync — namespace per KB, bidirectional sync, conflict UI | ✅ |
 | v0.36.0 | Cloud Resource Insert — pick Picora image/audio/video from menu & right-click | ✅ |
 | v0.37.0 | Picora Settings Tab — unified account/sync/browse panel; image-host entry de-emphasized | ✅ |
+| v0.38.0 | Apple code signing & notarization — signed/notarized macOS DMG, no xattr workaround | 🚧 |
+| v0.60.0-pre | Shared markdown core extraction (@moraya/markdown-core, npm-only boundary) | 📋 |
+| v0.60.0 | Moraya Web foundation — editor base + Connect tier (Picora storage adapter) | 📋 |
+| v0.61.0 | BYOC infrastructure + 5 storage adapters (Aliyun OSS, AWS S3, Cloudflare R2, Tencent COS, Backblaze B2) | 📋 |
+| v0.62.0 | E2E client-side encryption + Cloud KMS dual mode (AWS / Aliyun / Tencent KMS) | 📋 |
+| v0.63.0 | Subscription & billing — Stripe + Alipay, 4-tier plans, usage metering | 📋 |
+| v0.64.0 | Cross-KB RAG (P0 AI 1) — client-side embedding, IndexedDB vector store, server-side optional | 📋 |
+| v0.65.0 | AI workflow orchestration (P0 AI 2) — DSL, 4 triggers, 7 node types, 5 built-in templates | 📋 |
+| v0.66.0 | Long-term memory (P0 AI 3) — Memory KB, cross-session injection, /forget command | 📋 |
+| v0.67.0 | Web multi-tab workspace | 📋 |
+| v0.68.0 | Web outline + find/replace + file tree | 📋 |
+| v0.69.0 | Web theming + media paste / drag-drop | 📋 |
+| v0.70.0 | Web full-text search (hybrid: BM25 + semantic + RRF fusion) | 📋 |
+| v0.71.0 | KB cross-provider migration tool with 30-day rollback | 📋 |
+| v0.72.0 | Team collaboration — realtime editing (Yjs CRDT) + Review system | 📋 |
+| v0.73.0 | Team audit logs + SSO (OIDC/SAML) + advanced ACL + MFA | 📋 |
+| v0.74.0 | Multi-LLM Router (P1 AI 1) — task classifier, cost-aware routing, BYO key mix | 📋 |
+| v0.75.0 | Voice-first capture (P1 AI 2) — 4-provider transcription + AI structuring + auto-filing | 📋 |
+| v0.76.0 | Agent over Docs (P1 AI 3) — ReAct/Plan-Execute, 5 tool types, multi-step task execution | 📋 |
+| v0.77.0 | Enterprise — SCIM, HSM, private deployment, multi-org, compliance archive | 📋 |
+| v0.78.0 | Performance + PWA polish — bundle optimization, virtual scroll, offline shell | 📋 |
+| v1.0.0 | Moraya Web GA — bug bash, full docs, case studies, launch day coordination | 📋 |
 
 ## ⭐ Star Growth trend (updated in real time)
 
