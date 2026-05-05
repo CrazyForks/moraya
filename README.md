@@ -171,13 +171,8 @@ Download the latest release from [GitHub Releases](https://github.com/zouwei/mor
 
 | Platform | File | Install |
 | --- | --- | --- |
-| macOS (Apple Silicon) | `Moraya_x.x.x_aarch64.dmg` | Open DMG, drag to Applications |
-| macOS (Intel) | `Moraya_x.x.x_x64.dmg` | Open DMG, drag to Applications |
-| Windows | `Moraya_x.x.x_x64_en-US.msi` | Run the MSI installer |
-| Linux (Debian) | `moraya_x.x.x_amd64.deb` | `sudo dpkg -i moraya_*.deb` |
-| Linux (AppImage) | `Moraya_x.x.x_amd64.AppImage` | `chmod +x` then run |
-| macOS (Apple Silicon) | `Moraya_x.x.x_mac_aarch64.dmg` | Open DMG, drag to Applications |
-| macOS (Intel) | `Moraya_x.x.x_mac_x64.dmg` | Open DMG, drag to Applications |
+| macOS (Apple Silicon) | `Moraya_x.x.x_mac_aarch64.dmg` | Signed & notarized — drag to Applications, double-click to launch |
+| macOS (Intel) | `Moraya_x.x.x_mac_x64.dmg` | Signed & notarized — drag to Applications, double-click to launch |
 | Windows | `Moraya_x.x.x_win_x64_en-US.msi` | Run the MSI installer |
 | Linux (Debian) | `moraya_x.x.x_linux_amd64.deb` | `sudo dpkg -i moraya_*.deb` |
 | Linux (AppImage) | `Moraya_x.x.x_linux_amd64.AppImage` | `chmod +x` then run |
