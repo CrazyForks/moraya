@@ -2510,6 +2510,7 @@ ${tr('welcome.tip')}
     // after the native window has fully settled. Prevents stale layout in new windows.
     // Also explicitly request focus — on Windows, WebView2 in new windows may not
     // receive keyboard input until the native window + WebView both have focus.
+    let desktopResizeUnlisten: (() => void) | undefined;
     if (isTauri && !isIPadOS) {
       requestAnimationFrame(() => {
         window.dispatchEvent(new Event('resize'));
@@ -2518,6 +2519,25 @@ ${tr('welcome.tip')}
       // On Windows, WebView2 needs an extra focus nudge after the initial render
       // completes. The first requestAnimationFrame runs before layout settles.
       setTimeout(() => { window.focus(); }, 100);
+
+      // WKWebView on macOS does NOT update `100dvh`/`100vh` continuously while
+      // the user drags a window edge — viewport-unit reflow only fires on a
+      // few discrete events (initial layout, maximize/zoom toggle, etc.).
+      // Mirror `window.innerHeight` into `--app-height` on every resize so
+      // the `.app-container`'s flex column honors the px-locked height
+      // instead of the stale `100dvh`. The listener can't fire while the JS
+      // thread is blocked parsing a huge file — that's an unavoidable
+      // limitation; once the parse finishes, the queued resize event will
+      // fire and the layout will snap to the correct position.
+      const onResize = () => {
+        document.documentElement.style.setProperty(
+          '--app-height',
+          `${window.innerHeight}px`,
+        );
+      };
+      window.addEventListener('resize', onResize);
+      desktopResizeUnlisten = () => window.removeEventListener('resize', onResize);
+      onResize();
     }
 
     // Preload enhancement plugins in background (warms cache for editor creation)
@@ -3015,6 +3035,7 @@ ${tr('welcome.tip')}
       tabDragEndUnlisten?.();
       focusUnlisten?.();
       vvUnlisten?.();
+      desktopResizeUnlisten?.();
       window.removeEventListener('moraya:file-synced', handleFileSynced);
       window.removeEventListener('moraya:dynamic-service-created', handleDynamicServiceCreated);
       // Dynamic MCP services are now always persisted (lifecycle: 'saved')
@@ -3458,6 +3479,16 @@ ${tr('welcome.tip')}
   .app-body {
     display: flex;
     flex: 1;
+    /* Flex items default to `min-height: auto`, which means they refuse to
+       shrink below their content's intrinsic height. With a tiny doc that
+       doesn't matter, but once a multi-MB markdown file is loaded the
+       editor's intrinsic height balloons and `.app-body` stops shrinking
+       on window resize — the trailing `.statusbar` then gets pushed past
+       `.app-container`'s bottom edge and clipped by its `overflow: hidden`.
+       Setting `min-height: 0` lets flex distribute height correctly
+       regardless of content size, so the StatusBar always hugs the
+       window's bottom edge. */
+    min-height: 0;
     overflow: hidden;
   }
 

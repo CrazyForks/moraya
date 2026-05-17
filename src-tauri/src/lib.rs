@@ -40,6 +40,12 @@ pub struct MainWindowReady(pub AtomicBool);
 /// Frontend drains this via `take_pending_picora_import` once the import dialog is mounted.
 pub struct PendingPicoraImport(pub Mutex<Option<serde_json::Value>>);
 
+/// Recent file-open dispatches, used to dedupe `on_open_url` (deep-link plugin)
+/// vs `RunEvent::Opened` (Tauri runtime) which can both fire for the same
+/// macOS apple-event. Maps path → instant of last dispatch; entries older than
+/// the dedup window are ignored.
+pub struct RecentOpens(pub Mutex<HashMap<String, std::time::Instant>>);
+
 /// Atomic counter for generating unique window labels.
 static WINDOW_COUNTER: AtomicU32 = AtomicU32::new(0);
 
@@ -537,6 +543,86 @@ fn parse_picora_deeplink(raw: &str) -> Option<serde_json::Value> {
     Some(serde_json::Value::Object(payload))
 }
 
+/// Returns true if this path was dispatched within the dedup window.
+/// On macOS, both the deep-link plugin's `on_open_url` and Tauri's
+/// `RunEvent::Opened` can fire for the same apple-event; without this guard
+/// the file would be opened twice (cold start) or two windows would be
+/// created (warm start).
+fn is_duplicate_open(app: &tauri::AppHandle, path: &str) -> bool {
+    let recent = match app.try_state::<RecentOpens>() {
+        Some(s) => s,
+        None => return false,
+    };
+    let mut map = match recent.0.lock() {
+        Ok(g) => g,
+        Err(e) => e.into_inner(),
+    };
+    let now = std::time::Instant::now();
+    let window = std::time::Duration::from_millis(1500);
+    // Clean stale entries to bound memory.
+    map.retain(|_, t| now.duration_since(*t) < window);
+    if let Some(prev) = map.get(path) {
+        if now.duration_since(*prev) < window {
+            return true;
+        }
+    }
+    map.insert(path.to_string(), now);
+    false
+}
+
+/// Route a URL handed to us by the deep-link plugin (macOS apple-events,
+/// Windows scheme handler, Linux argv-via-single-instance). `file://` URLs
+/// flow through the file-open pipeline (same as `RunEvent::Opened`); custom
+/// schemes flow through the Picora deep-link handler. Without this split,
+/// the deep-link plugin's `on_open_url` callback silently consumes the
+/// `file://` URL from a Finder double-click and the document never opens.
+fn dispatch_open_url(app: &tauri::AppHandle, url: &url::Url) {
+    if url.scheme() == "file" {
+        if let Ok(path_buf) = url.to_file_path() {
+            let path = path_buf.to_string_lossy().into_owned();
+            if is_duplicate_open(app, &path) {
+                return;
+            }
+            let main_ready = app
+                .try_state::<MainWindowReady>()
+                .map(|s| s.0.load(Ordering::SeqCst))
+                .unwrap_or(false);
+
+            if !main_ready {
+                // Cold start: buffer for the main window's get_opened_file().
+                // Also fire the open-file event in case the frontend listener
+                // is already registered by the time we get here.
+                if let Some(opened) = app.try_state::<OpenedFiles>() {
+                    if let Ok(mut files) = opened.0.lock() {
+                        files.push(path.clone());
+                    }
+                }
+                let _ = app.emit("open-file", &path);
+            } else {
+                // Runtime: open the file in a new editor window. Fall back to
+                // the open-file event if window creation fails so an existing
+                // window can pick it up.
+                #[cfg(target_os = "macos")]
+                {
+                    if let Some(pending) = app.try_state::<PendingFiles>() {
+                        if create_editor_window(app, &pending, Some(path.clone())).is_err() {
+                            let _ = app.emit("open-file", &path);
+                        }
+                    } else {
+                        let _ = app.emit("open-file", &path);
+                    }
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = app.emit("open-file", &path);
+                }
+            }
+        }
+        return;
+    }
+    handle_picora_deeplink(app, url.as_str());
+}
+
 /// Dispatch a deep-link URL: parse it, then either emit `picora-import-request`
 /// to the main window (if the frontend is ready) or buffer it for later pickup.
 fn handle_picora_deeplink(app: &tauri::AppHandle, raw_url: &str) {
@@ -639,12 +725,32 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            // A second instance was launched. If it carries a moraya:// URL on
-            // its argv (Windows/Linux deep-link delivery path), extract and
-            // forward it to the primary instance.
+            // A second instance was launched. Two carriers to forward:
+            //   1. moraya:// deep-link URL → Picora handler
+            //   2. file path (Windows/Linux file association) → file-open path
             for arg in args.iter().skip(1) {
                 if arg.starts_with("moraya://") {
                     handle_picora_deeplink(app, arg);
+                } else if !arg.starts_with('-') {
+                    let p = std::path::Path::new(arg);
+                    if p.is_file() {
+                        let path = arg.clone();
+                        let main_ready = app
+                            .try_state::<MainWindowReady>()
+                            .map(|s| s.0.load(Ordering::SeqCst))
+                            .unwrap_or(false);
+                        if main_ready {
+                            // Existing window picks it up via the event.
+                            let _ = app.emit("open-file", &path);
+                        } else {
+                            if let Some(opened) = app.try_state::<OpenedFiles>() {
+                                if let Ok(mut files) = opened.0.lock() {
+                                    files.push(path.clone());
+                                }
+                            }
+                            let _ = app.emit("open-file", &path);
+                        }
+                    }
                 }
             }
             // Always raise the main window — that's the user expectation when
@@ -681,6 +787,7 @@ pub fn run() {
         .manage(PendingTabData(Mutex::new(HashMap::new())))
         .manage(MainWindowReady(AtomicBool::new(false)))
         .manage(PendingPicoraImport(Mutex::new(None)))
+        .manage(RecentOpens(Mutex::new(HashMap::new())))
         .manage(DockDocumentTracker(Mutex::new(HashMap::new())))
         .invoke_handler(tauri::generate_handler![
             commands::file::read_file,
@@ -818,13 +925,13 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 app.deep_link().on_open_url(move |event| {
                     for url in event.urls() {
-                        handle_picora_deeplink(&app_handle, url.as_str());
+                        dispatch_open_url(&app_handle, &url);
                     }
                 });
                 // Also drain any URL the OS handed us at startup (macOS/Windows path).
                 if let Ok(Some(urls)) = app.deep_link().get_current() {
                     for url in urls {
-                        handle_picora_deeplink(app.handle(), url.as_str());
+                        dispatch_open_url(app.handle(), &url);
                     }
                 }
             }
@@ -1009,6 +1116,9 @@ pub fn run() {
                             if u.scheme() == "file" {
                                 if let Ok(p) = u.to_file_path() {
                                     let path = p.to_string_lossy().into_owned();
+                                    if is_duplicate_open(_app, &path) {
+                                        continue;
+                                    }
 
                                     if !main_ready {
                                         // Cold start: store file for the main window to pick up
