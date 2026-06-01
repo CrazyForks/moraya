@@ -9,6 +9,7 @@
   import type { KbSyncState } from '$lib/services/kb-sync/types';
   import KbPicoraBindDialog from './KbPicoraBindDialog.svelte';
   import KbSyncConflictPanel from './KbSyncConflictPanel.svelte';
+  import KbSyncTrashPanel from './KbSyncTrashPanel.svelte';
   import { ask } from '@tauri-apps/plugin-dialog';
 
   let knowledgeBases = $state<KnowledgeBase[]>([]);
@@ -17,6 +18,7 @@
   let bindingKb = $state<KnowledgeBase | null>(null);
   let conflictKbId = $state<string | null>(null);
   let expandedKbId = $state<string | null>(null);
+  let showTrash = $state(false);
 
   const unsub1 = filesStore.subscribe(state => { knowledgeBases = state.knowledgeBases; });
   const unsub2 = settingsStore.subscribe(state => { kbSyncEnabled = state.kbSyncEnabled ?? true; });
@@ -123,6 +125,9 @@
       <span>{$t('kbSync.settings.globalSwitch')}</span>
     </label>
     <p class="hint">{$t('kbSync.settings.globalSwitchHint')}</p>
+    <button class="trash-link" onclick={() => { showTrash = true; }} type="button">
+      🗑 {$t('kbSync.trash.title')}
+    </button>
   </div>
 
   <div class="kb-list">
@@ -248,6 +253,10 @@
   />
 {/if}
 
+{#if showTrash}
+  <KbSyncTrashPanel onClose={() => { showTrash = false; }} />
+{/if}
+
 {#if conflictKbId}
   {@const conflictKb = knowledgeBases.find(k => k.id === conflictKbId)}
   {#if conflictKb && conflictKb.picoraBinding}
@@ -287,6 +296,21 @@
     margin: 0.3rem 0 0;
     font-size: var(--font-size-xs);
     color: var(--text-muted);
+  }
+
+  .trash-link {
+    margin-top: 0.5rem;
+    padding: 4px 10px;
+    font-size: var(--font-size-xs);
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .trash-link:hover {
+    color: var(--text-primary);
+    border-color: var(--text-primary);
   }
 
   .kb-list {

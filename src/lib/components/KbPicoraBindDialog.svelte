@@ -58,7 +58,9 @@
     kbsError = '';
     try {
       const base = picoraApiBase(target.picoraApiUrl);
-      remoteKbs = await listKbs(base, target.picoraApiKey);
+      const { getPicoraApiKey } = await import('$lib/services/picora/credentials');
+      const apiKey = await getPicoraApiKey(target);
+      remoteKbs = await listKbs(base, apiKey);
     } catch (e) {
       kbsError = typeof e === 'string' ? e : 'Failed to load Knowledge Bases';
     } finally {
@@ -114,11 +116,13 @@
     try {
       const target = picoraTargets.find(t => t.id === selectedTargetId)!;
       const base = picoraApiBase(target.picoraApiUrl);
+      const { getPicoraApiKey } = await import('$lib/services/picora/credentials');
+      const apiKey = await getPicoraApiKey(target);
 
       let picoraKbId: string;
       let picoraKbName: string;
       if (createMode) {
-        const created = await createKb(base, target.picoraApiKey, newKbName, newKbSlug || undefined);
+        const created = await createKb(base, apiKey, newKbName, newKbSlug || undefined);
         picoraKbId = created.id;
         picoraKbName = created.name;
       } else {

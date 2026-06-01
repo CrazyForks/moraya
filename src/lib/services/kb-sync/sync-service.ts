@@ -103,7 +103,8 @@ export async function runSync(
 ): Promise<Omit<SyncReport, 'conflicts'> & { conflicts: ConflictEntry[]; diff?: DiffResult }> {
   const { localKbId, picoraKbId, strategy } = binding;
   const apiBase = picoraApiBase(target.picoraApiUrl);
-  const apiKey = target.picoraApiKey;
+  const { getPicoraApiKey } = await import('$lib/services/picora/credentials');
+  const apiKey = await getPicoraApiKey(target);
 
   kbSyncStore.setState(localKbId, { status: 'syncing', lastError: null });
 

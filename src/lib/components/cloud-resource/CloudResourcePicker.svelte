@@ -175,7 +175,8 @@
   async function fetchPage(cursor?: string) {
     if (!selectedTarget) return;
     const apiBase = picoraApiBaseFromUploadUrl(selectedTarget.picoraApiUrl);
-    const apiKey = selectedTarget.picoraApiKey;
+    const { getPicoraApiKey } = await import('$lib/services/picora/credentials');
+    const apiKey = await getPicoraApiKey(selectedTarget);
     const cacheKey = makeCacheKey(selectedTargetId, type, debouncedQ, kbScope, cursor ?? '', undefined);
 
     const cached = mediaCache.get(cacheKey);
@@ -299,7 +300,8 @@
   async function makePublicThenInsert() {
     if (!selectedTarget) return;
     const apiBase = picoraApiBaseFromUploadUrl(selectedTarget.picoraApiUrl);
-    const apiKey = selectedTarget.picoraApiKey;
+    const { getPicoraApiKey } = await import('$lib/services/picora/credentials');
+    const apiKey = await getPicoraApiKey(selectedTarget);
     for (const item of privateItems) {
       try {
         await updateVisibility(apiBase, apiKey, item.type, item.id, true);

@@ -375,11 +375,16 @@ export function discoverPublishTargets(): PublishTarget[] {
 }
 
 /**
- * Connect all enabled servers
+ * Connect all enabled servers. Skips servers that are already connected —
+ * `initContainerManager` connects saved dynamic services itself during
+ * restoration, so on app startup `connectAllServers` would otherwise race
+ * with it (both call `connectServer(id)` concurrently, both see
+ * `clients.has(id) === false`, and both spawn duplicate stdio processes —
+ * one ends up orphaned with no reader, hanging future requests).
  */
 export async function connectAllServers(): Promise<void> {
   const state = mcpStore.getState();
-  const enabled = state.servers.filter(s => s.enabled);
+  const enabled = state.servers.filter(s => s.enabled && !clients.has(s.id));
 
   await Promise.allSettled(enabled.map(s => connectServer(s)));
 }

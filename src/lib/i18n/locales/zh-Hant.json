@@ -732,7 +732,9 @@
     "picoraImportInvalid": "匯入連結無效，請回到 Picora 控制台重新產生。",
     "picoraVerify": "驗證",
     "picoraHeroDesc": "自研 SaaS 圖床 · 5 分鐘一鍵完成設定",
-    "otherProviders": "其他圖床"
+    "otherProviders": "其他圖床",
+    "picoraApiKeyKeychain": "已存入系統鑰匙圈 · 輸入新 key 可覆蓋",
+    "picoraKeyMigratedToast": "已將 {count} 個 Picora API key 遷移到系統鑰匙圈。"
   },
   "imageMenu": {
     "resize": "調整大小",
@@ -2012,6 +2014,33 @@
     "syncNow": "立即同步",
     "error": {
       "targetMissing": "找不到 Picora 帳號，請重新綁定此知識庫，或在設定中恢復帳號。"
+    },
+    "trash": {
+      "title": "回收筒",
+      "toastDeleted": "Picora 刪除了 {count} 個檔案，已移入回收筒。",
+      "view": "檢視",
+      "restoreAll": "全部還原",
+      "restoreSuccess": "已還原 {count} 個檔案。",
+      "restoreFailed": "部分檔案未能還原。",
+      "restoreConflictTitle": "檔案已存在",
+      "restoreConflictBody": "{path} 已存在，是否覆寫？",
+      "overwrite": "覆寫",
+      "cancel": "取消",
+      "filterKbAll": "全部知識庫",
+      "filterTime7d": "最近 7 天",
+      "filterTime30d": "最近 30 天",
+      "filterTimeAll": "全部時間",
+      "emptyState": "回收筒為空。",
+      "loading": "載入中…",
+      "restore": "還原",
+      "deleteForever": "永久刪除",
+      "deleteForeverConfirm": "永久刪除 {path}？此操作無法復原。",
+      "purgeAll": "清空回收筒",
+      "purgeAllConfirm": "清空 {days} 天前的所有項目？",
+      "purgeResult": "已清理 {files} 個檔案，釋放 {size}。",
+      "autoPurgeHint": "超過 7 天的項目會自動刪除。",
+      "entryDeletedAt": "刪除於 {date}",
+      "kbUnknown": "未知知識庫"
     }
   }
 }

@@ -116,14 +116,44 @@ export interface ImageHostTarget {
   ossCdnDomain: string;
   ossPathPrefix: string;
   picoraApiUrl: string;
+  /**
+   * Legacy plaintext field. As of v0.69.0 the actual key is stored in the OS
+   * Keychain under `picora-api-key:{id}` and this field is cleared after
+   * one-shot migration. Reading code MUST go through `getPicoraApiKey()` in
+   * `$lib/services/picora/credentials` rather than reading the field directly.
+   *
+   * @deprecated since v0.69.0 — slated for full removal in v0.75.0.
+   */
   picoraApiKey: string;
   picoraImgDomain: string;
   picoraUserEmail: string;
+  /** True after the v0.69.0 migration moved `picoraApiKey` to the Keychain. */
+  picoraKeyMigratedV069?: boolean;
+  /**
+   * v0.69.0 Phase 2 — when present, credential resolution goes through the
+   * OAuth Device Flow path (`picora_oauth_get_token`) instead of the legacy
+   * api-key path. Set by v0.66.0's "Connect Picora" onboarding after a
+   * successful device-flow login.
+   *
+   * Mutually exclusive with `picoraApiKey` in practice — the resolver prefers
+   * the OAuth ref when both are present.
+   */
+  picoraAuthRef?: PicoraAuthRef;
   /** Set by Picora import flow; affects sort order and badge rendering. */
   featured?: boolean;
   /** Unix ms when this target was imported from Picora; display-only. */
   picoraImportedAt?: number;
 }
+
+/**
+ * Reference to a Picora authentication credential. v0.69.0 Phase 2 ships
+ * with `oauth` only; future kinds (e.g. `api-key`) can be added when needed.
+ *
+ * Storage: tokens live in OS Keychain under `picora-token:{accountId}`
+ * (see `src-tauri/src/commands/picora_oauth.rs`); this struct holds only
+ * the lookup key.
+ */
+export type PicoraAuthRef = { kind: 'oauth'; accountId: string };
 
 export function generateImageHostTargetId(): string {
   return `imghost_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;

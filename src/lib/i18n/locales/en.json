@@ -784,7 +784,9 @@
     "picoraImportInvalid": "Invalid import link — please retry from the Picora console.",
     "picoraVerify": "Verify",
     "picoraHeroDesc": "Our own SaaS image host · zero-config bind in 5 minutes",
-    "otherProviders": "Other providers"
+    "otherProviders": "Other providers",
+    "picoraApiKeyKeychain": "Stored in system Keychain · enter a new key to replace",
+    "picoraKeyMigratedToast": "Migrated {count} Picora API key(s) to your system keychain."
   },
   "imageMenu": {
     "resize": "Resize",
@@ -2091,6 +2093,33 @@
     "syncNow": "Sync now",
     "error": {
       "targetMissing": "Picora account not found — please re-bind this KB or restore the account in Settings."
+    },
+    "trash": {
+      "title": "Recycle Bin",
+      "toastDeleted": "Picora deleted {count} file(s). Moved to recycle bin.",
+      "view": "View",
+      "restoreAll": "Restore all",
+      "restoreSuccess": "Restored {count} file(s).",
+      "restoreFailed": "Could not restore some files.",
+      "restoreConflictTitle": "File already exists",
+      "restoreConflictBody": "{path} already exists. Overwrite it?",
+      "overwrite": "Overwrite",
+      "cancel": "Cancel",
+      "filterKbAll": "All KBs",
+      "filterTime7d": "Last 7 days",
+      "filterTime30d": "Last 30 days",
+      "filterTimeAll": "All time",
+      "emptyState": "No items in the recycle bin.",
+      "loading": "Loading…",
+      "restore": "Restore",
+      "deleteForever": "Delete forever",
+      "deleteForeverConfirm": "Permanently delete {path}? This cannot be undone.",
+      "purgeAll": "Empty bin",
+      "purgeAllConfirm": "Empty all entries older than {days} days?",
+      "purgeResult": "Cleaned up {files} file(s), freed {size}.",
+      "autoPurgeHint": "Items older than 7 days are deleted automatically.",
+      "entryDeletedAt": "Deleted {date}",
+      "kbUnknown": "Unknown KB"
     }
   }
 }

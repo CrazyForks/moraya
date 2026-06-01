@@ -730,7 +730,9 @@
     "picoraImportInvalid": "Lien d’import invalide — réessayez depuis la console Picora.",
     "picoraVerify": "Vérifier",
     "picoraHeroDesc": "Notre hébergeur d’images SaaS · configuration en 5 minutes en un clic",
-    "otherProviders": "Autres fournisseurs"
+    "otherProviders": "Autres fournisseurs",
+    "picoraApiKeyKeychain": "Stockée dans le trousseau du système · saisissez une nouvelle clé pour la remplacer",
+    "picoraKeyMigratedToast": "{count} clé(s) API Picora migrée(s) vers le trousseau du système."
   },
   "imageMenu": {
     "resize": "Redimensionner",
@@ -2010,6 +2012,33 @@
     "syncNow": "Synchroniser maintenant",
     "error": {
       "targetMissing": "Compte Picora introuvable — veuillez relier cette base de connaissances ou restaurer le compte dans les Paramètres."
+    },
+    "trash": {
+      "title": "Corbeille",
+      "toastDeleted": "Picora a supprimé {count} fichier(s). Déplacé(s) dans la corbeille.",
+      "view": "Voir",
+      "restoreAll": "Tout restaurer",
+      "restoreSuccess": "{count} fichier(s) restauré(s).",
+      "restoreFailed": "Impossible de restaurer certains fichiers.",
+      "restoreConflictTitle": "Le fichier existe déjà",
+      "restoreConflictBody": "{path} existe déjà. Écraser ?",
+      "overwrite": "Écraser",
+      "cancel": "Annuler",
+      "filterKbAll": "Toutes les BC",
+      "filterTime7d": "7 derniers jours",
+      "filterTime30d": "30 derniers jours",
+      "filterTimeAll": "Toute la période",
+      "emptyState": "La corbeille est vide.",
+      "loading": "Chargement…",
+      "restore": "Restaurer",
+      "deleteForever": "Supprimer définitivement",
+      "deleteForeverConfirm": "Supprimer définitivement {path} ? Impossible d'annuler.",
+      "purgeAll": "Vider la corbeille",
+      "purgeAllConfirm": "Vider toutes les entrées de plus de {days} jours ?",
+      "purgeResult": "{files} fichier(s) nettoyé(s), {size} libéré(s).",
+      "autoPurgeHint": "Les éléments de plus de 7 jours sont supprimés automatiquement.",
+      "entryDeletedAt": "Supprimé le {date}",
+      "kbUnknown": "BC inconnue"
     }
   }
 }

@@ -137,6 +137,62 @@ fn default_true() -> bool {
     true
 }
 
+// ---------------------------------------------------------------------------
+// Shared unit conversions (used by macOS direct path + Win/Linux child mode)
+// ---------------------------------------------------------------------------
+//
+// `POINTS_PER_INCH`, `mm_to_inches`, and `mm_to_points` are consumed by the
+// cfg-gated Win/Linux child-mode implementations (v0.60.1 Phase 2/3). They
+// carry `#[allow(dead_code)]` so the macOS build stays warning-free until
+// those bindings land. Unit tests below exercise them on every platform.
+
+/// 1 inch = 25.4 mm.
+pub const MM_PER_INCH: f64 = 25.4;
+
+/// CSS spec: 1 inch = 96 CSS pixels.
+pub const CSS_PX_PER_INCH: f64 = 96.0;
+
+/// PostScript / PDF / GTK PageSetup spec: 1 inch = 72 points.
+#[allow(dead_code)]
+pub const POINTS_PER_INCH: f64 = 72.0;
+
+/// mm → inches (used by WebView2 `ICoreWebView2PrintSettings`, which takes
+/// dimensions in floating-point inches).
+#[allow(dead_code)]
+#[inline]
+pub fn mm_to_inches(mm: f64) -> f64 {
+    mm / MM_PER_INCH
+}
+
+/// mm → PostScript points (used by GTK / WebKitGTK `PageSetup` / `PaperSize`,
+/// which work in 1/72 inch units).
+#[allow(dead_code)]
+#[inline]
+pub fn mm_to_points(mm: f64) -> f64 {
+    mm / MM_PER_INCH * POINTS_PER_INCH
+}
+
+/// Compute the CSS-pixel width of the printable content area for a print job.
+///
+/// Shared by:
+/// - macOS direct path (sets the hidden WKWebView frame width before `createPDF`)
+/// - Windows / Linux subprocess child (sets the WebView2 / WebKitGTK viewport
+///   width so line-break behaviour matches the printed output)
+///
+/// Floor of 50 mm protects against pathological margin configs that would
+/// otherwise leave a negative or near-zero content area.
+pub fn paper_content_viewport_width(job: &JobConfig) -> f64 {
+    let (pw_mm, ph_mm) = job.options.paper_size.dimensions_mm();
+    let paper_w_mm = if job.options.orientation == Orientation::Landscape {
+        ph_mm
+    } else {
+        pw_mm
+    };
+    let margin_w = job.options.margins.left + job.options.margins.right;
+    let content_mm = (paper_w_mm - margin_w).max(50.0);
+    (content_mm / MM_PER_INCH * CSS_PX_PER_INCH).round()
+}
+
 impl Default for PdfExportOptions {
     fn default() -> Self {
         PdfExportOptions {
@@ -303,5 +359,80 @@ mod tests {
         let s = serde_json::to_string(&ev).unwrap();
         assert!(s.contains("\"type\":\"Paginating\""));
         assert!(s.contains("\"current\":12"));
+    }
+
+    #[test]
+    fn mm_to_inches_a4_short_edge() {
+        // 210 mm (A4 width) = 8.2677… inch; tolerance well under WebView2's
+        // ICoreWebView2PrintSettings rounding (0.01 inch).
+        let v = mm_to_inches(210.0);
+        assert!((v - 8.2677).abs() < 0.001, "got {v}");
+    }
+
+    #[test]
+    fn mm_to_points_us_letter_long_edge() {
+        // 279.4 mm (US Letter height) = 11 inch = 792 points exactly.
+        let v = mm_to_points(279.4);
+        assert!((v - 792.0).abs() < 0.01, "got {v}");
+    }
+
+    #[test]
+    fn mm_to_inches_zero_and_negative_pass_through() {
+        // Conversion is a pure linear map; safety floors live in
+        // paper_content_viewport_width, not in the unit conversions.
+        assert_eq!(mm_to_inches(0.0), 0.0);
+        assert!(mm_to_inches(-1.0) < 0.0);
+    }
+
+    fn job_with(paper: PaperSize, orient: Orientation, margins: Margins) -> JobConfig {
+        JobConfig {
+            job_id: "t".to_string(),
+            markdown: String::new(),
+            output_path: "/tmp/x.pdf".to_string(),
+            options: PdfExportOptions {
+                paper_size: paper,
+                orientation: orient,
+                margins,
+                ..PdfExportOptions::default()
+            },
+        }
+    }
+
+    #[test]
+    fn viewport_width_a4_portrait_default_margins() {
+        // A4 portrait = 210 mm wide, margins L+R = 15+15 = 30 mm,
+        // content = 180 mm = 7.0866 inch ≈ 680 CSS px.
+        let job = job_with(PaperSize::A4, Orientation::Portrait, Margins::default());
+        let w = paper_content_viewport_width(&job);
+        assert_eq!(w, 680.0);
+    }
+
+    #[test]
+    fn viewport_width_a4_landscape_swaps_dims() {
+        // A4 landscape = 297 mm wide, content = 267 mm = 10.512 inch ≈ 1009 CSS px.
+        let job = job_with(PaperSize::A4, Orientation::Landscape, Margins::default());
+        let w = paper_content_viewport_width(&job);
+        assert_eq!(w, 1009.0);
+    }
+
+    #[test]
+    fn viewport_width_floors_at_50mm_for_extreme_margins() {
+        // Margins eat the whole sheet → fall back to 50 mm content area.
+        // 50 mm = 1.9685 inch ≈ 189 CSS px.
+        let job = job_with(
+            PaperSize::A4,
+            Orientation::Portrait,
+            Margins { top: 0.0, right: 200.0, bottom: 0.0, left: 200.0 },
+        );
+        let w = paper_content_viewport_width(&job);
+        assert_eq!(w, 189.0);
+    }
+
+    #[test]
+    fn viewport_width_letter_portrait() {
+        // US Letter = 215.9 mm wide, content = 185.9 mm = 7.319 inch ≈ 703 CSS px.
+        let job = job_with(PaperSize::Letter, Orientation::Portrait, Margins::default());
+        let w = paper_content_viewport_width(&job);
+        assert_eq!(w, 703.0);
     }
 }

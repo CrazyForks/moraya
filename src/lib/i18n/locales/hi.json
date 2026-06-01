@@ -732,7 +732,9 @@
     "picoraImportInvalid": "अमान्य इम्पोर्ट लिंक — कृपया Picora कंसोल से पुनः प्रयास करें।",
     "picoraVerify": "सत्यापित करें",
     "picoraHeroDesc": "हमारा SaaS इमेज होस्ट · 5 मिनट में वन-क्लिक सेटअप",
-    "otherProviders": "अन्य प्रदाता"
+    "otherProviders": "अन्य प्रदाता",
+    "picoraApiKeyKeychain": "सिस्टम कीचेन में संग्रहीत · प्रतिस्थापित करने के लिए नई कुंजी दर्ज करें",
+    "picoraKeyMigratedToast": "{count} Picora API कुंजी सिस्टम कीचेन में स्थानांतरित की गईं।"
   },
   "imageMenu": {
     "resize": "आकार बदलें",
@@ -2012,6 +2014,33 @@
     "syncNow": "अभी सिंक करें",
     "error": {
       "targetMissing": "Picora खाता नहीं मिला — कृपया इस ज्ञान आधार को पुनः जोड़ें या सेटिंग में खाता पुनर्स्थापित करें।"
+    },
+    "trash": {
+      "title": "रीसायकल बिन",
+      "toastDeleted": "Picora ने {count} फ़ाइल(ें) हटा दीं। रीसायकल बिन में ले जाई गईं।",
+      "view": "देखें",
+      "restoreAll": "सभी पुनर्स्थापित करें",
+      "restoreSuccess": "{count} फ़ाइल(ें) पुनर्स्थापित की गईं।",
+      "restoreFailed": "कुछ फ़ाइलें पुनर्स्थापित नहीं हो सकीं।",
+      "restoreConflictTitle": "फ़ाइल पहले से मौजूद है",
+      "restoreConflictBody": "{path} पहले से मौजूद है। अधिलेखित करें?",
+      "overwrite": "अधिलेखित करें",
+      "cancel": "रद्द करें",
+      "filterKbAll": "सभी KB",
+      "filterTime7d": "पिछले 7 दिन",
+      "filterTime30d": "पिछले 30 दिन",
+      "filterTimeAll": "सम्पूर्ण समय",
+      "emptyState": "रीसायकल बिन खाली है।",
+      "loading": "लोड हो रहा है…",
+      "restore": "पुनर्स्थापित करें",
+      "deleteForever": "हमेशा के लिए हटाएं",
+      "deleteForeverConfirm": "{path} को हमेशा के लिए हटाएं? यह वापस नहीं किया जा सकता।",
+      "purgeAll": "बिन खाली करें",
+      "purgeAllConfirm": "{days} दिन से पुरानी सभी प्रविष्टियाँ हटाएँ?",
+      "purgeResult": "{files} फ़ाइल(ें) साफ़, {size} खाली।",
+      "autoPurgeHint": "7 दिन से पुरानी प्रविष्टियाँ स्वतः हट जाती हैं।",
+      "entryDeletedAt": "{date} पर हटाया गया",
+      "kbUnknown": "अज्ञात KB"
     }
   }
 }

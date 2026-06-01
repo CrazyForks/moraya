@@ -730,7 +730,9 @@
     "picoraImportInvalid": "Enlace de importación no válido — vuelve a intentarlo desde la consola de Picora.",
     "picoraVerify": "Verificar",
     "picoraHeroDesc": "Nuestro host de imágenes SaaS · configuración en 5 min con un clic",
-    "otherProviders": "Otros proveedores"
+    "otherProviders": "Otros proveedores",
+    "picoraApiKeyKeychain": "Almacenado en el Llavero del sistema · introduzca una nueva clave para reemplazarla",
+    "picoraKeyMigratedToast": "Se migraron {count} clave(s) de API de Picora al llavero del sistema."
   },
   "imageMenu": {
     "resize": "Redimensionar",
@@ -2010,6 +2012,33 @@
     "syncNow": "Sincronizar ahora",
     "error": {
       "targetMissing": "Cuenta de Picora no encontrada — vuelva a vincular esta base de conocimiento o restaure la cuenta en Configuración."
+    },
+    "trash": {
+      "title": "Papelera",
+      "toastDeleted": "Picora eliminó {count} archivo(s). Movido(s) a la papelera.",
+      "view": "Ver",
+      "restoreAll": "Restaurar todo",
+      "restoreSuccess": "Se restauraron {count} archivo(s).",
+      "restoreFailed": "No se pudieron restaurar algunos archivos.",
+      "restoreConflictTitle": "El archivo ya existe",
+      "restoreConflictBody": "{path} ya existe. ¿Sobrescribir?",
+      "overwrite": "Sobrescribir",
+      "cancel": "Cancelar",
+      "filterKbAll": "Todas las BC",
+      "filterTime7d": "Últimos 7 días",
+      "filterTime30d": "Últimos 30 días",
+      "filterTimeAll": "Todo el tiempo",
+      "emptyState": "La papelera está vacía.",
+      "loading": "Cargando…",
+      "restore": "Restaurar",
+      "deleteForever": "Eliminar permanentemente",
+      "deleteForeverConfirm": "¿Eliminar permanentemente {path}? Esto no se puede deshacer.",
+      "purgeAll": "Vaciar papelera",
+      "purgeAllConfirm": "¿Vaciar todas las entradas con más de {days} días?",
+      "purgeResult": "Se limpiaron {files} archivo(s), se liberaron {size}.",
+      "autoPurgeHint": "Las entradas con más de 7 días se eliminan automáticamente.",
+      "entryDeletedAt": "Eliminado el {date}",
+      "kbUnknown": "BC desconocida"
     }
   }
 }

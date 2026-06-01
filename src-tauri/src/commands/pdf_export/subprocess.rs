@@ -83,11 +83,19 @@ pub async fn run(job: &JobConfig, progress: &Channel<ProgressEvent>) -> Result<(
     let _ = std::fs::remove_file(&cfg_path);
 
     if !exit.success() {
-        return Err(format!(
-            "subprocess exited with status {:?}; stderr: {}",
+        // Surface the child's stderr (truncated) via the progress Channel as a
+        // Fallback event before returning Err. Without this the frontend only
+        // sees the generic Err string in the toast — the operator has no way
+        // to see *why* the child died from in-app UI. The Err return value
+        // still propagates so the orchestrator's canvas fallback fires.
+        let stderr_head: String = err_text.chars().take(200).collect();
+        let reason = format!(
+            "subprocess exited with status {:?}: {}",
             exit.code(),
-            err_text.chars().take(200).collect::<String>()
-        ));
+            if stderr_head.is_empty() { "<no stderr>" } else { stderr_head.as_str() }
+        );
+        let _ = progress.send(ProgressEvent::Fallback { reason: reason.clone() });
+        return Err(reason);
     }
 
     // The child writes the PDF directly to job.output_path before exiting,

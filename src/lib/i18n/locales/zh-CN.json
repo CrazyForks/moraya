@@ -784,7 +784,9 @@
     "picoraImportInvalid": "导入链接无效，请回到 Picora 控制台重新生成。",
     "picoraVerify": "验证",
     "picoraHeroDesc": "自研 SaaS 图床 · 5 分钟一键完成配置",
-    "otherProviders": "其他图床"
+    "otherProviders": "其他图床",
+    "picoraApiKeyKeychain": "已存入系统钥匙串 · 输入新 key 可覆盖",
+    "picoraKeyMigratedToast": "已将 {count} 个 Picora API key 迁移到系统钥匙串。"
   },
   "imageMenu": {
     "resize": "调整大小",
@@ -2091,6 +2093,33 @@
     "syncNow": "立即同步",
     "error": {
       "targetMissing": "找不到 Picora 账号，请重新绑定此知识库，或在设置中恢复账号。"
+    },
+    "trash": {
+      "title": "回收站",
+      "toastDeleted": "Picora 删除了 {count} 个文件，已移入回收站。",
+      "view": "查看",
+      "restoreAll": "全部恢复",
+      "restoreSuccess": "已恢复 {count} 个文件。",
+      "restoreFailed": "部分文件未能恢复。",
+      "restoreConflictTitle": "文件已存在",
+      "restoreConflictBody": "{path} 已存在，是否覆盖？",
+      "overwrite": "覆盖",
+      "cancel": "取消",
+      "filterKbAll": "全部知识库",
+      "filterTime7d": "最近 7 天",
+      "filterTime30d": "最近 30 天",
+      "filterTimeAll": "全部时间",
+      "emptyState": "回收站为空。",
+      "loading": "加载中…",
+      "restore": "恢复",
+      "deleteForever": "永久删除",
+      "deleteForeverConfirm": "永久删除 {path}？此操作无法撤销。",
+      "purgeAll": "清空回收站",
+      "purgeAllConfirm": "清空 {days} 天前的所有条目？",
+      "purgeResult": "已清理 {files} 个文件，释放 {size}。",
+      "autoPurgeHint": "超过 7 天的条目会被自动删除。",
+      "entryDeletedAt": "删除于 {date}",
+      "kbUnknown": "未知知识库"
     }
   }
 }

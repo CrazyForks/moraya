@@ -732,7 +732,9 @@
     "picoraImportInvalid": "رابط الاستيراد غير صالح — يرجى المحاولة مرة أخرى من وحدة تحكم Picora.",
     "picoraVerify": "تحقق",
     "picoraHeroDesc": "موفر استضافة صور SaaS الخاص بنا · إعداد بنقرة واحدة في 5 دقائق",
-    "otherProviders": "خيارات أخرى"
+    "otherProviders": "خيارات أخرى",
+    "picoraApiKeyKeychain": "محفوظ في سلسلة مفاتيح النظام · أدخل مفتاحًا جديدًا للاستبدال",
+    "picoraKeyMigratedToast": "تم نقل {count} مفتاح API لـ Picora إلى سلسلة مفاتيح النظام."
   },
   "imageMenu": {
     "resize": "تغيير الحجم",
@@ -2012,6 +2014,33 @@
     "syncNow": "مزامنة الآن",
     "error": {
       "targetMissing": "لم يتم العثور على حساب Picora — يرجى إعادة ربط قاعدة المعرفة هذه أو استعادة الحساب في الإعدادات."
+    },
+    "trash": {
+      "title": "سلة المحذوفات",
+      "toastDeleted": "حذف Picora {count} ملف(ات). تم النقل إلى سلة المحذوفات.",
+      "view": "عرض",
+      "restoreAll": "استعادة الكل",
+      "restoreSuccess": "تم استعادة {count} ملف(ات).",
+      "restoreFailed": "تعذرت استعادة بعض الملفات.",
+      "restoreConflictTitle": "الملف موجود بالفعل",
+      "restoreConflictBody": "{path} موجود بالفعل. هل تريد الكتابة فوقه؟",
+      "overwrite": "الكتابة فوقه",
+      "cancel": "إلغاء",
+      "filterKbAll": "كل قواعد المعرفة",
+      "filterTime7d": "آخر 7 أيام",
+      "filterTime30d": "آخر 30 يومًا",
+      "filterTimeAll": "كل الوقت",
+      "emptyState": "سلة المحذوفات فارغة.",
+      "loading": "جارٍ التحميل…",
+      "restore": "استعادة",
+      "deleteForever": "حذف نهائي",
+      "deleteForeverConfirm": "حذف {path} نهائيًا؟ لا يمكن التراجع عن هذا.",
+      "purgeAll": "إفراغ السلة",
+      "purgeAllConfirm": "إفراغ جميع العناصر الأقدم من {days} يوم؟",
+      "purgeResult": "تم تنظيف {files} ملف(ات)، تم تحرير {size}.",
+      "autoPurgeHint": "العناصر الأقدم من 7 أيام تُحذف تلقائيًا.",
+      "entryDeletedAt": "حُذف في {date}",
+      "kbUnknown": "قاعدة معرفة غير معروفة"
     }
   }
 }

@@ -732,7 +732,9 @@
     "picoraImportInvalid": "Link de importação inválido — tente novamente no console do Picora.",
     "picoraVerify": "Verificar",
     "picoraHeroDesc": "Nosso host SaaS de imagens · configuração em 5 min com um clique",
-    "otherProviders": "Outros provedores"
+    "otherProviders": "Outros provedores",
+    "picoraApiKeyKeychain": "Armazenado no Chaveiro do sistema · digite uma nova chave para substituir",
+    "picoraKeyMigratedToast": "{count} chave(s) de API do Picora migrada(s) para o chaveiro do sistema."
   },
   "imageMenu": {
     "resize": "Redimensionar",
@@ -2012,6 +2014,33 @@
     "syncNow": "Sincronizar agora",
     "error": {
       "targetMissing": "Conta Picora não encontrada — por favor, vincule novamente esta base de conhecimento ou restaure a conta nas Configurações."
+    },
+    "trash": {
+      "title": "Lixeira",
+      "toastDeleted": "Picora excluiu {count} arquivo(s). Movido(s) para a lixeira.",
+      "view": "Ver",
+      "restoreAll": "Restaurar tudo",
+      "restoreSuccess": "{count} arquivo(s) restaurado(s).",
+      "restoreFailed": "Não foi possível restaurar alguns arquivos.",
+      "restoreConflictTitle": "Arquivo já existe",
+      "restoreConflictBody": "{path} já existe. Sobrescrever?",
+      "overwrite": "Sobrescrever",
+      "cancel": "Cancelar",
+      "filterKbAll": "Todas as BC",
+      "filterTime7d": "Últimos 7 dias",
+      "filterTime30d": "Últimos 30 dias",
+      "filterTimeAll": "Todo o tempo",
+      "emptyState": "A lixeira está vazia.",
+      "loading": "Carregando…",
+      "restore": "Restaurar",
+      "deleteForever": "Excluir permanentemente",
+      "deleteForeverConfirm": "Excluir permanentemente {path}? Isso não pode ser desfeito.",
+      "purgeAll": "Esvaziar lixeira",
+      "purgeAllConfirm": "Esvaziar todas as entradas com mais de {days} dias?",
+      "purgeResult": "{files} arquivo(s) limpos, {size} liberados.",
+      "autoPurgeHint": "Itens com mais de 7 dias são excluídos automaticamente.",
+      "entryDeletedAt": "Excluído em {date}",
+      "kbUnknown": "BC desconhecida"
     }
   }
 }

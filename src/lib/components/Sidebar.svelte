@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
   import { filesStore, type FileEntry, type FilePreview, type KnowledgeBase } from '../stores/files-store';
   import { settingsStore } from '../stores/settings-store';
   import { invoke } from '@tauri-apps/api/core';
@@ -23,6 +24,7 @@
     selfName = '',
     onForceUnlock,
     onViewReadonly,
+    onNotify,
   }: {
     onFileSelect: (path: string, scrollOffset?: number, keyword?: string) => void;
     onOpenKBManager?: () => void;
@@ -34,6 +36,8 @@
     selfName?: string;
     onForceUnlock?: () => void;
     onViewReadonly?: () => void;
+    /** Toast notification — passed in from +page.svelte's showToast. */
+    onNotify?: (text: string, type?: 'success' | 'error') => void;
   } = $props();
 
   let fileTree = $state<FileEntry[]>([]);
@@ -164,6 +168,12 @@
         },
         lastSyncError: null,
       });
+      if (report.deletedLocal > 0 && onNotify) {
+        onNotify(
+          get(t)('kbSync.trash.toastDeleted', { count: String(report.deletedLocal) }),
+          'success',
+        );
+      }
     } catch (e) {
       const errMsg = typeof e === 'string' ? e : (e instanceof Error ? e.message : 'Sync failed');
       console.error('[KbSync] Sync failed for KB', kb.id, ':', errMsg);

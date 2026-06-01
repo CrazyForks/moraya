@@ -732,7 +732,9 @@
     "picoraImportInvalid": "가져오기 링크가 잘못되었습니다 — Picora 콘솔에서 다시 시도하세요.",
     "picoraVerify": "확인",
     "picoraHeroDesc": "자체 SaaS 이미지 호스트 · 5분 원클릭 설정",
-    "otherProviders": "기타 제공자"
+    "otherProviders": "기타 제공자",
+    "picoraApiKeyKeychain": "시스템 키체인에 저장됨 · 새 키 입력 시 덮어쓰기",
+    "picoraKeyMigratedToast": "{count}개의 Picora API 키를 시스템 키체인으로 이동했습니다."
   },
   "imageMenu": {
     "resize": "크기 조절",
@@ -2012,6 +2014,33 @@
     "syncNow": "지금 동기화",
     "error": {
       "targetMissing": "Picora 계정을 찾을 수 없습니다 — 이 지식 베이스를 다시 연결하거나 설정에서 계정을 복원해 주세요."
+    },
+    "trash": {
+      "title": "휴지통",
+      "toastDeleted": "Picora가 {count}개의 파일을 삭제하여 휴지통으로 이동했습니다.",
+      "view": "보기",
+      "restoreAll": "모두 복원",
+      "restoreSuccess": "{count}개의 파일을 복원했습니다.",
+      "restoreFailed": "일부 파일을 복원하지 못했습니다.",
+      "restoreConflictTitle": "파일이 이미 존재합니다",
+      "restoreConflictBody": "{path}가 이미 존재합니다. 덮어쓸까요?",
+      "overwrite": "덮어쓰기",
+      "cancel": "취소",
+      "filterKbAll": "전체 KB",
+      "filterTime7d": "최근 7일",
+      "filterTime30d": "최근 30일",
+      "filterTimeAll": "전체 기간",
+      "emptyState": "휴지통이 비어 있습니다.",
+      "loading": "불러오는 중…",
+      "restore": "복원",
+      "deleteForever": "영구 삭제",
+      "deleteForeverConfirm": "{path}를 영구 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
+      "purgeAll": "휴지통 비우기",
+      "purgeAllConfirm": "{days}일 이전의 모든 항목을 삭제할까요?",
+      "purgeResult": "{files}개 파일 정리, {size} 확보.",
+      "autoPurgeHint": "7일이 지난 항목은 자동으로 삭제됩니다.",
+      "entryDeletedAt": "{date}에 삭제됨",
+      "kbUnknown": "알 수 없는 KB"
     }
   }
 }

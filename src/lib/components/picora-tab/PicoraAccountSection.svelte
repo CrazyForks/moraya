@@ -82,7 +82,8 @@
     quotaByTargetId = { ...quotaByTargetId };
     try {
       const apiBase = picoraApiBase(target);
-      const apiKey = target.picoraApiKey ?? '';
+      const { getPicoraApiKeyOrEmpty } = await import('$lib/services/picora/credentials');
+      const apiKey = await getPicoraApiKeyOrEmpty(target);
       const data = await invoke<{
         plan: string;
         planLimits: PlanLimits | null;
@@ -141,9 +142,10 @@
     testError[target.id] = '';
     testStatus = { ...testStatus };
     try {
+      const { getPicoraApiKeyOrEmpty } = await import('$lib/services/picora/credentials');
       await invoke('test_picora_connection', {
         apiBase: picoraApiBase(target),
-        apiKey: target.picoraApiKey || '',
+        apiKey: await getPicoraApiKeyOrEmpty(target),
       });
       testStatus[target.id] = 'success';
     } catch (e) {
@@ -175,8 +177,19 @@
     editing = null;
   }
 
-  function saveEdit() {
+  async function saveEdit() {
     if (!editing) return;
+    // v0.69.0: push entered API key into OS keychain and clear the inline
+    // field before persisting to disk.
+    if (editing.picoraApiKey) {
+      try {
+        const { setPicoraApiKey } = await import('$lib/services/picora/credentials');
+        await setPicoraApiKey(editing.id, editing.picoraApiKey);
+        editing = { ...editing, picoraApiKey: '', picoraKeyMigratedV069: true };
+      } catch {
+        // Keychain unavailable — fall back to inline storage.
+      }
+    }
     const updated = targets.map(t => t.id === editing!.id ? editing! : t);
     settingsStore.update({ imageHostTargets: JSON.parse(JSON.stringify(updated)) });
     editing = null;
@@ -425,7 +438,9 @@
       </div>
       <div class="field">
         <label for="picora-edit-key">{tr('imageHost.picoraApiKey')}</label>
-        <input id="picora-edit-key" type="password" bind:value={editing.picoraApiKey} />
+        <input id="picora-edit-key" type="password"
+          bind:value={editing.picoraApiKey}
+          placeholder={editing.picoraKeyMigratedV069 ? tr('imageHost.picoraApiKeyKeychain') : ''} />
       </div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick={cancelEdit}>{tr('common.cancel')}</button>

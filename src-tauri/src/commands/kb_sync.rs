@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::command;
 
+use super::util::current_epoch_ms;
+
 const DEFAULT_TIMEOUT_SECS: u64 = 60;
 const MAX_RELATIVE_PATH_LEN: usize = 1024;
 
@@ -597,6 +599,402 @@ pub async fn kb_sync_move_to_trash(
         .map_err(|_| "Failed to move file to trash".to_string())
 }
 
+// ── Trash UX (v0.68.0) ─────────────────────────────────────────────────
+//
+// Trash layout: ~/.moraya/trash/{localKbId}/{ts}/{relativePath}
+//   - localKbId : Moraya-side KB id (matches files-store)
+//   - ts        : RFC3339-like timestamp at deletion (filename-safe)
+//   - relativePath : original path within the KB
+//
+// Security:
+//   - All ops resolved to canonical paths and verified to stay inside
+//     ~/.moraya/trash/ (path traversal protection).
+//   - Restore target is validated against the caller-supplied kb_root and
+//     must be a canonical descendant; the relative_path is re-validated.
+//   - No symlinks followed when walking trash (skipped silently).
+
+const TRASH_DIR_NAME: &str = "trash";
+const MORAYA_DIR_NAME: &str = ".moraya";
+const DEFAULT_LIST_LIMIT: usize = 200;
+const DEFAULT_PURGE_DAYS: u32 = 7;
+
+#[derive(Debug, Serialize)]
+pub struct TrashEntry {
+    #[serde(rename = "kbId")]
+    pub kb_id: String,
+    /// Filename-safe timestamp segment as written by the frontend at delete time
+    #[serde(rename = "deletedAt")]
+    pub deleted_at: String,
+    /// Unix epoch ms parsed from deleted_at if possible; 0 otherwise
+    #[serde(rename = "deletedAtMs")]
+    pub deleted_at_ms: u64,
+    #[serde(rename = "relativePath")]
+    pub relative_path: String,
+    #[serde(rename = "sizeBytes")]
+    pub size_bytes: u64,
+    #[serde(rename = "absoluteTrashPath")]
+    pub absolute_trash_path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum RestoreResult {
+    Restored {
+        #[serde(rename = "targetPath")]
+        target_path: String,
+    },
+    ConflictExists {
+        #[serde(rename = "existingSize")]
+        existing_size: u64,
+    },
+}
+
+#[derive(Debug, Serialize, Default)]
+pub struct PurgeReport {
+    #[serde(rename = "purgedFiles")]
+    pub purged_files: usize,
+    #[serde(rename = "purgedDirs")]
+    pub purged_dirs: usize,
+    #[serde(rename = "freedBytes")]
+    pub freed_bytes: u64,
+}
+
+fn trash_root() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or_else(|| "Home directory not available".to_string())?;
+    Ok(home.join(MORAYA_DIR_NAME).join(TRASH_DIR_NAME))
+}
+
+/// Ensure a path stays within the trash root after canonicalization.
+/// Trash root itself does not need to exist for an empty result, but if the
+/// caller asks us to operate on a specific path it must canonicalize within.
+fn assert_under_trash_root(path: &Path) -> Result<(), String> {
+    let root = trash_root()?;
+    // Resolve both sides; if the target doesn't exist yet (e.g. restore
+    // destination), canonicalize the existing prefix instead.
+    let canonical_path = path.canonicalize().map_err(|_| "Path not accessible".to_string())?;
+    let canonical_root = root.canonicalize().map_err(|_| "Trash root not accessible".to_string())?;
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err("Path outside trash root".to_string());
+    }
+    Ok(())
+}
+
+/// Parse the timestamp segment back to epoch ms. Accepts any of:
+///   - "2026-05-27T18-42-03.123Z"  (`:` replaced with `-` for filename safety)
+///   - "1716800000000"             (plain ms)
+/// Returns 0 if unparseable (still surfaces entry to user).
+fn parse_ts_segment(ts: &str) -> u64 {
+    // Try plain numeric ms first
+    if let Ok(n) = ts.parse::<u64>() {
+        return n;
+    }
+    // Reverse the filename-safe substitution
+    let mut s = ts.to_string();
+    // Reconstruct "T??:??:??" — only the time portion uses `-` we replaced
+    if let Some(t_idx) = s.find('T') {
+        let date = &s[..t_idx];
+        let rest = &s[t_idx + 1..];
+        // Replace first two `-` in the time portion back to `:`
+        let mut buf = String::with_capacity(rest.len());
+        let mut replaced = 0;
+        for ch in rest.chars() {
+            if ch == '-' && replaced < 2 {
+                buf.push(':');
+                replaced += 1;
+            } else {
+                buf.push(ch);
+            }
+        }
+        s = format!("{}T{}", date, buf);
+    }
+    // Parse via chrono if available — we don't depend on it here; fall back to
+    // a coarse-grained parser based on `Date::parse` would need extra crates,
+    // so accept failure and return 0.
+    match httpdate_like_parse(&s) {
+        Some(ms) => ms,
+        None => 0,
+    }
+}
+
+/// Minimal RFC3339 → epoch ms parser (subset) — avoids adding chrono dep here.
+/// Accepts "YYYY-MM-DDTHH:MM:SS[.fff]Z" only.
+fn httpdate_like_parse(s: &str) -> Option<u64> {
+    let bytes = s.as_bytes();
+    if bytes.len() < 20 {
+        return None;
+    }
+    let year: i64 = s.get(0..4)?.parse().ok()?;
+    let month: u32 = s.get(5..7)?.parse().ok()?;
+    let day: u32 = s.get(8..10)?.parse().ok()?;
+    let hour: u32 = s.get(11..13)?.parse().ok()?;
+    let minute: u32 = s.get(14..16)?.parse().ok()?;
+    let second: u32 = s.get(17..19)?.parse().ok()?;
+
+    if !(1970..=9999).contains(&year) { return None; }
+    if !(1..=12).contains(&month) { return None; }
+    if !(1..=31).contains(&day) { return None; }
+    if hour > 23 || minute > 59 || second > 60 { return None; }
+
+    // Civil-from-days algorithm (Howard Hinnant, public domain)
+    let y = year - if month <= 2 { 1 } else { 0 };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = (y - era * 400) as u64;
+    let m = month as u64;
+    let d = day as u64;
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days_since_epoch = era * 146097 + doe as i64 - 719468;
+    let secs = days_since_epoch * 86400 + (hour as i64) * 3600 + (minute as i64) * 60 + (second as i64);
+    if secs < 0 { return None; }
+    Some((secs as u64) * 1000)
+}
+
+/// List trash entries, newest first.
+///
+/// `kb_id` = None → list all KBs; otherwise filter to one KB folder.
+/// `limit` = None → DEFAULT_LIST_LIMIT (200).
+#[command]
+pub async fn kb_sync_list_trash(
+    kb_id: Option<String>,
+    limit: Option<usize>,
+) -> Result<Vec<TrashEntry>, String> {
+    let root = trash_root()?;
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+    let cap = limit.unwrap_or(DEFAULT_LIST_LIMIT);
+    let mut entries = Vec::new();
+
+    let kb_iter = match &kb_id {
+        Some(id) => {
+            let p = root.join(id);
+            if !p.exists() { return Ok(Vec::new()); }
+            vec![p]
+        }
+        None => std::fs::read_dir(&root)
+            .map_err(|_| "Cannot read trash root".to_string())?
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.metadata().map(|m| m.is_dir() && !m.is_symlink()).unwrap_or(false)
+            })
+            .map(|e| e.path())
+            .collect(),
+    };
+
+    for kb_dir in kb_iter {
+        let kb_id_str = kb_dir.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+        let ts_iter = match std::fs::read_dir(&kb_dir) {
+            Ok(it) => it,
+            Err(_) => continue,
+        };
+        for ts_entry in ts_iter.filter_map(|e| e.ok()) {
+            match ts_entry.metadata() {
+                Ok(m) if m.is_dir() && !m.is_symlink() => {}
+                _ => continue,
+            }
+            let ts_path = ts_entry.path();
+            let ts_name = ts_path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+            collect_files_recursive(&ts_path, &ts_path, &kb_id_str, &ts_name, &mut entries);
+            if entries.len() >= cap * 4 {
+                // hard ceiling; we'll truncate after sort
+                break;
+            }
+        }
+    }
+
+    entries.sort_by(|a, b| b.deleted_at_ms.cmp(&a.deleted_at_ms).then(a.relative_path.cmp(&b.relative_path)));
+    if entries.len() > cap {
+        entries.truncate(cap);
+    }
+    Ok(entries)
+}
+
+fn collect_files_recursive(
+    base: &Path,
+    cursor: &Path,
+    kb_id: &str,
+    ts_segment: &str,
+    out: &mut Vec<TrashEntry>,
+) {
+    let iter = match std::fs::read_dir(cursor) {
+        Ok(it) => it,
+        Err(_) => return,
+    };
+    for entry in iter.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        let meta = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        if meta.is_symlink() {
+            continue; // never follow symlinks
+        }
+        if meta.is_dir() {
+            collect_files_recursive(base, &path, kb_id, ts_segment, out);
+        } else if meta.is_file() {
+            let rel = match path.strip_prefix(base) {
+                Ok(r) => r.to_string_lossy().replace('\\', "/"),
+                Err(_) => continue,
+            };
+            out.push(TrashEntry {
+                kb_id: kb_id.to_string(),
+                deleted_at: ts_segment.to_string(),
+                deleted_at_ms: parse_ts_segment(ts_segment),
+                relative_path: rel,
+                size_bytes: meta.len(),
+                absolute_trash_path: path.to_string_lossy().to_string(),
+            });
+        }
+    }
+}
+
+/// Restore a single trashed file back to the KB.
+///
+/// Frontend supplies `kb_root` (the original KB absolute path) and the
+/// (kb_id, deleted_at, relative_path) triple from a previous list_trash call.
+/// Returns ConflictExists when the destination is already present and
+/// `overwrite=false`.
+#[command]
+pub async fn kb_sync_restore_from_trash(
+    kb_id: String,
+    deleted_at: String,
+    relative_path: String,
+    kb_root: String,
+    overwrite: Option<bool>,
+) -> Result<RestoreResult, String> {
+    validate_relative_path(&relative_path)?;
+    let overwrite = overwrite.unwrap_or(false);
+
+    let trash_file = trash_root()?
+        .join(&kb_id)
+        .join(&deleted_at)
+        .join(&relative_path);
+    // assert_under_trash_root canonicalizes — file must currently exist
+    if !trash_file.exists() {
+        return Err("Trash entry not found".to_string());
+    }
+    assert_under_trash_root(&trash_file)?;
+
+    let kb_root_path = PathBuf::from(&kb_root);
+    let kb_root_canonical = kb_root_path
+        .canonicalize()
+        .map_err(|_| "KB root not accessible".to_string())?;
+    // Build the would-be destination, then verify after canonicalize-of-parent
+    let target = kb_root_canonical.join(&relative_path);
+    // Verify target stays under kb_root_canonical
+    let mut probe = target.clone();
+    let canonical_parent = loop {
+        if let Some(parent) = probe.parent() {
+            if parent.exists() {
+                break parent.canonicalize().map_err(|_| "Path not accessible".to_string())?;
+            }
+            probe = parent.to_path_buf();
+        } else {
+            return Err("Invalid restore destination".to_string());
+        }
+    };
+    if !canonical_parent.starts_with(&kb_root_canonical) {
+        return Err("Restore target escapes KB root".to_string());
+    }
+
+    if target.exists() && !overwrite {
+        let size = std::fs::metadata(&target).map(|m| m.len()).unwrap_or(0);
+        return Ok(RestoreResult::ConflictExists { existing_size: size });
+    }
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent).map_err(|_| "Failed to create directory".to_string())?;
+    }
+    std::fs::rename(&trash_file, &target)
+        .or_else(|_| {
+            std::fs::copy(&trash_file, &target).map(|_| ())?;
+            std::fs::remove_file(&trash_file)
+        })
+        .map_err(|_| "Failed to restore file".to_string())?;
+
+    Ok(RestoreResult::Restored {
+        target_path: target.to_string_lossy().to_string(),
+    })
+}
+
+/// Purge trash entries older than the threshold (default 7 days).
+#[command]
+pub async fn kb_sync_purge_trash(
+    kb_id: Option<String>,
+    older_than_days: Option<u32>,
+) -> Result<PurgeReport, String> {
+    let root = trash_root()?;
+    if !root.exists() {
+        return Ok(PurgeReport::default());
+    }
+    let days = older_than_days.unwrap_or(DEFAULT_PURGE_DAYS) as u64;
+    let cutoff_ms = current_epoch_ms().saturating_sub(days * 86_400_000);
+
+    let mut report = PurgeReport::default();
+    let kb_iter = match &kb_id {
+        Some(id) => vec![root.join(id)],
+        None => std::fs::read_dir(&root)
+            .map_err(|_| "Cannot read trash root".to_string())?
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.metadata().map(|m| m.is_dir() && !m.is_symlink()).unwrap_or(false)
+            })
+            .map(|e| e.path())
+            .collect(),
+    };
+
+    for kb_dir in kb_iter {
+        if !kb_dir.exists() { continue; }
+        let ts_iter = match std::fs::read_dir(&kb_dir) {
+            Ok(it) => it,
+            Err(_) => continue,
+        };
+        for ts_entry in ts_iter.filter_map(|e| e.ok()) {
+            match ts_entry.metadata() {
+                Ok(m) if m.is_dir() && !m.is_symlink() => {}
+                _ => continue,
+            }
+            let ts_path = ts_entry.path();
+            let ts_name = ts_path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+            let ts_ms = parse_ts_segment(&ts_name);
+            if ts_ms == 0 || ts_ms >= cutoff_ms {
+                continue;
+            }
+            // Belt-and-braces: confirm we're still inside the trash root before remove
+            if assert_under_trash_root(&ts_path).is_err() {
+                continue;
+            }
+            // Sum sizes recursively before delete
+            sum_dir_sizes(&ts_path, &mut report);
+            if std::fs::remove_dir_all(&ts_path).is_ok() {
+                report.purged_dirs += 1;
+            }
+        }
+    }
+    Ok(report)
+}
+
+fn sum_dir_sizes(dir: &Path, report: &mut PurgeReport) {
+    let iter = match std::fs::read_dir(dir) {
+        Ok(it) => it,
+        Err(_) => return,
+    };
+    for entry in iter.filter_map(|e| e.ok()) {
+        let meta = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        if meta.is_symlink() {
+            continue;
+        }
+        if meta.is_dir() {
+            sum_dir_sizes(&entry.path(), report);
+        } else if meta.is_file() {
+            report.purged_files += 1;
+            report.freed_bytes += meta.len();
+        }
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -865,6 +1263,82 @@ mod tests {
         assert!(json.get("baseUpdatedAt").is_none(), "delete must omit baseUpdatedAt: {json}");
         let s = serde_json::to_string(&op).unwrap();
         assert!(!s.contains("null"), "serialized delete op must contain no null values: {s}");
+    }
+
+    // ── Trash UX tests (v0.68.0) ──────────────────────────────────────
+
+    #[test]
+    fn parse_ts_segment_numeric_ms() {
+        assert_eq!(parse_ts_segment("1716800000000"), 1_716_800_000_000);
+    }
+
+    #[test]
+    fn parse_ts_segment_filename_safe_rfc3339() {
+        // 2026-05-27T18:42:03Z → filename-safe → 2026-05-27T18-42-03Z
+        let ms = parse_ts_segment("2026-05-27T18-42-03Z");
+        assert_eq!(ms, 1_779_907_323_000);
+    }
+
+    #[test]
+    fn parse_ts_segment_filename_safe_rfc3339_with_fraction() {
+        // Fractional seconds after `.` — parser ignores the fraction
+        let ms = parse_ts_segment("2026-05-27T18-42-03.500Z");
+        assert_eq!(ms, 1_779_907_323_000);
+    }
+
+    #[test]
+    fn parse_ts_segment_returns_zero_on_invalid_month() {
+        assert_eq!(parse_ts_segment("2026-13-01T00-00-00Z"), 0);
+        assert_eq!(parse_ts_segment("2026-00-01T00-00-00Z"), 0);
+    }
+
+    #[test]
+    fn parse_ts_segment_returns_zero_on_garbage() {
+        assert_eq!(parse_ts_segment(""), 0);
+        assert_eq!(parse_ts_segment("not-a-timestamp"), 0);
+        assert_eq!(parse_ts_segment("9999-99-99T99-99-99Z"), 0);
+    }
+
+    #[test]
+    fn restore_result_serializes_with_kind_tag() {
+        let r = RestoreResult::Restored { target_path: "/x/y.md".to_string() };
+        let s = serde_json::to_string(&r).unwrap();
+        assert!(s.contains("\"kind\":\"restored\""), "{s}");
+        assert!(s.contains("\"targetPath\":\"/x/y.md\""), "{s}");
+
+        let c = RestoreResult::ConflictExists { existing_size: 42 };
+        let s = serde_json::to_string(&c).unwrap();
+        assert!(s.contains("\"kind\":\"conflict-exists\""), "{s}");
+        assert!(s.contains("\"existingSize\":42"), "{s}");
+    }
+
+    #[test]
+    fn trash_entry_serializes_with_camelcase() {
+        let e = TrashEntry {
+            kb_id: "kb-1".to_string(),
+            deleted_at: "ts".to_string(),
+            deleted_at_ms: 1,
+            relative_path: "a.md".to_string(),
+            size_bytes: 7,
+            absolute_trash_path: "/p".to_string(),
+        };
+        let s = serde_json::to_string(&e).unwrap();
+        assert!(s.contains("\"kbId\""), "{s}");
+        assert!(s.contains("\"deletedAt\""), "{s}");
+        assert!(s.contains("\"deletedAtMs\""), "{s}");
+        assert!(s.contains("\"relativePath\""), "{s}");
+        assert!(s.contains("\"sizeBytes\""), "{s}");
+        assert!(s.contains("\"absoluteTrashPath\""), "{s}");
+    }
+
+    #[test]
+    fn purge_report_default_is_zero() {
+        let p = PurgeReport::default();
+        assert_eq!(p.purged_files, 0);
+        assert_eq!(p.purged_dirs, 0);
+        assert_eq!(p.freed_bytes, 0);
+        let s = serde_json::to_string(&p).unwrap();
+        assert!(s.contains("\"purgedFiles\":0"), "{s}");
     }
 
     #[test]

@@ -59,6 +59,7 @@
   import TabBar from '$lib/components/TabBar.svelte';
   import TouchToolbar from '$lib/editor/TouchToolbar.svelte';
   import { tabsStore } from '$lib/stores/tabs-store';
+  import { editorLoadingStore } from '$lib/stores/editor-loading-store';
 
   import '$lib/styles/global.css';
   import '$lib/styles/editor.css';
@@ -985,6 +986,8 @@ ${tr('welcome.tip')}
 
   // Auto-save timer
   let autoSaveTimer: ReturnType<typeof setInterval> | null = null;
+  // KB sync trash purge timer (v0.68.0) — purge entries older than 7 days
+  let trashPurgeTimer: ReturnType<typeof setInterval> | null = null;
 
   function setupAutoSave() {
     if (autoSaveTimer) clearInterval(autoSaveTimer);
@@ -1286,9 +1289,17 @@ ${tr('welcome.tip')}
   }
 
   async function handleOpenFile() {
+    // Bump the serial to invalidate any in-flight sidebar/open-file-event load
+    // (doFileSelect / openFileByPath observe fileSelectSerial via the
+    // replaceContentAndScrollToTop guard). Without this, a slow sidebar load
+    // racing with a File → Open could land tab B's content into tab A or
+    // run two `replaceContentAndScrollToTop` cycles back-to-back, producing
+    // the "open another MD → editor stops responding" symptom.
+    const mySerial = ++fileSelectSerial;
     // Sync current tab state BEFORE openFile() modifies editorStore
     tabsStore.syncFromEditor();
     const fileContent = await openFile();
+    if (mySerial !== fileSelectSerial) return; // Superseded while picker was open
     if (fileContent !== null) {
       // openFile() already called editorStore.setCurrentFile(path)
       const filePath = editorStore.getState().currentFilePath;
@@ -1300,6 +1311,7 @@ ${tr('welcome.tip')}
           if (result.length > 0) mtime = result[0][1];
         } catch { /* ignore */ }
       }
+      if (mySerial !== fileSelectSerial) return; // Superseded during mtime fetch
       // skipSync=true: we already synced above before openFile() modified editorStore
       tabsStore.openFileTab(filePath ?? '', fileName, fileContent, mtime, true);
       resetWorkflowState();
@@ -1992,7 +2004,9 @@ ${tr('welcome.tip')}
     if (!target) return { url: '', error: 'no Picora target configured' };
     try {
       const apiBase = picoraApiBaseFromUploadUrl(target.picoraApiUrl);
-      const detail = await getMediaDetail(apiBase, target.picoraApiKey, item.type, item.id);
+      const { getPicoraApiKey } = await import('$lib/services/picora/credentials');
+      const apiKey = await getPicoraApiKey(target);
+      const detail = await getMediaDetail(apiBase, apiKey, item.type, item.id);
       const u = detail.playbackUrl ?? detail.url ?? '';
       if (u) return { url: u };
       // Fallback diagnostic: list the keys actually present in the detail
@@ -2555,18 +2569,40 @@ ${tr('welcome.tip')}
           loadFile(filePath),
           invoke('get_files_mtime', { paths: [filePath] }).catch(() => []) as Promise<[string, number][]>,
         ]);
+        // Auto-open of a large file (double-click an .md → launches Moraya
+        // with that path). The editor's parse blocks the JS thread for
+        // tens of seconds on multi-MB files. `editorLoadingStore` would
+        // normally light up at the start of `syncContent` — but on cold
+        // start the editor is still initializing while we sit here, so
+        // the user sees a blank window for the early part of the freeze.
+        // Surface the indicator as soon as we know there's a big file
+        // queued, before the editor has even finished mounting.
+        editorLoadingStore.startIfLarge(fileContent.length);
         const fileName = getFileNameFromPath(filePath);
         const mtime = (mtimeResult as [string, number][]).length > 0 ? (mtimeResult as [string, number][])[0][1] : null;
         openedFileData = { filePath, fileContent, fileName, mtime };
       }).catch(() => {});
 
       Promise.all([initSettingsStore(), initAIStore(), initMCPStore(), filesStore.loadPersistedPrefs(), openedFilePromise])
-        .then(() => {
-          // Auto-connect all enabled MCP servers
-          connectAllServers().catch(() => {});
-
-          // Initialize dynamic service container (checks Node.js, reconnects saved services)
-          initContainerManager().catch(() => {});
+        .then(async () => {
+          // MCP restoration: container manager FIRST, then the general pass.
+          // initContainerManager() loads saved dynamic services and connects
+          // them itself; running both concurrently would race on
+          // `connectServer(id)` and double-spawn stdio processes (the second
+          // one orphans the first, hanging future tool calls — which is why
+          // saved MCPs worked on install but broke after restart).
+          // `connectAllServers` now skips already-connected ids, so this
+          // ordering keeps saved services healthy on every launch.
+          try {
+            await initContainerManager();
+          } catch (e) {
+            console.warn('[Startup] initContainerManager failed:', e);
+          }
+          try {
+            await connectAllServers();
+          } catch (e) {
+            console.warn('[Startup] connectAllServers failed:', e);
+          }
 
           // Restore knowledge base or last opened folder
           const settings = settingsStore.getState();
@@ -2646,6 +2682,49 @@ ${tr('welcome.tip')}
         .catch(() => {});
 
       setupAutoSave();
+
+      // v0.68.0: KB sync trash auto-purge — once shortly after startup + every 24h.
+      // Deferred so a deep trash tree (recursive walk + remove_dir_all) doesn't
+      // block initial render or compete with file-tree load / editor mount.
+      const purgeTrashOnce = async () => {
+        try {
+          const { purgeTrash } = await import('$lib/services/kb-sync/trash');
+          await purgeTrash({ olderThanDays: 7 });
+        } catch {
+          // Trash root may not exist yet; ignore.
+        }
+      };
+      setTimeout(() => { void purgeTrashOnce(); }, 5000);
+      trashPurgeTimer = setInterval(purgeTrashOnce, 24 * 60 * 60 * 1000);
+
+      // v0.69.0: one-shot migration of any plaintext Picora API keys into
+      // the OS keychain. Idempotent — targets already flagged are skipped.
+      void (async () => {
+        try {
+          const { migratePicoraKeysToKeychain } = await import('$lib/services/picora/credentials');
+          const targets = settingsStore.getState().imageHostTargets ?? [];
+          const picoraTargets = targets.filter(t => t.provider === 'picora');
+          if (picoraTargets.length === 0) return;
+          const { report, migratedIds } = await migratePicoraKeysToKeychain(picoraTargets);
+          if (migratedIds.length > 0) {
+            const updated = targets.map(t =>
+              migratedIds.includes(t.id)
+                ? { ...t, picoraApiKey: '', picoraKeyMigratedV069: true }
+                : t
+            );
+            settingsStore.update({ imageHostTargets: JSON.parse(JSON.stringify(updated)) });
+            showToast(
+              $t('imageHost.picoraKeyMigratedToast', { count: String(report.migrated) }),
+              'success',
+            );
+          }
+          if (report.errors.length > 0) {
+            console.warn('[v0.69] Picora key migration errors:', report.errors);
+          }
+        } catch (e) {
+          console.warn('[v0.69] Picora key migration skipped:', e);
+        }
+      })();
     }
 
     // Initialize word count
@@ -2882,17 +2961,26 @@ ${tr('welcome.tip')}
         }
       }).then(unlisten => menuUnlisteners.push(unlisten));
 
-      // Helper: load a file by path and open in a tab
+      // Helper: load a file by path and open in a tab.
+      // Used for both OS file-association events and any programmatic open.
+      // Bumps fileSelectSerial so a stale in-flight sidebar/menu-open
+      // operation can't land on top of this open (Windows path: a double-
+      // click that arrives as an `open-file` event mid-pickup of an earlier
+      // file would otherwise interleave the two flows and leave the editor
+      // in a wedged state).
       async function openFileByPath(filePath: string) {
+        const mySerial = ++fileSelectSerial;
         // Sync current tab so its editor state is captured before switching.
         tabsStore.syncFromEditor();
         const fileContent = await loadFile(filePath);
+        if (mySerial !== fileSelectSerial) return;
         const fileName = getFileNameFromPath(filePath);
         let mtime: number | null = null;
         try {
           const result = await invoke('get_files_mtime', { paths: [filePath] }) as [string, number][];
           if (result.length > 0) mtime = result[0][1];
         } catch { /* ignore */ }
+        if (mySerial !== fileSelectSerial) return;
         // skipSync=true: we already synced above
         tabsStore.openFileTab(filePath, fileName, fileContent, mtime, true);
         resetWorkflowState();
@@ -3027,6 +3115,7 @@ ${tr('welcome.tip')}
 
     return () => {
       if (autoSaveTimer) clearInterval(autoSaveTimer);
+      if (trashPurgeTimer) clearInterval(trashPurgeTimer);
       menuUnlisteners.forEach(unlisten => unlisten());
       openFileUnlisten?.();
       dragDropUnlisten?.();
@@ -3085,6 +3174,7 @@ ${tr('welcome.tip')}
           currentFileLock = null;
         }}
         onViewReadonly={() => { /* treat as read-only view */ }}
+        onNotify={showToast}
       />
     {/if}
 

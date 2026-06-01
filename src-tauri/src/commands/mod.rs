@@ -1,10 +1,12 @@
 pub mod ai_proxy;
 pub mod file;
+pub mod util;
 pub mod git;
 pub mod image_hosting_picora;
 pub mod kb;
 pub mod picora_account;
 pub mod picora_media;
+pub mod picora_oauth;
 pub mod kb_sync;
 pub mod keychain;
 pub mod macos_system_audio;

@@ -24,8 +24,9 @@
   import { editorLoadingStore } from '../stores/editor-loading-store';
   import { readImageAsBlobUrl } from '../services/file-service';
   import { uploadImage, fetchImageAsBlob, targetToConfig } from '../services/image-hosting';
+  import { targetToConfigAsync } from '$lib/services/picora/credentials';
   import { aiStore } from '../services/ai';
-  import type { ImageHostConfig } from '../services/image-hosting';
+  import type { ImageHostConfig, ImageHostTarget } from '../services/image-hosting';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
   import { openUrl } from '@tauri-apps/plugin-opener';
@@ -663,9 +664,10 @@
   /** Upload an image (any URL) and replace it in the editor.
    *  When `targetPos` is provided (right-click upload), use it directly
    *  to avoid URL mismatch between DOM-resolved src and ProseMirror attrs. */
-  async function uploadAndReplace(imageSrc: string, config: ImageHostConfig, targetPos?: number | null) {
+  async function uploadAndReplace(imageSrc: string, target: ImageHostTarget, targetPos?: number | null) {
     if (!editor) return;
     try {
+      const config = await targetToConfigAsync(target);
       // For right-click uploads with a known position, use fetchImageForNode to correctly
       // handle local relative paths (where imgEl.src is tauri://localhost/... in production).
       // For auto-upload (paste/drop), targetPos may be null and imageSrc is always a blob: URL.
@@ -1160,7 +1162,7 @@
     const target = settingsStore.getDefaultImageHostTarget();
     if (target?.autoUpload) {
       const blobUrl = URL.createObjectURL(imageFile);
-      uploadAndReplace(blobUrl, targetToConfig(target));
+      uploadAndReplace(blobUrl, target);
     }
   }
 
@@ -1275,7 +1277,7 @@
     if (!editor || contextMenuTargetPos === null) return;
     const target = settingsStore.getDefaultImageHostTarget();
     if (!target) return;
-    uploadAndReplace(imageMenuSrc, targetToConfig(target), contextMenuTargetPos);
+    uploadAndReplace(imageMenuSrc, target, contextMenuTargetPos);
   }
 
   /** Check if document contains at least one image (markdown image node or HTML img tag) */
@@ -1332,7 +1334,7 @@
       });
       return;
     }
-    const config = targetToConfig(target);
+    const config = await targetToConfigAsync(target);
     const view = editor.view;
 
     // 1. Collect all uploadable image sources (deduplicate)
@@ -2215,7 +2217,7 @@
           // Auto-upload if enabled
           const target = settingsStore.getDefaultImageHostTarget();
           if (target?.autoUpload) {
-            uploadAndReplace(blobUrl, targetToConfig(target));
+            uploadAndReplace(blobUrl, target);
           }
         } catch (e) {
           console.warn('[Image] Failed to read/insert image file:', imgPath, e);
@@ -2575,50 +2577,60 @@
     if (!editor) return;
     const view = editor.view;
 
-    // Step 1: Replace via dispatch (proper DOM update with step maps)
-    const tr = view.state.tr.replace(
-      0, view.state.doc.content.size,
-      new Slice(doc.content, 0, 0),
-    );
-    tr.setMeta('addToHistory', false);
-    tr.setMeta('file-switch', true);
-    view.dispatch(tr);
-
-    // Step 2: Reset all plugin state by swapping to a fresh EditorState.
-    // Place cursor at end of first block (natural editing position for documents
-    // with content). Falls back to document start for empty documents.
-    const newDoc = view.state.doc;
-    let sel: import('prosemirror-state').Selection;
+    // The whole body must always reach the `finally` block so syncResetTimer
+    // is guaranteed to clear `syncingFromExternal`. Without this guard, a
+    // throw from view.dispatch / view.updateState (e.g. a plugin's apply()
+    // panics on an unusual doc) would leave the flag stuck `true` forever,
+    // permanently silencing onDocChanged → no dirty tracking, no word count,
+    // no outline refresh on future edits. The visible symptom on Windows /
+    // older WebView2 is "open another file → editor appears frozen on input."
     try {
-      const firstChild = newDoc.firstChild;
-      if (firstChild && firstChild.content.size > 0) {
-        // End of first block's text content: offset 1 (block opening) + content size
-        const endPos = 1 + firstChild.content.size;
-        sel = TextSelection.create(newDoc, endPos);
-      } else {
+      // Step 1: Replace via dispatch (proper DOM update with step maps)
+      const tr = view.state.tr.replace(
+        0, view.state.doc.content.size,
+        new Slice(doc.content, 0, 0),
+      );
+      tr.setMeta('addToHistory', false);
+      tr.setMeta('file-switch', true);
+      view.dispatch(tr);
+
+      // Step 2: Reset all plugin state by swapping to a fresh EditorState.
+      // Place cursor at end of first block (natural editing position for documents
+      // with content). Falls back to document start for empty documents.
+      const newDoc = view.state.doc;
+      let sel: import('prosemirror-state').Selection;
+      try {
+        const firstChild = newDoc.firstChild;
+        if (firstChild && firstChild.content.size > 0) {
+          // End of first block's text content: offset 1 (block opening) + content size
+          const endPos = 1 + firstChild.content.size;
+          sel = TextSelection.create(newDoc, endPos);
+        } else {
+          sel = TextSelection.atStart(newDoc);
+        }
+      } catch {
         sel = TextSelection.atStart(newDoc);
       }
-    } catch {
-      sel = TextSelection.atStart(newDoc);
-    }
-    const freshState = EditorState.create({
-      schema: view.state.schema,
-      doc: newDoc,
-      plugins: view.state.plugins,
-      selection: sel,
-    });
-    view.updateState(freshState);
+      const freshState = EditorState.create({
+        schema: view.state.schema,
+        doc: newDoc,
+        plugins: view.state.plugins,
+        selection: sel,
+      });
+      view.updateState(freshState);
 
-    // Clear any stale search decorations from setProps (they reference old doc positions)
-    if (searchMatches.length > 0) {
-      searchMatches = [];
-      searchIndex = -1;
-      (view as any).setProps({ decorations: () => DecorationSet.empty });
+      // Clear any stale search decorations from setProps (they reference old doc positions)
+      if (searchMatches.length > 0) {
+        searchMatches = [];
+        searchIndex = -1;
+        (view as any).setProps({ decorations: () => DecorationSet.empty });
+      }
+    } finally {
+      if (syncResetTimer) clearTimeout(syncResetTimer);
+      syncResetTimer = setTimeout(() => { syncingFromExternal = false; }, 200);
+      cachedSelFrom = -1;
+      scheduleExtractHeadings();
     }
-
-    syncResetTimer = setTimeout(() => { syncingFromExternal = false; }, 200);
-    cachedSelFrom = -1;
-    scheduleExtractHeadings();
   }
 
   /**

@@ -81,7 +81,8 @@
     const target = settingsStore.getState().imageHostTargets.find(t => t.id === binding.picoraTargetId);
     if (!target) throw new Error('Picora target not found');
     const apiBase = picoraApiBase(target.picoraApiUrl);
-    const apiKey = target.picoraApiKey;
+    const { getPicoraApiKey } = await import('$lib/services/picora/credentials');
+    const apiKey = await getPicoraApiKey(target);
 
     if (resolution === 'prefer-local') {
       // Upload local → overwrite remote

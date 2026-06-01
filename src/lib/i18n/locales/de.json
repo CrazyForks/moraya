@@ -732,7 +732,9 @@
     "picoraImportInvalid": "Ungültiger Import-Link – bitte erneut aus der Picora-Konsole versuchen.",
     "picoraVerify": "Verifizieren",
     "picoraHeroDesc": "Unser SaaS-Bildhoster · Einrichtung per Klick in 5 Minuten",
-    "otherProviders": "Weitere Anbieter"
+    "otherProviders": "Weitere Anbieter",
+    "picoraApiKeyKeychain": "Im System-Schlüsselbund gespeichert · neuen Schlüssel eingeben zum Ersetzen",
+    "picoraKeyMigratedToast": "{count} Picora-API-Schlüssel in den System-Schlüsselbund migriert."
   },
   "imageMenu": {
     "resize": "Größe ändern",
@@ -2012,6 +2014,33 @@
     "syncNow": "Jetzt synchronisieren",
     "error": {
       "targetMissing": "Picora-Konto nicht gefunden — bitte diese Wissensdatenbank neu verknüpfen oder das Konto in den Einstellungen wiederherstellen."
+    },
+    "trash": {
+      "title": "Papierkorb",
+      "toastDeleted": "Picora hat {count} Datei(en) gelöscht. In den Papierkorb verschoben.",
+      "view": "Anzeigen",
+      "restoreAll": "Alle wiederherstellen",
+      "restoreSuccess": "{count} Datei(en) wiederhergestellt.",
+      "restoreFailed": "Einige Dateien konnten nicht wiederhergestellt werden.",
+      "restoreConflictTitle": "Datei existiert bereits",
+      "restoreConflictBody": "{path} existiert bereits. Überschreiben?",
+      "overwrite": "Überschreiben",
+      "cancel": "Abbrechen",
+      "filterKbAll": "Alle KBs",
+      "filterTime7d": "Letzte 7 Tage",
+      "filterTime30d": "Letzte 30 Tage",
+      "filterTimeAll": "Gesamte Zeit",
+      "emptyState": "Der Papierkorb ist leer.",
+      "loading": "Laden…",
+      "restore": "Wiederherstellen",
+      "deleteForever": "Endgültig löschen",
+      "deleteForeverConfirm": "{path} endgültig löschen? Kann nicht rückgängig gemacht werden.",
+      "purgeAll": "Papierkorb leeren",
+      "purgeAllConfirm": "Alle Einträge älter als {days} Tage löschen?",
+      "purgeResult": "{files} Datei(en) bereinigt, {size} freigegeben.",
+      "autoPurgeHint": "Einträge älter als 7 Tage werden automatisch gelöscht.",
+      "entryDeletedAt": "Gelöscht am {date}",
+      "kbUnknown": "Unbekannte KB"
     }
   }
 }

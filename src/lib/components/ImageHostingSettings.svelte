@@ -85,8 +85,19 @@
     settingsStore.update(patch);
   }
 
-  function saveTarget() {
+  async function saveTarget() {
     if (!editingTarget) return;
+    // v0.69.0: for Picora targets, push the entered key into the OS keychain
+    // and clear the inline field before it's persisted to disk.
+    if (editingTarget.provider === 'picora' && editingTarget.picoraApiKey) {
+      try {
+        const { setPicoraApiKey } = await import('$lib/services/picora/credentials');
+        await setPicoraApiKey(editingTarget.id, editingTarget.picoraApiKey);
+        editingTarget = { ...editingTarget, picoraApiKey: '', picoraKeyMigratedV069: true };
+      } catch {
+        // Keychain unavailable — fall back to inline storage (legacy behavior).
+      }
+    }
     const existing = targets.findIndex(t => t.id === editingTarget!.id);
     let updated: ImageHostTarget[];
     if (existing >= 0) {
@@ -231,9 +242,10 @@
     testStatus = { ...testStatus };
     try {
       if (target.provider === 'picora') {
+        const { getPicoraApiKeyOrEmpty } = await import('$lib/services/picora/credentials');
         await invoke('test_picora_connection', {
           apiBase: picoraApiBaseFromTarget(target),
-          apiKey: target.picoraApiKey || '',
+          apiKey: await getPicoraApiKeyOrEmpty(target),
         });
       } else {
         const canvas = document.createElement('canvas');
@@ -399,7 +411,9 @@
           <label class="setting-label" for="imghost-picora-key">{tr('imageHost.picoraApiKey')}</label>
           <input id="imghost-picora-key" type="password" class="setting-input"
             bind:value={editingTarget.picoraApiKey}
-            placeholder={tr('imageHost.picoraApiKeyPlaceholder')} />
+            placeholder={editingTarget.picoraKeyMigratedV069
+              ? tr('imageHost.picoraApiKeyKeychain')
+              : tr('imageHost.picoraApiKeyPlaceholder')} />
         </div>
       {/if}
 

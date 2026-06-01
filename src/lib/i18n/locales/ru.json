@@ -732,7 +732,9 @@
     "picoraImportInvalid": "Неверная ссылка импорта — повторите попытку из консоли Picora.",
     "picoraVerify": "Проверить",
     "picoraHeroDesc": "Наш собственный SaaS-хостинг изображений · настройка за 5 минут в один клик",
-    "otherProviders": "Другие провайдеры"
+    "otherProviders": "Другие провайдеры",
+    "picoraApiKeyKeychain": "Сохранён в системной связке ключей · введите новый ключ для замены",
+    "picoraKeyMigratedToast": "Перенесено {count} ключ(ей) API Picora в системную связку ключей."
   },
   "imageMenu": {
     "resize": "Изменить размер",
@@ -2012,6 +2014,33 @@
     "syncNow": "Синхронизировать сейчас",
     "error": {
       "targetMissing": "Аккаунт Picora не найден — повторно привяжите эту базу знаний или восстановите аккаунт в настройках."
+    },
+    "trash": {
+      "title": "Корзина",
+      "toastDeleted": "Picora удалил {count} файл(ов). Перемещено в корзину.",
+      "view": "Просмотр",
+      "restoreAll": "Восстановить всё",
+      "restoreSuccess": "Восстановлено {count} файл(ов).",
+      "restoreFailed": "Не удалось восстановить некоторые файлы.",
+      "restoreConflictTitle": "Файл уже существует",
+      "restoreConflictBody": "{path} уже существует. Перезаписать?",
+      "overwrite": "Перезаписать",
+      "cancel": "Отмена",
+      "filterKbAll": "Все БЗ",
+      "filterTime7d": "Последние 7 дней",
+      "filterTime30d": "Последние 30 дней",
+      "filterTimeAll": "Всё время",
+      "emptyState": "Корзина пуста.",
+      "loading": "Загрузка…",
+      "restore": "Восстановить",
+      "deleteForever": "Удалить навсегда",
+      "deleteForeverConfirm": "Удалить {path} навсегда? Это нельзя отменить.",
+      "purgeAll": "Очистить корзину",
+      "purgeAllConfirm": "Очистить все записи старше {days} дней?",
+      "purgeResult": "Очищено {files} файл(ов), освобождено {size}.",
+      "autoPurgeHint": "Элементы старше 7 дней удаляются автоматически.",
+      "entryDeletedAt": "Удалено {date}",
+      "kbUnknown": "Неизвестная БЗ"
     }
   }
 }

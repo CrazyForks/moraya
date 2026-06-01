@@ -714,6 +714,99 @@ fn file_paths_from_args() -> Vec<String> {
         .collect()
 }
 
+/// Re-export of [`commands::pdf_export::child_mode::detect_child_mode`] so
+/// `main.rs` can route argv before `tauri::Builder` starts. Returns the
+/// config-file path when `--print-pdf-config=<path>` is present in argv.
+pub fn detect_print_child_arg<I, S>(args: I) -> Option<String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    commands::pdf_export::child_mode::detect_child_mode(args)
+}
+
+/// Subprocess child-mode entry for the PDF export pipeline (Windows/Linux).
+///
+/// This runs in a child process spawned by [`commands::pdf_export::subprocess::run`].
+/// Its job is to load the `/print` route in a hidden WebView, wait for the
+/// frontend's `export_print_ready` handshake, call the platform-native
+/// printToPdf API, write the bytes to `output_path`, and exit.
+///
+/// v0.60.0 shipped the macOS direct path fully wired and a stub here.
+/// v0.60.1 adds:
+///   - up-front config validation (typed `JobConfig` returned)
+///   - platform dispatch to `run_print_child_windows` / `run_print_child_linux`
+///   - structured Fallback messaging that names the missing implementation
+/// The WebView2 `PrintToPdfStreamAsync` and WebKitGTK `print_to_stream` bindings
+/// themselves still need to land — they require hands-on testing on Win/Linux
+/// machines. Until they do, this function exits 1 with a `Fallback` event so
+/// the frontend orchestrator automatically switches to the canvas path.
+pub fn run_print_child(cfg_path: &str) {
+    use commands::pdf_export::child_mode;
+    use commands::pdf_export::ProgressEvent;
+
+    let job = match child_mode::load_config(cfg_path) {
+        Ok(j) => j,
+        Err(e) => {
+            eprintln!("print-child: load_config failed: {e}");
+            child_mode::emit_progress(&ProgressEvent::Error { message: e });
+            std::process::exit(2);
+        }
+    };
+
+    #[cfg(target_os = "windows")]
+    let result = run_print_child_windows(&job);
+
+    #[cfg(target_os = "linux")]
+    let result = run_print_child_linux(&job);
+
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    let result: Result<(), String> = {
+        let _ = &job; // suppress unused warning on macOS/iOS
+        Err("subprocess child mode is only spawned on Windows/Linux".to_string())
+    };
+
+    if let Err(reason) = result {
+        child_mode::emit_progress(&ProgressEvent::Fallback { reason });
+        std::process::exit(1);
+    }
+    std::process::exit(0);
+}
+
+/// Windows native print-to-PDF child entry (stub for v0.60.1).
+///
+/// Will host a minimal Tauri instance with one hidden window loading `/print`,
+/// wait for `export_print_ready`, then call
+/// `CoreWebView2.PrintToPdfStreamAsync` (via `webview2-com`) with paper /
+/// margin / orientation derived from `job.options`, write the bytes to
+/// `job.output_path`, emit `ProgressEvent::Done`, and exit.
+///
+/// Currently returns Err so the parent transparently falls back to canvas;
+/// see `docs/iterations/v0.60.1-pc-win-linux-native-pdf.md` Phase 2 for the
+/// full implementation plan.
+#[cfg(target_os = "windows")]
+fn run_print_child_windows(job: &commands::pdf_export::JobConfig) -> Result<(), String> {
+    let _ = job;
+    Err("Windows native PrintToPdfStreamAsync binding pending v0.60.1 Phase 2".to_string())
+}
+
+/// Linux native print-to-PDF child entry (stub for v0.60.1).
+///
+/// Will host a minimal Tauri instance with one hidden WebKitGTK WebView
+/// loading `/print`, wait for `export_print_ready`, then call
+/// `WebKitPrintOperation::print_to_stream` (via `webkit2gtk`) with the right
+/// `PrintSettings` / `PageSetup`, drain the `MemoryOutputStream` into a
+/// `Vec<u8>`, write to `job.output_path`, emit `ProgressEvent::Done`, exit.
+///
+/// Currently returns Err so the parent transparently falls back to canvas;
+/// see `docs/iterations/v0.60.1-pc-win-linux-native-pdf.md` Phase 3 for the
+/// full implementation plan.
+#[cfg(target_os = "linux")]
+fn run_print_child_linux(job: &commands::pdf_export::JobConfig) -> Result<(), String> {
+    let _ = job;
+    Err("Linux native WebKitGTK print_to_stream binding pending v0.60.1 Phase 3".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Fix PATH for macOS GUI apps (Dock/Finder don't inherit shell PATH)
@@ -880,6 +973,9 @@ pub fn run() {
             commands::kb_sync::picora_kb_raw,
             commands::kb_sync::kb_sync_scan_dir,
             commands::kb_sync::kb_sync_move_to_trash,
+            commands::kb_sync::kb_sync_list_trash,
+            commands::kb_sync::kb_sync_restore_from_trash,
+            commands::kb_sync::kb_sync_purge_trash,
             commands::picora_media::picora_media_list,
             commands::picora_media::picora_media_detail,
             commands::picora_media::picora_video_status,
@@ -887,6 +983,11 @@ pub fn run() {
             commands::picora_media::picora_server_caps,
             commands::picora_account::picora_get_quota,
             commands::picora_account::picora_media_delete,
+            commands::picora_oauth::picora_oauth_start_device_flow,
+            commands::picora_oauth::picora_oauth_poll,
+            commands::picora_oauth::picora_oauth_get_token,
+            commands::picora_oauth::picora_oauth_has_session,
+            commands::picora_oauth::picora_oauth_logout,
             set_editor_mode_menu,
             update_menu_labels,
             set_menu_check,

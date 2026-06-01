@@ -359,12 +359,18 @@ All API keys are stored exclusively in your OS Keychain — never in plaintext. 
 | v0.57.0 | Agent over Docs (P1 AI 3) — ReAct/Plan-Execute, 5 tool types, multi-step task execution | ✅ |
 | v0.58.0 | Enterprise — SCIM, HSM, private deployment, multi-org, compliance archive | ✅ |
 | v0.59.0 | Performance + PWA polish — bundle optimization, virtual scroll, offline shell | ✅ |
-| v0.60.0 | Native PDF export — print-to-PDF on macOS WKWebView + Windows WebView2 + Linux WebKitGTK, selectable text, vector fonts, CSS @page pagination, statusbar progress, full Export settings tab | 📋 |
+| v0.60.0 | Native PDF export — macOS WKWebView createPDF (vector, selectable text, CSS @page pagination, statusbar progress, full Export settings tab); Windows/Linux subprocess scaffold auto-falls back to canvas, native printToPdf deferred to v0.60.1 | ✅ |
+| v0.60.1 | Windows/Linux native PDF — platform-agnostic groundwork landed (shared viewport/mm conversion helpers, platform-dispatch child-mode skeleton, subprocess stderr surfaced via Channel); WebView2 PrintToPdfStreamAsync + WebKitGTK print_to_stream bindings still need Win/Linux real-hardware validation | 🚧 |
 | v0.61.0 | Moraya Mobile — Capacitor foundation (iOS 15+/Android 7+ shell, 13 plugins, sync pipeline from moraya-web build) | ✅ |
 | v0.62.0 | Mobile responsive UX — drawer nav, bottom sheet, settings full-screen sheet, split disable, 44pt touch targets, virtual keyboard handling | ✅ |
 | v0.63.0 | Mobile native integrations — Push notifications (APNs/FCM), Camera/OCR (Vision/ML Kit), Face ID/Touch ID, Voice recording | ✅ |
 | v0.64.0 | Mobile iOS App Store launch — TestFlight, privacy manifest, Apple review, China region compliance | ✅ |
 | v0.65.0 | Mobile Android Play Store + GA release — internal/beta/production tracks, Sentry monitoring | ✅ |
+| v0.66.0 | Picora Sync — Phase A ✓ (OAuth Device Flow Rust client + 5 Tauri commands + frontend service + 20 tests); Phase B-E (UI, scheduler, sidecar) blocked on Picora backend availability | 🚧 |
+| v0.67.0 | Push notification device registration — wire NotificationCenter to Picora /api/v1/devices*, settings/notifications route, device list with revoke | 📋 |
+| v0.68.0 | KB sync trash UX — toast on remote deletions, recycle bin panel with restore, 7-day auto purge, 3 new Rust commands | ✅ |
+| v0.69.0 | Picora credentials — Phase 1 ✓ (Keychain migration, `picora-api-key:{id}` namespace, 9 call sites refactored) + Phase 2 lite ✓ (PicoraAuthRef field + OAuth-branch resolver in credentials.ts, 7 new tests, 0 breaking changes); Rust 11-command AuthRef refactor still deferred | ✅ |
+| v0.93.0 | Mobile Picora Photos Sync — Phase A ✓ (Capacitor plugin TS surface + web fallback + 11 tests at `moraya-mobile/native-plugins/moraya-photos-scanner`); Phase B (iOS Swift) / C (Android Kotlin) pending | 🚧 |
 | v1.0.0 | Moraya Web GA — bug bash, full docs, case studies, launch day coordination | 📋 |
 
 ## ⭐ Star Growth trend (updated in real time)

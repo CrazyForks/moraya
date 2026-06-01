@@ -19,27 +19,10 @@ use std::time::Duration;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
-use super::{JobConfig, ProgressEvent};
+use super::{paper_content_viewport_width, JobConfig, ProgressEvent};
 
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
 const CREATE_PDF_TIMEOUT: Duration = Duration::from_secs(120);
-
-/// Compute the CSS-pixel width of the printable content area for `job`'s
-/// paper size and orientation. Used as the hidden window viewport width so
-/// WebKit lays out text at exactly the right line-break width.
-fn paper_content_viewport_width(job: &JobConfig) -> f64 {
-    let (pw_mm, ph_mm) = job.options.paper_size.dimensions_mm();
-    // Swap for landscape.
-    let paper_w_mm = if job.options.orientation == super::Orientation::Landscape {
-        ph_mm
-    } else {
-        pw_mm
-    };
-    let margin_w = job.options.margins.left + job.options.margins.right;
-    let content_mm = (paper_w_mm - margin_w).max(50.0);
-    // 96 CSS px per inch, 25.4 mm per inch.
-    (content_mm / 25.4 * 96.0).round()
-}
 
 pub async fn run(
     app: AppHandle,

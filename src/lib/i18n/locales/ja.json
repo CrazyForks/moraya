@@ -732,7 +732,9 @@
     "picoraImportInvalid": "インポートリンクが無効です — Picora コンソールから再試行してください。",
     "picoraVerify": "検証",
     "picoraHeroDesc": "自社 SaaS 画像ホスト · 5 分でワンクリック設定",
-    "otherProviders": "その他のプロバイダー"
+    "otherProviders": "その他のプロバイダー",
+    "picoraApiKeyKeychain": "システムキーチェーンに保存済み · 新しいキーで上書き可能",
+    "picoraKeyMigratedToast": "{count} 個の Picora API キーをシステムキーチェーンに移行しました。"
   },
   "imageMenu": {
     "resize": "リサイズ",
@@ -2012,6 +2014,33 @@
     "syncNow": "今すぐ同期",
     "error": {
       "targetMissing": "Picora アカウントが見つかりません — この知識ベースを再バインドするか、設定でアカウントを復元してください。"
+    },
+    "trash": {
+      "title": "ゴミ箱",
+      "toastDeleted": "Picora が {count} 件のファイルを削除し、ゴミ箱に移動しました。",
+      "view": "表示",
+      "restoreAll": "すべて復元",
+      "restoreSuccess": "{count} 件のファイルを復元しました。",
+      "restoreFailed": "一部のファイルを復元できませんでした。",
+      "restoreConflictTitle": "ファイルは既に存在します",
+      "restoreConflictBody": "{path} は既に存在します。上書きしますか？",
+      "overwrite": "上書き",
+      "cancel": "キャンセル",
+      "filterKbAll": "すべてのKB",
+      "filterTime7d": "過去 7 日間",
+      "filterTime30d": "過去 30 日間",
+      "filterTimeAll": "すべての期間",
+      "emptyState": "ゴミ箱は空です。",
+      "loading": "読み込み中…",
+      "restore": "復元",
+      "deleteForever": "完全に削除",
+      "deleteForeverConfirm": "{path} を完全に削除しますか？この操作は元に戻せません。",
+      "purgeAll": "ゴミ箱を空にする",
+      "purgeAllConfirm": "{days} 日より古いすべての項目を削除しますか？",
+      "purgeResult": "{files} 件のファイルを削除し、{size} を解放しました。",
+      "autoPurgeHint": "7 日以上経過した項目は自動的に削除されます。",
+      "entryDeletedAt": "{date} に削除",
+      "kbUnknown": "不明な KB"
     }
   }
 }
