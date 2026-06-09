@@ -2771,7 +2771,7 @@ dependencies = [
 
 [[package]]
 name = "moraya"
-version = "0.41.4"
+version = "0.41.5"
 dependencies = [
  "anndists",
  "base64 0.22.1",
