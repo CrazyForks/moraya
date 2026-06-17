@@ -231,6 +231,15 @@ ${tr('welcome.tip')}
   let currentFileName = $state($t('common.untitled'));
   let selectedText = $state('');
   let editorMode = $state<EditorMode>('visual');
+  /**
+   * Sticky base mode (Visual / Source). See editor-store.ts for the
+   * full rationale — in short, Visual/Source is one mutex axis and
+   * single/split is a separate one, but the rendered `editorMode`
+   * collapses them. This $state mirrors `editorStore.lastSingleMode`
+   * so the shortcut handlers + menu sync $effect can reason about
+   * both axes independently.
+   */
+  let lastSingleMode = $state<'visual' | 'source'>('visual');
 
   // Tab state for TitleBar and TabBar rendering
   let tabs = $state<import('$lib/stores/tabs-store').TabItem[]>([]);
@@ -732,6 +741,12 @@ ${tr('welcome.tip')}
         }).catch(() => {});
       }
     }
+    // Mirror lastSingleMode from the store. Guarded by equality so this
+    // subscriber stays a no-op when only unrelated fields (content,
+    // wordCount, …) change.
+    if (state.lastSingleMode !== lastSingleMode) {
+      lastSingleMode = state.lastSingleMode;
+    }
     // Guard: only write $state when mode actually changes to avoid re-entrancy
     // during Svelte's render flush (e.g., when Editor.onDestroy calls setContent,
     // which triggers this subscriber while the component tree is being updated).
@@ -892,11 +907,21 @@ ${tr('welcome.tip')}
     }
   });
 
-  // Sync native menu checkmarks when editor mode changes (all desktop platforms).
+  // Sync native menu checkmarks for the editor-mode trio. Visual/Source
+  // is one mutex axis (base mode), Split is independent (layout axis), so
+  // we push each CheckMenuItem on its own — NOT via the radio-style
+  // `set_editor_mode_menu` helper, which would force exactly one of the
+  // three to be checked and undo the two-axis design. With this wiring:
+  //   • Visual is checked iff lastSingleMode === 'visual'
+  //   • Source is checked iff lastSingleMode === 'source'
+  //   • Split is checked iff editorMode === 'split'
+  // So in split mode the user sees BOTH Split AND their chosen base mode
+  // checked, exactly matching the mental model.
   $effect(() => {
     if (!isTauri) return;
-
-    invoke('set_editor_mode_menu', { mode: editorMode }).catch(() => {});
+    invoke('set_menu_check', { id: 'view_mode_visual', checked: lastSingleMode === 'visual' }).catch(() => {});
+    invoke('set_menu_check', { id: 'view_mode_source', checked: lastSingleMode === 'source' }).catch(() => {});
+    invoke('set_menu_check', { id: 'view_mode_split', checked: editorMode === 'split' }).catch(() => {});
   });
 
   // Sync native menu checkmarks when view panels are toggled.
@@ -1141,13 +1166,28 @@ ${tr('welcome.tip')}
       case 'format.insertImage': showImageDialog = true; return true;
 
       case 'view.toggleMode': {
-        const next = editorMode === 'visual' ? 'source' : 'visual';
-        editorMode = next;
-        editorStore.setEditorMode(next);
+        // Cmd+/ — flip the base mode (Visual ↔ Source).
+        //  • In single layout (visual / source): flip the rendered editorMode
+        //    as well, taking the user from one base mode to the other.
+        //  • In split layout: just flip lastSingleMode. The user stays in
+        //    split (both panes still showing), but the menu's
+        //    Visual/Source checkmark moves, and the NEXT Cmd+Shift+/ will
+        //    exit split into the newly-chosen base. This matches the
+        //    "two-axis" mental model (see editor-store.ts).
+        const newBase: 'visual' | 'source' = lastSingleMode === 'visual' ? 'source' : 'visual';
+        editorStore.setLastSingleMode(newBase);
+        if (editorMode !== 'split') {
+          editorMode = newBase;
+          editorStore.setEditorMode(newBase);
+        }
         return true;
       }
       case 'view.toggleSplit': {
-        const next = editorMode === 'split' ? 'visual' : 'split';
+        // Cmd+Shift+/ — toggle the layout axis. Returning from split
+        // restores the last single base (visual or source), NOT always
+        // visual; entering split keeps lastSingleMode where it is so
+        // the round-trip is non-destructive.
+        const next: EditorMode = editorMode === 'split' ? lastSingleMode : 'split';
         editorMode = next;
         editorStore.setEditorMode(next);
         return true;
@@ -1280,19 +1320,25 @@ ${tr('welcome.tip')}
       return;
     }
 
-    // Toggle source/visual mode and Split mode — same Tauri reasoning.
+    // Toggle base mode (Visual ↔ Source) and layout (single ↔ Split) —
+    // two-axis model, matches the shortcut handler in the `view.*` cases
+    // above. Tauri's native menu accelerators handle this for the
+    // desktop build; this branch only runs in the browser dev preview.
     const slashMod = isMacOS ? event.metaKey : event.ctrlKey;
     if (!isTauri && slashMod && !event.shiftKey && (event.key === '/' || event.code === 'Slash')) {
       event.preventDefault();
-      const newMode: EditorMode = editorMode === 'visual' ? 'source' : 'visual';
-      editorMode = newMode;
-      editorStore.setEditorMode(newMode);
+      const newBase: 'visual' | 'source' = lastSingleMode === 'visual' ? 'source' : 'visual';
+      editorStore.setLastSingleMode(newBase);
+      if (editorMode !== 'split') {
+        editorMode = newBase;
+        editorStore.setEditorMode(newBase);
+      }
       return;
     }
 
     if (!isTauri && slashMod && event.shiftKey && (event.key === '/' || event.key === '?' || event.code === 'Slash')) {
       event.preventDefault();
-      const newMode: EditorMode = editorMode === 'split' ? 'visual' : 'split';
+      const newMode: EditorMode = editorMode === 'split' ? lastSingleMode : 'split';
       editorMode = newMode;
       editorStore.setEditorMode(newMode);
       return;
@@ -3161,12 +3207,46 @@ ${tr('welcome.tip')}
         'menu:insert_cloud_image': () => { cloudPickerState = { kind: 'image', pos: null }; },
         'menu:insert_cloud_audio': () => { cloudPickerState = { kind: 'audio', pos: null }; },
         'menu:insert_cloud_video': () => { cloudPickerState = { kind: 'video', pos: null }; },
-        // View — editor modes: payload is boolean (is_checked state from native menu).
-        // On macOS, Cocoa auto-toggles CheckMenuItem before firing the event, so the
-        // checked item indicates the mode the user selected.
-        'menu:view_mode_visual': (p) => { if (p === true) { editorMode = 'visual'; editorStore.setEditorMode('visual'); } },
-        'menu:view_mode_source': (p) => { if (p === true) { editorMode = 'source'; editorStore.setEditorMode('source'); } },
-        'menu:view_mode_split': (p) => { if (p === true) { editorMode = 'split'; editorStore.setEditorMode('split'); } },
+        // View — editor modes. Two-axis model:
+        //   • Visual/Source is one mutex axis (the "base" mode)
+        //   • Split is independent (the "layout" axis)
+        // The native accelerator (Cmd+/) is owned by the Visual Mode
+        // CheckMenuItem, so this handler MUST implement the TOGGLE
+        // behaviour the user asked for — pressing Cmd+/ flips
+        // visual ↔ source regardless of which side they're on. A
+        // user mouse-click on the item routes here too; we lean on
+        // the fact that the checked item shows current state, so
+        // clicking it semantically reads as "switch off this one /
+        // switch to the other". Both items therefore share the same
+        // toggle handler; the menu sync $effect re-projects the
+        // correct checkmark afterwards.
+        'menu:view_mode_visual': () => {
+          const newBase: 'visual' | 'source' = lastSingleMode === 'visual' ? 'source' : 'visual';
+          editorStore.setLastSingleMode(newBase);
+          if (editorMode !== 'split') {
+            editorMode = newBase;
+            editorStore.setEditorMode(newBase);
+          }
+        },
+        'menu:view_mode_source': () => {
+          // Source item has no accelerator (Cmd+/ is on Visual), but a
+          // mouse click on Source should still flip the base — the
+          // mutex semantics are about the PAIR, not the individual item.
+          const newBase: 'visual' | 'source' = lastSingleMode === 'visual' ? 'source' : 'visual';
+          editorStore.setLastSingleMode(newBase);
+          if (editorMode !== 'split') {
+            editorMode = newBase;
+            editorStore.setEditorMode(newBase);
+          }
+        },
+        'menu:view_mode_split': () => {
+          // Cmd+Shift+/ or click — toggle the layout axis. Exit always
+          // returns to lastSingleMode (NOT hardcoded visual) so a user
+          // who entered split from source comes back to source.
+          const next: EditorMode = editorMode === 'split' ? lastSingleMode : 'split';
+          editorMode = next;
+          editorStore.setEditorMode(next);
+        },
         // View — panels (CheckMenuItems: payload is boolean checked state)
         'menu:view_sidebar': (p) => { if (typeof p === 'boolean') { if (p !== showSidebar) settingsStore.toggleSidebar(); } else { settingsStore.toggleSidebar(); } },
         'menu:view_ai_panel': (p) => { if (typeof p === 'boolean') { showAIPanel = p; } else { showAIPanel = !showAIPanel; } },

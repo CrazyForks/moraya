@@ -10,6 +10,21 @@ interface EditorState {
   wordCount: number;
   charCount: number;
   editorMode: EditorMode;
+  /**
+   * The most recently active "single" editor mode ('visual' or 'source').
+   * In the user's mental model, Visual ↔ Source is one mutually-exclusive
+   * axis ("base mode") and single ↔ split is a separate axis ("layout").
+   * The rendered `editorMode` collapses both into one enum, so we track
+   * the base mode here so that:
+   *   - Cmd+Shift+/ exiting split can restore the user's prior base
+   *     (i.e. coming out of split returns to source if that's what they
+   *     were in before entering split, not always to visual)
+   *   - Cmd+/ while inside split can flip the base without disturbing
+   *     the split layout — the next exit-split will land on the new base
+   *   - The native menu can keep one of Visual/Source checked at all
+   *     times, with Split as an independent checkmark layered on top
+   */
+  lastSingleMode: 'visual' | 'source';
   /** Cursor position as character offset in the markdown string (for cross-mode restore) */
   cursorOffset: number;
   /** Scroll position as fraction (0-1) of scrollHeight for cross-mode restore */
@@ -33,6 +48,7 @@ function createEditorStore() {
     wordCount: 0,
     charCount: 0,
     editorMode: 'visual',
+    lastSingleMode: 'visual',
     cursorOffset: 0,
     scrollFraction: 0,
   });
@@ -126,13 +142,31 @@ function createEditorStore() {
       scheduleWordCount(data.content);
     },
     toggleEditorMode() {
-      update(state => ({
-        ...state,
-        editorMode: state.editorMode === 'visual' ? 'source' : 'visual',
-      }));
+      update(state => {
+        const next: EditorMode = state.editorMode === 'visual' ? 'source' : 'visual';
+        return { ...state, editorMode: next, lastSingleMode: next };
+      });
     },
     setEditorMode(mode: EditorMode) {
-      update(state => state.editorMode === mode ? state : { ...state, editorMode: mode });
+      update(state => {
+        if (state.editorMode === mode) return state;
+        // Keep lastSingleMode in lockstep whenever we land on a single
+        // mode, so subsequent split-toggles restore the right base.
+        // Entering 'split' preserves whatever lastSingleMode already was.
+        const lastSingleMode: 'visual' | 'source' =
+          mode === 'visual' || mode === 'source' ? mode : state.lastSingleMode;
+        return { ...state, editorMode: mode, lastSingleMode };
+      });
+    },
+    /**
+     * Set the base ('visual' | 'source') without disturbing `editorMode`.
+     * Used by Cmd+/ while in split layout, where flipping the base should
+     * NOT collapse the split — it just records what the next exit-split
+     * will restore to, and lets the native menu Visual/Source check
+     * track the user's preference.
+     */
+    setLastSingleMode(mode: 'visual' | 'source') {
+      update(state => state.lastSingleMode === mode ? state : { ...state, lastSingleMode: mode });
     },
     setCursorOffset(offset: number) {
       update(state => state.cursorOffset === offset ? state : { ...state, cursorOffset: offset });
@@ -160,6 +194,7 @@ function createEditorStore() {
         wordCount: 0,
         charCount: 0,
         editorMode: 'visual',
+        lastSingleMode: 'visual',
         cursorOffset: 0,
         scrollFraction: 0,
       });
