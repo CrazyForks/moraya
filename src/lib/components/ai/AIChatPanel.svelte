@@ -26,7 +26,11 @@
   import { filesStore } from '$lib/stores/files-store';
   import { invoke, Channel } from '@tauri-apps/api/core';
   import { readFile } from '@tauri-apps/plugin-fs';
-  import { markdownToHtmlBody } from '$lib/services/export-service';
+  // v0.42.0: chat bubble rendering now goes through @moraya/core/chat-markdown
+  // via the local katex/hljs wrapper. `markdownToHtmlBody` (export-service)
+  // is reserved for HTML/PDF export, which has different needs (mermaid
+  // wrappers, TOC anchors, etc).
+  import { renderChatMarkdown } from '$lib/services/ai/chat-render';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { open as openDialog } from '@tauri-apps/plugin-dialog';
   import { onMount, onDestroy } from 'svelte';
@@ -250,7 +254,7 @@
   });
 
   // ── Cached markdown rendering ──
-  // Avoid expensive markdownToHtmlBody re-computation on every Svelte render cycle.
+  // Avoid expensive renderChatMarkdown re-computation on every Svelte render cycle.
   // Messages are immutable once stored, so we cache their rendered HTML by timestamp.
   const htmlCache = new Map<number, string>();
 
@@ -258,7 +262,7 @@
     const key = msg.timestamp;
     let cached = htmlCache.get(key);
     if (!cached) {
-      cached = markdownToHtmlBody(msg.content);
+      cached = renderChatMarkdown(msg.content);
       htmlCache.set(key, cached);
     }
     return cached;
@@ -277,14 +281,14 @@
     }
     if (!streamRenderTimer) {
       // First chunk — render immediately for fast perceived response
-      renderedStreamHtml = markdownToHtmlBody(raw);
+      renderedStreamHtml = renderChatMarkdown(raw);
       streamRenderTimer = setTimeout(() => { streamRenderTimer = undefined; }, 150);
     } else {
       // Subsequent chunks — schedule throttled render
       clearTimeout(streamRenderTimer);
       streamRenderTimer = setTimeout(() => {
         streamRenderTimer = undefined;
-        renderedStreamHtml = markdownToHtmlBody(streamingContent);
+        renderedStreamHtml = renderChatMarkdown(streamingContent);
       }, 150);
     }
   });
@@ -1904,7 +1908,7 @@
           </div>
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="message-content" onclick={handleContentClick}>{@html markdownToHtmlBody(rtCurrentResponse)}</div>
+          <div class="message-content" onclick={handleContentClick}>{@html renderChatMarkdown(rtCurrentResponse)}</div>
           <span class="typing-indicator">{$t('ai.typing')}</span>
         </div>
       {/if}
