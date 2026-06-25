@@ -15,30 +15,10 @@ export interface AIProviderConfig {
   temperature?: number;
 }
 
-export type RealtimeVoiceProvider =
-  | 'gemini-live'
-  | 'openai-realtime'
-  | 'doubao-realtime'
-  | 'qwen-realtime'
-  | 'stepfun-realtime'
-  | 'tongyi-bailing'
-  | 'amazon-nova-sonic';
-
-export interface RealtimeVoiceAIConfig {
-  id: string;
-  provider: RealtimeVoiceProvider;
-  apiKey?: string;
-  baseUrl?: string;
-  model: string;
-  voice?: string;
-  region?: string;
-  /** Doubao Realtime: X-Api-App-ID (App ID from Volcengine console) */
-  appId?: string;
-  accessKeyId?: string;
-  secretAccessKey?: string;
-  sessionToken?: string;
-  extra?: Record<string, string>;
-}
+// Realtime-voice provider types + catalogs now live in @moraya/core/ai (shared
+// across desktop + web). Re-exported here so existing importers are unchanged.
+export type { RealtimeVoiceProvider, RealtimeVoiceAIConfig } from '@moraya/core/ai/voice';
+import type { RealtimeVoiceProvider } from '@moraya/core/ai/voice';
 
 export const DEFAULT_MODELS: Record<AIProvider, string[]> = {
   claude:  ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
@@ -54,15 +34,7 @@ export const DEFAULT_MODELS: Record<AIProvider, string[]> = {
   custom:  [],
 };
 
-export const REALTIME_VOICE_DEFAULT_MODELS: Record<RealtimeVoiceProvider, string[]> = {
-  'gemini-live': ['gemini-live-2.5-flash-preview-native-audio'],
-  'openai-realtime': ['gpt-realtime'],
-  'doubao-realtime': ['doubao-realtime'],
-  'qwen-realtime': ['qwen-realtime'],
-  'stepfun-realtime': ['step-audio-chat'],
-  'tongyi-bailing': ['tongyi-bailing-realtime'],
-  'amazon-nova-sonic': ['amazon.nova-sonic-v1'],
-};
+export { REALTIME_VOICE_DEFAULT_MODELS } from '@moraya/core/ai/voice';
 
 export const PROVIDER_BASE_URLS: Record<AIProvider, string> = {
   claude:   'https://api.anthropic.com',
@@ -78,25 +50,7 @@ export const PROVIDER_BASE_URLS: Record<AIProvider, string> = {
   custom:   '',
 };
 
-export const REALTIME_VOICE_BASE_URLS: Record<RealtimeVoiceProvider, string> = {
-  'gemini-live': 'wss://generativelanguage.googleapis.com/ws',
-  'openai-realtime': 'wss://api.openai.com/v1/realtime',
-  'doubao-realtime': 'wss://openspeech.bytedance.com/api/v3/realtime/dialogue',
-  'qwen-realtime': 'wss://dashscope.aliyuncs.com/api-ws/v1/inference',
-  'stepfun-realtime': 'wss://api.stepfun.com/v1/realtime',
-  'tongyi-bailing': 'wss://dashscope.aliyuncs.com/api-ws/v1/inference',
-  'amazon-nova-sonic': 'wss://transcribestreaming.{region}.amazonaws.com:8443',
-};
-
-export const REALTIME_VOICE_PROVIDER_NAMES: Record<RealtimeVoiceProvider, string> = {
-  'gemini-live': 'Gemini Live',
-  'openai-realtime': 'OpenAI Realtime',
-  'doubao-realtime': 'Doubao Realtime',
-  'qwen-realtime': 'Qwen Realtime',
-  'stepfun-realtime': 'StepFun Realtime',
-  'tongyi-bailing': 'Tongyi Bailing',
-  'amazon-nova-sonic': 'Amazon Nova Sonic',
-};
+export { REALTIME_VOICE_BASE_URLS, REALTIME_VOICE_PROVIDER_NAMES } from '@moraya/core/ai/voice';
 
 export const REALTIME_VOICE_ENDPOINT_PRESETS: Partial<
   Record<RealtimeVoiceProvider, { value: string; label: string }[]>

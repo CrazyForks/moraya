@@ -9,6 +9,7 @@ import { resolveImageSize, DOUBAO_SIZE_MAP } from './types';
 import { sendAIRequest, openaiEndpoint } from './providers';
 import { generateBaseUrlCandidates } from './ai-service';
 import { extractOpenAICompatImageUrl, extractDashScopeImageUrl } from './image-response-parser';
+import { buildOpenAIImageBody } from '@moraya/core/ai/image';
 import { invoke } from '@tauri-apps/api/core';
 
 export interface ImageGenerationResult {
@@ -86,13 +87,9 @@ async function callOpenAIImageAPI(
   size: string,
   url: string,
 ): Promise<ImageGenerationResult> {
-  const bodyPayload = JSON.stringify({
-    model: config.model,
-    prompt,
-    n: 1,
-    size,
-    response_format: 'url',
-  });
+  // Shared OpenAI-compatible image body (@moraya/core/ai). gemini-predict +
+  // qwen/DashScope stay desktop-local (different protocols).
+  const bodyPayload = JSON.stringify(buildOpenAIImageBody(config.model, { prompt, n: 1, size }));
 
   const responseText = await invoke<string>('ai_proxy_fetch', {
     configId: config.id,
