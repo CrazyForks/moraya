@@ -116,14 +116,46 @@ function flatten(node, prefix = '', out = new Set()) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// App-local i18n overrides
+//
+// The consumer's i18n shell (lib/i18n/i18n.ts) may carry a `LOCAL_OVERRIDES`
+// map of app-only keys — strings intentionally NOT in the published
+// @moraya/core bundle yet (they get folded into core on its next release).
+// These are legitimately "defined" for coverage purposes. Union their keys in.
+// Absent / other consumers → empty set (no effect).
+// ─────────────────────────────────────────────────────────────────────────
+
+function loadLocalOverrideKeys(root) {
+  const keys = new Set()
+  const path = join(root, 'lib/i18n/i18n.ts')
+  if (!existsSync(path)) return keys
+  const text = readFileSync(path, 'utf8')
+  // Isolate the LOCAL_OVERRIDES object literal (up to its line-start `}`
+  // closing brace) so dotted strings elsewhere in the file aren't picked up.
+  const block = text.match(/LOCAL_OVERRIDES[\s\S]*?\n\}/)
+  if (!block) return keys
+  // Extract quoted object KEYS (dotted, followed by a colon). Translation
+  // values are natural language, never `'a.b':`-shaped, so no false hits.
+  const keyRe = /(['"])([\w-]+(?:\.[\w-]+)+)\1\s*:/g
+  let m
+  while ((m = keyRe.exec(block[0])) !== null) keys.add(m[2])
+  return keys
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Main
 // ─────────────────────────────────────────────────────────────────────────
 
 const enPath = locateEnBundle()
 const defined = flatten(JSON.parse(readFileSync(enPath, 'utf8')))
 
+// Fold in app-local override keys (mcp.lan.*, menu.undo/redo/select_all, …).
+const localOverrideKeys = loadLocalOverrideKeys(resolve(ROOT))
+for (const k of localOverrideKeys) defined.add(k)
+
 console.log(`Scanning ${ROOT}`)
 console.log(`Locale bundle: ${enPath}`)
+console.log(`Local overrides: ${localOverrideKeys.size} app-only key(s)`)
 
 walk(resolve(ROOT))
 

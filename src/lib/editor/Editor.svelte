@@ -107,6 +107,10 @@
   let scrollRafOutline: number | undefined;
   let headingTopsRaf: number | undefined; // RAF for computeHeadingTops
   let outlineScrollRaf: number | undefined; // RAF for smooth outline-click scroll
+  // True while an outline-click smooth scroll is animating. Suppresses the
+  // scroll-driven updateActiveHeading() so the highlight stays on the clicked
+  // item instead of flickering through intermediate headings mid-animation.
+  let outlineClickScrolling = false;
 
   /**
    * Animate `el.scrollTop` from its current value to `targetTop` over
@@ -114,14 +118,15 @@
    * reliance on WebView `behavior:'smooth'` which the prior code avoided for
    * Windows compatibility). Positions are pre-measured (cachedHeadingTops) so
    * no layout reads happen during the animation — safe per the perf rules.
+   * `onComplete` fires once the animation settles (or is a no-op scroll).
    */
-  function smoothScrollTop(el: HTMLElement, targetTop: number, duration = 320) {
+  function smoothScrollTop(el: HTMLElement, targetTop: number, duration = 320, onComplete?: () => void) {
     if (outlineScrollRaf) cancelAnimationFrame(outlineScrollRaf);
     const maxTop = Math.max(0, el.scrollHeight - el.clientHeight);
     const dest = Math.max(0, Math.min(targetTop, maxTop));
     const startTop = el.scrollTop;
     const delta = dest - startTop;
-    if (Math.abs(delta) < 2) { el.scrollTop = dest; return; }
+    if (Math.abs(delta) < 2) { el.scrollTop = dest; onComplete?.(); return; }
     const startTime = performance.now();
     // easeInOutCubic
     const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -133,6 +138,7 @@
       } else {
         el.scrollTop = dest; // snap to exact target
         outlineScrollRaf = undefined;
+        onComplete?.();
       }
     };
     outlineScrollRaf = requestAnimationFrame(step);
@@ -276,8 +282,13 @@
     // even before the scroll event fires (scroll-based updateActiveHeading may
     // not fire if the target is already near the current scroll position).
     activeHeadingId = h.id;
-    // Smooth animated scroll (rAF-based) instead of an instant jump.
-    smoothScrollTop(wrapper, cachedHeadingTops[idx] - 60);
+    // Smooth animated scroll (rAF-based) instead of an instant jump. Suppress
+    // the scroll-driven active recompute during the animation so the highlight
+    // stays on the clicked item (no flicker through intermediate headings).
+    outlineClickScrolling = true;
+    smoothScrollTop(wrapper, cachedHeadingTops[idx] - 60, 320, () => {
+      outlineClickScrolling = false;
+    });
   }
 
   let isReady = $state(false);
@@ -2964,9 +2975,13 @@
   }
 }} onscroll={() => {
   if (!showOutline) return;
+  // While an outline-click smooth scroll is animating, keep the clicked item
+  // highlighted — don't recompute active from the intermediate scroll position.
+  if (outlineClickScrolling) return;
   if (scrollRafOutline) return;
   scrollRafOutline = requestAnimationFrame(() => {
     scrollRafOutline = undefined;
+    if (outlineClickScrolling) return; // covers a RAF scheduled just before the click
     updateActiveHeading();
   });
 }}>
