@@ -37,11 +37,46 @@ import { derived } from 'svelte/store'
 void preloadAllLocales()
 
 /**
- * Svelte derived store. `$t('foo')` in templates re-evaluates whenever the
- * locale store updates, so component re-renders are automatic — preserving
- * the pre-v0.96.0 reactive behavior.
+ * App-local i18n overrides. moraya consumes the *published* `@moraya/core` for
+ * its 12-locale message set, so a brand-new UI string would otherwise need a
+ * core release. This map adds app-only keys here — fully localized across all
+ * 12 locales — to be folded into core on its next release. `t` checks this map
+ * first, then falls back to core.
  */
-export const t = derived(coreLocale, () => coreT)
+const LOCAL_OVERRIDES: Partial<Record<SupportedLocale, Record<string, string>>> = {
+  'en':      { 'mcp.lan.expose': 'Expose over LAN', 'mcp.lan.config': 'Config', 'mcp.lan.copy': 'Copy', 'mcp.lan.copy_config': 'Copy config', 'mcp.lan.hint': 'Same Wi-Fi only. Sent in plaintext over the LAN, secured by the token. macOS may ask to allow incoming connections.', 'mcp.lan.scan_hint': 'Scan with the Moraya mobile app' },
+  'zh-CN':   { 'mcp.lan.expose': '暴露到局域网', 'mcp.lan.config': '配置', 'mcp.lan.copy': '复制', 'mcp.lan.copy_config': '复制配置', 'mcp.lan.hint': '需同一 Wi-Fi。局域网内明文传输、由 token 保护；macOS 可能弹窗请求允许传入连接。', 'mcp.lan.scan_hint': '用 Moraya 手机端扫码接入' },
+  'zh-Hant': { 'mcp.lan.expose': '暴露到區域網路', 'mcp.lan.config': '設定', 'mcp.lan.copy': '複製', 'mcp.lan.copy_config': '複製設定', 'mcp.lan.hint': '需同一 Wi-Fi。區域網路內明文傳輸、由 token 保護；macOS 可能彈窗請求允許傳入連線。', 'mcp.lan.scan_hint': '用 Moraya 手機端掃碼接入' },
+  'ar':      { 'mcp.lan.expose': 'الكشف عبر الشبكة المحلية', 'mcp.lan.config': 'الإعداد', 'mcp.lan.copy': 'نسخ', 'mcp.lan.copy_config': 'نسخ الإعداد', 'mcp.lan.hint': 'نفس شبكة Wi-Fi فقط. يُرسل كنص عادي عبر الشبكة المحلية، محميًا بالرمز.', 'mcp.lan.scan_hint': 'امسح باستخدام تطبيق Moraya' },
+  'de':      { 'mcp.lan.expose': 'Im LAN freigeben', 'mcp.lan.config': 'Konfig', 'mcp.lan.copy': 'Kopieren', 'mcp.lan.copy_config': 'Konfig kopieren', 'mcp.lan.hint': 'Nur gleiches WLAN. Im Klartext über das LAN, durch das Token gesichert. macOS fragt ggf. nach eingehenden Verbindungen.', 'mcp.lan.scan_hint': 'Mit der Moraya-App scannen' },
+  'es':      { 'mcp.lan.expose': 'Exponer en la LAN', 'mcp.lan.config': 'Configuración', 'mcp.lan.copy': 'Copiar', 'mcp.lan.copy_config': 'Copiar configuración', 'mcp.lan.hint': 'Solo la misma Wi-Fi. En texto plano por la LAN, protegido por el token. macOS puede pedir permitir conexiones entrantes.', 'mcp.lan.scan_hint': 'Escanea con la app de Moraya' },
+  'fr':      { 'mcp.lan.expose': 'Exposer sur le réseau local', 'mcp.lan.config': 'Config', 'mcp.lan.copy': 'Copier', 'mcp.lan.copy_config': 'Copier la config', 'mcp.lan.hint': 'Même Wi-Fi uniquement. En clair sur le réseau local, protégé par le jeton. macOS peut demander d’autoriser les connexions entrantes.', 'mcp.lan.scan_hint': 'Scannez avec l’app Moraya' },
+  'hi':      { 'mcp.lan.expose': 'LAN पर उपलब्ध कराएं', 'mcp.lan.config': 'कॉन्फ़िग', 'mcp.lan.copy': 'कॉपी', 'mcp.lan.copy_config': 'कॉन्फ़िग कॉपी करें', 'mcp.lan.hint': 'केवल समान Wi-Fi। LAN पर सादे रूप में भेजा जाता है, टोकन से सुरक्षित।', 'mcp.lan.scan_hint': 'Moraya मोबाइल ऐप से स्कैन करें' },
+  'ja':      { 'mcp.lan.expose': 'LAN に公開', 'mcp.lan.config': '設定', 'mcp.lan.copy': 'コピー', 'mcp.lan.copy_config': '設定をコピー', 'mcp.lan.hint': '同一 Wi-Fi のみ。LAN 上は平文で送信され、トークンで保護されます。macOS が着信接続の許可を求める場合があります。', 'mcp.lan.scan_hint': 'Moraya モバイルでスキャン' },
+  'ko':      { 'mcp.lan.expose': 'LAN에 노출', 'mcp.lan.config': '구성', 'mcp.lan.copy': '복사', 'mcp.lan.copy_config': '구성 복사', 'mcp.lan.hint': '동일 Wi-Fi만 가능. LAN에서 평문으로 전송되며 토큰으로 보호됩니다.', 'mcp.lan.scan_hint': 'Moraya 모바일 앱으로 스캔' },
+  'pt':      { 'mcp.lan.expose': 'Expor na LAN', 'mcp.lan.config': 'Config', 'mcp.lan.copy': 'Copiar', 'mcp.lan.copy_config': 'Copiar config', 'mcp.lan.hint': 'Apenas o mesmo Wi-Fi. Em texto puro na LAN, protegido pelo token. O macOS pode pedir para permitir conexões.', 'mcp.lan.scan_hint': 'Escaneie com o app Moraya' },
+  'ru':      { 'mcp.lan.expose': 'Открыть в локальной сети', 'mcp.lan.config': 'Конфиг', 'mcp.lan.copy': 'Копировать', 'mcp.lan.copy_config': 'Копировать конфиг', 'mcp.lan.hint': 'Только та же Wi-Fi. Передаётся открытым текстом по локальной сети, защищено токеном.', 'mcp.lan.scan_hint': 'Сканируйте в приложении Moraya' },
+}
+
+/**
+ * Svelte derived store. `$t('foo')` in templates re-evaluates whenever the
+ * locale store updates, so component re-renders are automatic. App-local
+ * overrides resolve first, then core.
+ */
+export const t = derived(coreLocale, ($loc) => {
+  return (...args: Parameters<typeof coreT>): string => {
+    const [key, params] = args
+    const override = LOCAL_OVERRIDES[$loc]?.[key] ?? LOCAL_OVERRIDES['en']?.[key]
+    if (override !== undefined) {
+      if (!params) return override
+      return Object.entries(params).reduce(
+        (acc, [k, v]) => acc.replaceAll(`{${k}}`, String(v)),
+        override,
+      )
+    }
+    return coreT(...args)
+  }
+})
 
 /** Re-exported locale store for `import { locale } from '$lib/i18n'`. */
 export const locale = coreLocale

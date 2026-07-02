@@ -354,6 +354,8 @@ Moraya ships as a coordinated multi-product suite — each lives in its own repo
 | v0.69.0 | Picora credentials — Phase 1 ✓ (Keychain migration, `picora-api-key:{id}` namespace, 9 call sites refactored) + Phase 2 lite ✓ (`PicoraAuthRef` field + OAuth-branch resolver in `credentials.ts`); Rust 11-command AuthRef refactor still deferred | ✅ |
 | v0.96.0 | Unified i18n consumer — pc side of the shared `@moraya/core/i18n` rollout (1,716 callsites renamed to canonical snake_case via AST-aware codemod, 12 unified locale bundles) `[cross-product]` | ✅ |
 | v1.0.0 | Desktop GA — final polish round, release-engineering checklists, full long-form user manual | 📋 |
+| v1.1.0 | MCP LAN bridge — expose a connected local MCP server over the LAN as a token-gated plain-JSON HTTP endpoint (tiny_http, per-server opt-in, 192-bit bearer token); MCPPanel expose toggle + connection card `[cross-product]` | ✅ |
+| v1.2.0 | MCP connection QR — render the LAN connection payload as a scannable QR code in the MCPPanel connection card (`qrcode`), so mobile pairs by scanning instead of pasting `[cross-product]` | ✅ |
 
 ### Web — [`moraya-web`](https://github.com/zouwei/moraya-web)
 
@@ -393,6 +395,8 @@ Moraya ships as a coordinated multi-product suite — each lives in its own repo
 | v0.64.0 | iOS App Store launch — TestFlight, privacy manifest, Apple review, China region compliance | ✅ |
 | v0.65.0 | Android Play Store + GA release — internal/beta/production tracks, Sentry monitoring | ✅ |
 | v0.93.0 | **Picora Photos Sync** — Phase A ✓ (Capacitor plugin TS surface + web fallback + 11 tests at `native-plugins/moraya-photos-scanner`); Phase B (iOS Swift) / Phase C (Android Kotlin) pending `[cross-product]` | 🚧 |
+| v1.1.0 | Consume LAN MCP — settings/MCP "paste config" import (http transport + bearer header) + iOS local-network permission (NSLocalNetworkUsageDescription + NSAllowsLocalNetworking) `[cross-product]` | ✅ |
+| v1.2.0 | MCP QR scan — native barcode scanning (`@capacitor-mlkit/barcode-scanning` via `registerPlugin`) to pair with a PC's exposed MCP by scanning its QR; reuses the paste parser `[cross-product]` | ✅ |
 
 ### Shared Markdown Core — [`@moraya/core`](https://www.npmjs.com/package/@moraya/core)
 

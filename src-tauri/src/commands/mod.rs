@@ -12,6 +12,7 @@ pub mod kb_sync;
 pub mod keychain;
 pub mod macos_system_audio;
 pub mod mcp;
+pub mod mcp_lan_bridge;
 pub mod menu_accel;
 pub mod object_storage;
 pub mod pdf_export;

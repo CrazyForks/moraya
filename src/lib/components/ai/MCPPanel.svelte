@@ -28,6 +28,7 @@
   import { containerStore, type DynamicService } from '$lib/services/mcp/container-store';
   import { saveService, removeService, stopService, startService } from '$lib/services/mcp/container-manager';
   import { invoke } from '@tauri-apps/api/core';
+  import QRCode from 'qrcode';
   import { settingsStore } from '$lib/stores/settings-store';
 
   let {
@@ -113,6 +114,67 @@
     nodeAvailable = state.nodeAvailable;
     nodeVersion = state.nodeVersion;
   });
+
+  // ── LAN bridge: expose a connected MCP server over the local network so the
+  //    mobile app can consume it. serverId -> { url, token }. ──────────────────
+  let lanExposed = $state<Record<string, { url: string; token: string }>>({});
+  let lanQr = $state<Record<string, string>>({}); // serverId -> QR data URL
+  let lanCopied = $state<string | null>(null);
+
+  async function refreshLanStatus() {
+    try {
+      const rows = await invoke<Array<{ server_id: string; url: string; token: string }>>('mcp_lan_status');
+      const next: Record<string, { url: string; token: string }> = {};
+      for (const r of rows) next[r.server_id] = { url: r.url, token: r.token };
+      lanExposed = next;
+      for (const r of rows) genLanQr(r.server_id);
+    } catch { /* bridge unavailable — leave empty */ }
+  }
+
+  async function toggleLanExpose(server: MCPServerConfig) {
+    try {
+      if (lanExposed[server.id]) {
+        await invoke('mcp_lan_unexpose', { serverId: server.id });
+        const next = { ...lanExposed };
+        delete next[server.id];
+        lanExposed = next;
+        const q = { ...lanQr };
+        delete q[server.id];
+        lanQr = q;
+      } else {
+        const info = await invoke<{ url: string; token: string; port: number }>('mcp_lan_expose', { serverId: server.id });
+        lanExposed = { ...lanExposed, [server.id]: { url: info.url, token: info.token } };
+        genLanQr(server.id);
+      }
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  /** Payload encoded for paste / QR — matches the mobile parser. */
+  function lanConfigJson(server: MCPServerConfig): string {
+    const e = lanExposed[server.id];
+    if (!e) return '';
+    return JSON.stringify({ v: 1, name: server.name, url: e.url, token: e.token });
+  }
+
+  /** Render the connection payload as a scannable QR (data URL). */
+  async function genLanQr(serverId: string) {
+    const server = servers.find(s => s.id === serverId);
+    const payload = server ? lanConfigJson(server) : '';
+    if (!payload) return;
+    try {
+      lanQr = { ...lanQr, [serverId]: await QRCode.toDataURL(payload, { width: 176, margin: 1 }) };
+    } catch { /* QR generation failed — card still shows copyable text */ }
+  }
+
+  async function copyLanText(key: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      lanCopied = key;
+      setTimeout(() => { if (lanCopied === key) lanCopied = null; }, 1200);
+    } catch { /* clipboard denied */ }
+  }
 
   async function handleConnect(server: MCPServerConfig) {
     try {
@@ -499,6 +561,7 @@
 
   onMount(async () => {
     mpSource = await loadMarketplaceSource();
+    refreshLanStatus();
   });
 
   async function mpSearch(page = 1) {
@@ -812,6 +875,46 @@
                 {/if}
                 <button class="btn-sm danger" onclick={() => handleRemoveServer(server.id)}>{$t('common.remove')}</button>
               </div>
+
+              {#if connectedServers.has(server.id)}
+                <div class="lan-expose">
+                  <label class="lan-toggle">
+                    <input type="checkbox" checked={!!lanExposed[server.id]} onchange={() => toggleLanExpose(server)} />
+                    <span>{$t('mcp.lan.expose')}</span>
+                  </label>
+                  {#if lanExposed[server.id]}
+                    <div class="lan-card">
+                      <div class="lan-row">
+                        <span class="lan-label">URL</span>
+                        <code class="lan-value">{lanExposed[server.id].url}</code>
+                        <button class="btn-xs" onclick={() => copyLanText(server.id + ':url', lanExposed[server.id].url)}>
+                          {lanCopied === server.id + ':url' ? '✓' : $t('mcp.lan.copy')}
+                        </button>
+                      </div>
+                      <div class="lan-row">
+                        <span class="lan-label">Token</span>
+                        <code class="lan-value">{lanExposed[server.id].token}</code>
+                        <button class="btn-xs" onclick={() => copyLanText(server.id + ':token', lanExposed[server.id].token)}>
+                          {lanCopied === server.id + ':token' ? '✓' : $t('mcp.lan.copy')}
+                        </button>
+                      </div>
+                      <div class="lan-row">
+                        <span class="lan-label">{$t('mcp.lan.config')}</span>
+                        <button class="btn-xs primary" onclick={() => copyLanText(server.id + ':cfg', lanConfigJson(server))}>
+                          {lanCopied === server.id + ':cfg' ? '✓' : $t('mcp.lan.copy_config')}
+                        </button>
+                      </div>
+                      {#if lanQr[server.id]}
+                        <div class="lan-qr-wrap">
+                          <img class="lan-qr" src={lanQr[server.id]} alt={$t('mcp.lan.scan_hint')} />
+                          <span class="lan-qr-cap">{$t('mcp.lan.scan_hint')}</span>
+                        </div>
+                      {/if}
+                      <p class="lan-hint">{$t('mcp.lan.hint')}</p>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
             </div>
           {/if}
         {/each}
@@ -1340,6 +1443,97 @@
     display: flex;
     gap: 0.25rem;
     flex-shrink: 0;
+  }
+
+  /* ── LAN expose (per connected server) ── */
+  .lan-expose {
+    flex-basis: 100%;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color, #e5e5e5);
+  }
+  .lan-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    user-select: none;
+  }
+  .lan-card {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.6rem;
+    background: var(--bg-secondary, #f6f6f6);
+    border: 1px solid var(--border-color, #e5e5e5);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .lan-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .lan-label {
+    flex-shrink: 0;
+    width: 3.2rem;
+    font-size: 0.72rem;
+    color: var(--text-secondary, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .lan-value {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.74rem;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    background: var(--bg-primary, #fff);
+    padding: 0.15rem 0.35rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color, #e5e5e5);
+  }
+  .btn-xs {
+    flex-shrink: 0;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.72rem;
+    border: 1px solid var(--border-color, #ddd);
+    border-radius: 4px;
+    background: var(--bg-primary, #fff);
+    cursor: pointer;
+  }
+  .btn-xs.primary {
+    background: var(--accent-color, #6366f1);
+    color: #fff;
+    border-color: transparent;
+  }
+  .lan-hint {
+    margin: 0.2rem 0 0;
+    font-size: 0.7rem;
+    color: var(--text-secondary, #999);
+    line-height: 1.4;
+  }
+  .lan-qr-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.4rem 0;
+  }
+  .lan-qr {
+    width: 176px;
+    height: 176px;
+    image-rendering: pixelated;
+    background: #fff;
+    border-radius: 6px;
+    border: 1px solid var(--border-color, #e5e5e5);
+  }
+  .lan-qr-cap {
+    font-size: 0.7rem;
+    color: var(--text-secondary, #999);
   }
 
   .btn-sm {

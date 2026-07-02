@@ -360,32 +360,8 @@ pub async fn mcp_send_request(
     server_id: String,
     request: String,
 ) -> Result<String, String> {
-    // Step 1: Lock Mutex briefly — write request and take out the process
-    let mut proc = {
-        let mut processes = state.processes.lock().map_err(|e| e.to_string())?;
-
-        let proc = processes
-            .get_mut(&server_id)
-            .ok_or("MCP server not connected")?;
-
-        if let Err(_) = writeln!(proc.stdin, "{}", request) {
-            let stderr_msg = try_read_stderr(&mut proc.stderr);
-            return if stderr_msg.is_empty() {
-                Err("Failed to write to MCP server (process may have exited)".to_string())
-            } else {
-                Err(format!("MCP server error: {}", stderr_msg))
-            };
-        }
-        proc.stdin
-            .flush()
-            .map_err(|_| "Failed to flush MCP server stdin".to_string())?;
-
-        // Remove from HashMap so the Mutex is released during channel read
-        processes
-            .remove(&server_id)
-            .ok_or("MCP server not connected")?
-    };
-    // Mutex is now released — other commands (including disconnect) can proceed
+    // Step 1 (fast, sync): write the request and take the process out of the map.
+    let mut proc = take_proc_after_write(&state, &server_id, &request)?;
 
     // Step 2: Read response on a blocking thread so we don't freeze the Tauri IPC handler.
     // MCPProcess is Send (Child, ChildStdin, etc. are Send), so it can move across threads.
@@ -396,27 +372,82 @@ pub async fn mcp_send_request(
     .await
     .map_err(|e| format!("Task failed: {}", e))?;
 
-    // Step 3: Put the process back or clean up
-    match &result {
+    // Step 3: put the process back on success, or clean up on error.
+    return_or_cleanup(&state, &server_id, &result, returned_proc);
+    result
+}
+
+/// Synchronous shared core of the take-out → channel-read → put-back flow.
+///
+/// Used by the async `mcp_send_request` command (wrapped in `spawn_blocking`)
+/// AND by the LAN bridge (`mcp_lan_bridge.rs`), whose tiny_http handler already
+/// runs on a dedicated blocking thread so it can call this directly. Behavior is
+/// identical to the original `mcp_send_request` body.
+pub fn forward_request_blocking(
+    mgr: &MCPProcessManager,
+    server_id: &str,
+    request: &str,
+) -> Result<String, String> {
+    let mut proc = take_proc_after_write(mgr, server_id, request)?;
+    let result = read_response_channel(&mut proc);
+    return_or_cleanup(mgr, server_id, &result, proc);
+    result
+}
+
+/// Step 1: lock briefly, write the JSON-RPC line to the child's stdin, flush,
+/// then remove the process from the map so the Mutex isn't held during the read.
+fn take_proc_after_write(
+    mgr: &MCPProcessManager,
+    server_id: &str,
+    request: &str,
+) -> Result<MCPProcess, String> {
+    let mut processes = mgr.processes.lock().map_err(|e| e.to_string())?;
+
+    let proc = processes
+        .get_mut(server_id)
+        .ok_or("MCP server not connected")?;
+
+    if writeln!(proc.stdin, "{}", request).is_err() {
+        let stderr_msg = try_read_stderr(&mut proc.stderr);
+        return if stderr_msg.is_empty() {
+            Err("Failed to write to MCP server (process may have exited)".to_string())
+        } else {
+            Err(format!("MCP server error: {}", stderr_msg))
+        };
+    }
+    proc.stdin
+        .flush()
+        .map_err(|_| "Failed to flush MCP server stdin".to_string())?;
+
+    processes
+        .remove(server_id)
+        .ok_or_else(|| "MCP server not connected".to_string())
+}
+
+/// Step 3: on success re-insert the process for reuse; on error kill + reap it
+/// and drop its pid entry.
+fn return_or_cleanup(
+    mgr: &MCPProcessManager,
+    server_id: &str,
+    result: &Result<String, String>,
+    returned_proc: MCPProcess,
+) {
+    match result {
         Ok(_) => {
-            // Success — put the process back for future requests
-            if let Ok(mut processes) = state.processes.lock() {
-                processes.insert(server_id, returned_proc);
+            if let Ok(mut processes) = mgr.processes.lock() {
+                processes.insert(server_id.to_string(), returned_proc);
             }
         }
         Err(_) => {
-            // Error (EOF, timeout, process died) — clean up
             let mut proc = returned_proc;
             let _ = proc.child.kill();
             let _ = proc.child.try_wait();
             drop(proc);
-            if let Ok(mut pids) = state.pids.lock() {
-                pids.remove(&server_id);
+            if let Ok(mut pids) = mgr.pids.lock() {
+                pids.remove(server_id);
             }
         }
     }
-
-    result
 }
 
 /// Read a JSON response from the channel (fed by the background reader thread).

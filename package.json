@@ -49,7 +49,8 @@
     "prosemirror-schema-list": "^1.5.1",
     "prosemirror-state": "^1.4.4",
     "prosemirror-tables": "^1.8.5",
-    "prosemirror-view": "^1.41.6"
+    "prosemirror-view": "^1.41.6",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
@@ -57,6 +58,7 @@
     "@sveltejs/kit": "^2.9.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@tauri-apps/cli": "^2",
+    "@types/qrcode": "^1.5.6",
     "@vitest/ui": "^4.1.4",
     "png-to-ico": "^3.0.1",
     "svelte": "^5.0.0",

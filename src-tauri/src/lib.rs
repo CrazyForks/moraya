@@ -909,6 +909,7 @@ pub fn run() {
                 .build(),
         )
         .manage(commands::mcp::MCPProcessManager::new())
+        .manage(commands::mcp_lan_bridge::LanBridge::new())
         .manage(commands::ai_proxy::AIProxyState::new())
         .manage(commands::kb::KBIndexState::new())
         .manage(commands::speech_proxy::SpeechProxyState::new())
@@ -944,6 +945,9 @@ pub fn run() {
             commands::mcp::mcp_send_notification,
             commands::mcp::mcp_disconnect,
             commands::mcp::check_command_exists,
+            commands::mcp_lan_bridge::mcp_lan_expose,
+            commands::mcp_lan_bridge::mcp_lan_unexpose,
+            commands::mcp_lan_bridge::mcp_lan_status,
             commands::keychain::keychain_set,
             commands::keychain::keychain_get,
             commands::keychain::keychain_delete,
