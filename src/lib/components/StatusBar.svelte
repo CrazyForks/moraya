@@ -1,5 +1,6 @@
 <script lang="ts">
   import { editorStore, type EditorMode } from '../stores/editor-store';
+  import { settingsStore } from '../stores/settings-store';
   import { updateStore } from '$lib/services/update-service';
   import { t } from '$lib/i18n';
   import { isMacOS, isIPadOS } from '$lib/utils/platform';
@@ -60,12 +61,18 @@
   let updateAvailable = $state(false);
   let activeKbSyncState = $state<KbSyncState | null>(null);
   let showSyncPopover = $state(false);
+  let showSidebar = $state(false);
+  let showOutline = $state(false);
 
   // Top-level store subscriptions — do NOT wrap in $effect().
   // Svelte 5 $effect tracks reads in subscribe callbacks, causing infinite loops.
   editorStore.subscribe(state => {
     wordCount = state.wordCount;
     charCount = state.charCount;
+  });
+  settingsStore.subscribe(state => {
+    showSidebar = state.showSidebar;
+    showOutline = state.showOutline;
   });
   updateStore.subscribe(state => {
     updateAvailable = state.checkStatus === 'available';
@@ -117,16 +124,56 @@
 
   function getModeLabel(mode: EditorMode): string {
     const labelMap: Record<EditorMode, string> = {
-      visual: 'statusbar.visualMode',
-      source: 'statusbar.sourceMode',
-      split: 'statusbar.splitMode',
+      visual: 'statusbar.visual_mode',
+      source: 'statusbar.source_mode',
+      split: 'statusbar.split_mode',
     };
     return labelMap[mode];
+  }
+
+  function toggleSidebar() {
+    settingsStore.toggleSidebar();
+  }
+
+  function toggleOutline() {
+    settingsStore.update({ showOutline: !showOutline });
   }
 </script>
 
 <div class="statusbar no-select">
   <div class="statusbar-left">
+    <button
+      class="status-icon"
+      class:active={showSidebar}
+      onclick={toggleSidebar}
+      title={$t('menu.toggle_sidebar')}
+      aria-label={$t('menu.toggle_sidebar')}
+      aria-pressed={showSidebar}
+      type="button"
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+        <line x1="9" y1="3" x2="9" y2="21"/>
+      </svg>
+    </button>
+    <button
+      class="status-icon"
+      class:active={showOutline}
+      onclick={toggleOutline}
+      title={$t('menu.toggle_outline')}
+      aria-label={$t('menu.toggle_outline')}
+      aria-pressed={showOutline}
+      type="button"
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="8" y1="6" x2="21" y2="6"/>
+        <line x1="8" y1="12" x2="21" y2="12"/>
+        <line x1="8" y1="18" x2="21" y2="18"/>
+        <line x1="3" y1="6" x2="3.01" y2="6"/>
+        <line x1="3" y1="12" x2="3.01" y2="12"/>
+        <line x1="3" y1="18" x2="3.01" y2="18"/>
+      </svg>
+    </button>
     <span class="status-item">{$t('statusbar.words')}: {wordCount}</span>
     <span class="status-item">{$t('statusbar.characters')}: {charCount}</span>
     {#if searchActive}
@@ -334,6 +381,29 @@
 
   .status-item {
     white-space: nowrap;
+  }
+
+  .status-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    margin: 0 -2px;
+    border: none;
+    background: none;
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .status-icon:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+  }
+
+  .status-icon.active {
+    color: var(--accent-color);
   }
 
   .search-status {

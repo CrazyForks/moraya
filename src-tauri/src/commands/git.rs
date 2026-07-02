@@ -2,8 +2,16 @@ use serde::Serialize;
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 
 use super::file::validate_path;
+
+/// Windows CreateProcess flag that suppresses the console window that would
+/// otherwise flash on screen each time git is spawned from the GUI app.
+/// No-op on other platforms (guarded at every call site by `cfg`).
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 // ───────────────────────────── types ─────────────────────────────
 
@@ -132,6 +140,8 @@ fn sanitize_stderr(stderr: &str) -> String {
 /// Create a base git Command with safe environment and working directory.
 fn git_cmd(work_dir: &Path) -> Command {
     let mut cmd = Command::new("git");
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
     cmd.current_dir(work_dir);
 
     // Filter environment variables
@@ -349,17 +359,27 @@ fn run_git(cmd: &mut Command, timeout_secs: u64) -> Result<String, String> {
 // ───────────────────────────── commands ──────────────────────────
 
 #[tauri::command]
-pub fn git_check_installed() -> Result<bool, String> {
-    match Command::new("git").arg("--version").output() {
-        Ok(output) => Ok(output.status.success()),
-        Err(e) => {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                Ok(false)
-            } else {
-                Err("Failed to check git installation".to_string())
+pub async fn git_check_installed() -> Result<bool, String> {
+    // Spawning `git --version` blocks on process creation; run it off the main
+    // thread so a slow/missing git binary can't stall app startup (the KB panel
+    // calls this eagerly on launch).
+    tokio::task::spawn_blocking(|| {
+        let mut cmd = Command::new("git");
+        #[cfg(target_os = "windows")]
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        match cmd.arg("--version").output() {
+            Ok(output) => Ok(output.status.success()),
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    Ok(false)
+                } else {
+                    Err("Failed to check git installation".to_string())
+                }
             }
         }
-    }
+    })
+    .await
+    .map_err(|_| "Failed to check git installation".to_string())?
 }
 
 #[tauri::command]

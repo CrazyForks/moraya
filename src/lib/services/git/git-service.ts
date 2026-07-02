@@ -7,11 +7,33 @@ import type {
 	GitBlameEntry,
 } from './types';
 
+// Git presence doesn't change during a session — cache the first successful
+// probe (and coalesce concurrent callers onto one in-flight IPC) so repeated
+// KB/sync UI mounts don't re-spawn `git --version` on every render.
+let gitInstalledCache: boolean | null = null;
+let gitInstalledInFlight: Promise<boolean> | null = null;
+
 /**
- * Check if git is installed on the system.
+ * Check if git is installed on the system. Result is memoized for the session.
  */
 export async function checkGitInstalled(): Promise<boolean> {
-	return invoke<boolean>('git_check_installed');
+	if (gitInstalledCache !== null) return gitInstalledCache;
+	if (gitInstalledInFlight) return gitInstalledInFlight;
+	gitInstalledInFlight = invoke<boolean>('git_check_installed')
+		.then((result) => {
+			gitInstalledCache = result;
+			return result;
+		})
+		.finally(() => {
+			gitInstalledInFlight = null;
+		});
+	return gitInstalledInFlight;
+}
+
+/** Test helper: reset the memoized git-installed probe. */
+export function __resetGitInstalledCache(): void {
+	gitInstalledCache = null;
+	gitInstalledInFlight = null;
 }
 
 /**
