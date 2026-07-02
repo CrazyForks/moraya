@@ -105,7 +105,7 @@
     const parts = binding.split('+');
     if (parts.length < 2) {
       recordedBinding = binding;
-      recordError = 'shortcuts.editor.needsModifier';
+      recordError = 'shortcuts.editor.needs_modifier';
       return;
     }
     const conflict = findBindingConflict(binding, recordingId, isMacOS, overrides, catalog);
@@ -156,7 +156,7 @@
       delete remaining[entry.id];
       const conflict = findBindingConflict(defaultBinding, entry.id, isMacOS, remaining, catalog);
       if (conflict) {
-        recordError = 'shortcuts.editor.resetConflict';
+        recordError = 'shortcuts.editor.reset_conflict';
         recordedBinding = defaultBinding;
         recordingId = entry.id; // open the recorder so user can pick a new combo
         return;

@@ -64,6 +64,11 @@
 
   import '$lib/styles/global.css';
   import '$lib/styles/editor.css';
+  // Code-block NodeView visual language now lives in @moraya/core (v0.5.1).
+  // Loading side-effect-only wires the language picker popup, toolbar, chip,
+  // copy button, and inner <pre>/<code>. Previously duplicated inline in
+  // editor.css lines 80-300 — that block was removed in the same commit.
+  import '@moraya/core/plugins/code-block.css';
   import '$lib/styles/settings.css';
   // KaTeX renders math via katex.render() in @moraya/core's schema with default
   // output='htmlAndMathml'. Without katex.css, the MathML accessibility layer
@@ -85,22 +90,22 @@
 
 ${tr('welcome.subtitle')}
 
-## ${tr('welcome.featuresTitle')}
+## ${tr('welcome.features_title')}
 
-- ${tr('welcome.featureWysiwyg')}
-- ${tr('welcome.featureMath')}
-- ${tr('welcome.featureThemes')}
-- ${tr('welcome.featureAI')}
-- ${tr('welcome.featureMCP')}
-- ${tr('welcome.featureLightweight')}
+- ${tr('welcome.feature_wysiwyg')}
+- ${tr('welcome.feature_math')}
+- ${tr('welcome.feature_themes')}
+- ${tr('welcome.feature_ai')}
+- ${tr('welcome.feature_mcp')}
+- ${tr('welcome.feature_lightweight')}
 
-## ${tr('welcome.mathTitle')}
+## ${tr('welcome.math_title')}
 
 $$
 \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}
 $$
 
-## ${tr('welcome.advancedMathTitle')}
+## ${tr('welcome.advanced_math_title')}
 
 $$
 \\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}
@@ -110,7 +115,7 @@ $$
 \\nabla \\times \\mathbf{E} = -\\frac{\\partial \\mathbf{B}}{\\partial t}
 $$
 
-## ${tr('welcome.codeTitle')}
+## ${tr('welcome.code_title')}
 
 Inline code: \`console.log\`, \`println!\`, \`标记文本\`
 
@@ -128,49 +133,49 @@ fn main() {
 }
 \`\`\`
 
-## ${tr('welcome.blockquoteTitle')}
+## ${tr('welcome.blockquote_title')}
 
-> ${tr('welcome.blockquoteContent')}
+> ${tr('welcome.blockquote_content')}
 
-## ${tr('welcome.tableTitle')}
+## ${tr('welcome.table_title')}
 
-| ${tr('welcome.tableFeature')} | ${tr('welcome.tableStatus')} |
+| ${tr('welcome.table_feature')} | ${tr('welcome.table_status')} |
 |---------|--------|
-| Markdown | ${tr('welcome.tableDone')} |
-| Math | ${tr('welcome.tableDone')} |
-| AI Integration | ${tr('welcome.tableDone')} |
-| MCP Publishing | ${tr('welcome.tableDone')} |
+| Markdown | ${tr('welcome.table_done')} |
+| Math | ${tr('welcome.table_done')} |
+| AI Integration | ${tr('welcome.table_done')} |
+| MCP Publishing | ${tr('welcome.table_done')} |
 
-## ${tr('welcome.listTitle')}
+## ${tr('welcome.list_title')}
 
-1. ${tr('welcome.listItem1')}
-   - ${tr('welcome.listItem1a')}
-   - ${tr('welcome.listItem1b')}
-   - ${tr('welcome.listItem1c')}
-2. ${tr('welcome.listItem2')}
-   - ${tr('welcome.listItem2a')}
-   - ${tr('welcome.listItem2b')}
-   - ${tr('welcome.listItem2c')}
-3. ${tr('welcome.listItem3')}
-   - ${tr('welcome.listItem3a')}
-   - ${tr('welcome.listItem3b')}
-   - ${tr('welcome.listItem3c')}
+1. ${tr('welcome.list_item1')}
+   - ${tr('welcome.list_item1a')}
+   - ${tr('welcome.list_item1b')}
+   - ${tr('welcome.list_item1c')}
+2. ${tr('welcome.list_item2')}
+   - ${tr('welcome.list_item2a')}
+   - ${tr('welcome.list_item2b')}
+   - ${tr('welcome.list_item2c')}
+3. ${tr('welcome.list_item3')}
+   - ${tr('welcome.list_item3a')}
+   - ${tr('welcome.list_item3b')}
+   - ${tr('welcome.list_item3c')}
 
-## ${tr('welcome.shortcutsTitle')}
+## ${tr('welcome.shortcuts_title')}
 
-- ${tr('welcome.shortcutSave')}
-- ${tr('welcome.shortcutOpen')}
-- ${tr('welcome.shortcutNew')}
-- ${tr('welcome.shortcutToggleMode')}
-- ${tr('welcome.shortcutSplitMode')}
-- ${tr('welcome.shortcutSidebar')}
-- ${tr('welcome.shortcutSettings')}
-- ${tr('welcome.shortcutAI')}
-- ${tr('welcome.shortcutExport')}
+- ${tr('welcome.shortcut_save')}
+- ${tr('welcome.shortcut_open')}
+- ${tr('welcome.shortcut_new')}
+- ${tr('welcome.shortcut_toggle_mode')}
+- ${tr('welcome.shortcut_split_mode')}
+- ${tr('welcome.shortcut_sidebar')}
+- ${tr('welcome.shortcut_settings')}
+- ${tr('welcome.shortcut_ai')}
+- ${tr('welcome.shortcut_export')}
 
 ---
 
-## ${tr('welcome.paragraphTitle')}
+## ${tr('welcome.paragraph_title')}
 
 ${tr('welcome.paragraph1')}
 
@@ -180,7 +185,7 @@ ${tr('welcome.paragraph3')}
 
 ---
 
-${tr('welcome.startWriting')}
+${tr('welcome.start_writing')}
 
 ${tr('welcome.tip')}
 `;
@@ -977,15 +982,15 @@ ${tr('welcome.tip')}
       menu_help: tr('menu.help'),
       // File menu
       file_new: tr('menu.new'),
-      file_new_window: tr('menu.newWindow'),
+      file_new_window: tr('menu.new_window'),
       file_open: tr('menu.open'),
       file_save: tr('menu.save'),
-      file_save_as: tr('menu.saveAs'),
+      file_save_as: tr('menu.save_as'),
       menu_export: tr('menu.export'),
-      file_export_html: tr('menu.exportHtml'),
-      file_export_pdf: tr('menu.exportPdf'),
-      file_export_image: tr('menu.exportImage'),
-      file_export_doc: tr('menu.exportDoc'),
+      file_export_html: tr('menu.export_html'),
+      file_export_pdf: tr('menu.export_pdf'),
+      file_export_image: tr('menu.export_image'),
+      file_export_doc: tr('menu.export_doc'),
       // Paragraph menu
       para_h1: tr('menu.heading1'),
       para_h2: tr('menu.heading2'),
@@ -994,14 +999,14 @@ ${tr('welcome.tip')}
       para_h5: tr('menu.heading5'),
       para_h6: tr('menu.heading6'),
       para_table: tr('menu.table'),
-      para_code_block: tr('menu.codeBlock'),
-      para_math_block: tr('menu.mathBlock'),
+      para_code_block: tr('menu.code_block'),
+      para_math_block: tr('menu.math_block'),
       para_quote: tr('menu.quote'),
-      para_bullet_list: tr('menu.bulletList'),
-      para_ordered_list: tr('menu.orderedList'),
-      para_task_list: tr('menu.taskList'),
+      para_bullet_list: tr('menu.bullet_list'),
+      para_ordered_list: tr('menu.ordered_list'),
+      para_task_list: tr('menu.task_list'),
 
-      para_hr: tr('menu.horizontalRule'),
+      para_hr: tr('menu.horizontal_rule'),
       // Format menu
       fmt_bold: tr('menu.bold'),
       fmt_italic: tr('menu.italic'),
@@ -1009,31 +1014,38 @@ ${tr('welcome.tip')}
       fmt_code: tr('menu.code'),
       fmt_link: tr('menu.link'),
       fmt_image: tr('menu.image'),
+      // Cloud insert items (reuse the context-menu strings — same wording)
+      insert_cloud_image: tr('context_menu.insert_cloud_image'),
+      insert_cloud_audio: tr('context_menu.insert_cloud_audio'),
+      insert_cloud_video: tr('context_menu.insert_cloud_video'),
       // View menu — append platform-appropriate shortcut hints
       // v0.41.5 (A5): accelerators are now native — no Unicode hints in labels.
-      view_mode_visual: tr('menu.visualMode'),
-      view_mode_source: tr('menu.sourceMode'),
-      view_mode_split: tr('menu.splitMode'),
-      view_sidebar: tr('menu.toggleSidebar'),
-      view_ai_panel: tr('menu.toggleAIPanel'),
-      view_outline: tr('menu.toggleOutline'),
-      view_zoom_in: tr('menu.zoomIn'),
-      view_zoom_out: tr('menu.zoomOut'),
-      view_actual_size: tr('menu.actualSize'),
+      view_mode_visual: tr('menu.visual_mode'),
+      view_mode_source: tr('menu.source_mode'),
+      view_mode_split: tr('menu.split_mode'),
+      view_sidebar: tr('menu.toggle_sidebar'),
+      view_ai_panel: tr('menu.toggle_aipanel'),
+      view_outline: tr('menu.toggle_outline'),
+      view_zoom_in: tr('menu.zoom_in'),
+      view_zoom_out: tr('menu.zoom_out'),
+      view_actual_size: tr('menu.actual_size'),
       // Help menu
-      help_version_info: tr('menu.versionInfo'),
+      help_version_info: tr('menu.version_info'),
       help_changelog: tr('menu.changelog'),
-      help_privacy: tr('menu.privacyPolicy'),
-      help_website: tr('menu.officialWebsite'),
-      help_about: tr('menu.aboutMoraya'),
+      help_privacy: tr('menu.privacy_policy'),
+      help_website: tr('menu.official_website'),
+      help_about: tr('menu.about_moraya'),
       help_feedback: tr('menu.feedback'),
       // Workflow menu
-      wf_seo: tr('menu.seoOptimization'),
-      wf_image_gen: tr('menu.aiImageGeneration'),
+      wf_seo: tr('menu.seo_optimization'),
+      wf_image_gen: tr('menu.ai_image_generation'),
       wf_publish: tr('menu.publish'),
-      wf_mcp: tr('menu.mcpTools'),
-      wf_mcp_empty: tr('menu.noMCPTools'),
+      wf_mcp: tr('menu.mcp_tools'),
+      wf_mcp_empty: tr('menu.no_mcptools'),
       // Edit — search
+      edit_undo: tr('menu.undo'),
+      edit_redo: tr('menu.redo'),
+      edit_select_all: tr('menu.select_all'),
       edit_find: tr('menu.find'),
       edit_replace: tr('menu.replace'),
       // macOS app menu

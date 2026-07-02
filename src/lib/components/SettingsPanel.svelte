@@ -151,16 +151,16 @@
       groupKey: 'settings.groups.ai',
       items: [
         { key: 'ai', icon: '✦', labelKey: 'settings.tabs.ai' },
-        { key: 'image-ai', icon: '🖼', labelKey: 'settings.tabs.imageAi' },
+        { key: 'image-ai', icon: '🖼', labelKey: 'settings.tabs.image_ai' },
         { key: 'voice', icon: '🎤', labelKey: 'settings.tabs.voice' },
         { key: 'mcp', icon: '⇌', labelKey: 'settings.tabs.mcp' },
       ],
     },
     {
-      groupKey: 'settings.groups.knowledgeBase',
+      groupKey: 'settings.groups.knowledge_base',
       items: [
-        { key: 'knowledge-base', icon: '📚', labelKey: 'settings.tabs.knowledgeBase' },
-        { key: 'kb-sync', icon: '☁', labelKey: 'settings.tabs.kbSync' },
+        { key: 'knowledge-base', icon: '📚', labelKey: 'settings.tabs.knowledge_base' },
+        { key: 'kb-sync', icon: '☁', labelKey: 'settings.tabs.kb_sync' },
       ],
     },
     {
@@ -218,7 +218,12 @@
                 class:active={activeTab === tab.key}
                 onclick={() => activeTab = tab.key}
               >
-                <span class="nav-icon">{tab.icon}</span>
+                <span class="nav-icon">
+                  {#if tab.key === 'picora'}
+                    <!-- Picora brand mark (picora-mark-mono-blue.svg) -->
+                    <svg width="10" height="12" viewBox="8 6 16 20" fill="none" style="vertical-align:-1px"><path d="M9.5 7.5v17" stroke="#2563eb" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="14" r="6.5" stroke="#2563eb" stroke-width="3"/><circle cx="16" cy="14" r="2.4" fill="#2563eb"/></svg>
+                  {:else}{tab.icon}{/if}
+                </span>
                 <span class="nav-label">{$t(tab.labelKey)}</span>
               </button>
             {/each}

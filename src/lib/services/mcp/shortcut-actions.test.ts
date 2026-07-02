@@ -155,7 +155,7 @@ describe('resolveMCPToolPrompt', () => {
     if (result.kind === 'ok') {
       expect(result.server.name).toBe('Filesystem');
       expect(result.tool.name).toBe('read_file');
-      expect(result.message).toContain('ai.prompts.mcpToolPrompt');
+      expect(result.message).toContain('ai.prompts.mcp_tool_prompt');
       expect(result.message).toContain('read_file');
       expect(result.message).toContain('Filesystem');
     }

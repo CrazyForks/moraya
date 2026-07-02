@@ -40,7 +40,7 @@
     { label: '50%', value: '50%' },
     { label: '75%', value: '75%' },
     { label: '100%', value: '100%' },
-    { label: tr('imageMenu.originalSize'), value: '' },
+    { label: tr('image_menu.original_size'), value: '' },
   ];
 
   function handleAction(action: () => void) {
@@ -62,7 +62,7 @@
       onmouseenter={() => showResizeSubmenu = true}
       onmouseleave={() => showResizeSubmenu = false}
     >
-      <span>{tr('imageMenu.resize')}</span>
+      <span>{tr('image_menu.resize')}</span>
       <span class="arrow">›</span>
       {#if showResizeSubmenu}
         <div class="submenu">
@@ -78,41 +78,41 @@
     <div class="menu-divider"></div>
 
     <button class="menu-item" onclick={() => handleAction(onCopyImage)}>
-      {tr('imageMenu.copyImage')}
+      {tr('image_menu.copy_image')}
     </button>
 
     <button class="menu-item" onclick={() => handleAction(onCopyUrl)}>
-      {tr('imageMenu.copyUrl')}
+      {tr('image_menu.copy_url')}
     </button>
 
     <div class="menu-divider"></div>
 
     {#if isUploadable}
       <button class="menu-item" onclick={() => handleAction(onUpload)}>
-        {tr('imageMenu.upload')}
+        {tr('image_menu.upload')}
       </button>
     {/if}
 
     <button class="menu-item" onclick={() => handleAction(onEditAlt)}>
-      {tr('imageMenu.editAlt')}
+      {tr('image_menu.edit_alt')}
     </button>
 
     <div class="menu-divider"></div>
 
     {#if isRemoteUrl}
       <button class="menu-item" onclick={() => handleAction(onOpenInBrowser)}>
-        {tr('imageMenu.openInBrowser')}
+        {tr('image_menu.open_in_browser')}
       </button>
     {/if}
 
     <button class="menu-item" onclick={() => handleAction(onSaveAs)}>
-      {tr('imageMenu.saveAs')}
+      {tr('image_menu.save_as')}
     </button>
 
     <div class="menu-divider"></div>
 
     <button class="menu-item danger" onclick={() => handleAction(onDelete)}>
-      {tr('imageMenu.delete')}
+      {tr('image_menu.delete')}
     </button>
   </div>
 </div>

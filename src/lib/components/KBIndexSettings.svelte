@@ -26,8 +26,8 @@
   let knowledgeBases = $state<KnowledgeBase[]>([]);
 
   const SOURCE_OPTIONS = [
-    { value: 'online', labelKey: 'kb.onlineModel' },
-    { value: 'local', labelKey: 'kb.localModels' },
+    { value: 'online', labelKey: 'kb.online_model' },
+    { value: 'local', labelKey: 'kb.local_models' },
   ];
 
   // Online provider list for the model dropdown

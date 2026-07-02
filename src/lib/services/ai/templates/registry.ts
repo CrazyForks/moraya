@@ -11,8 +11,8 @@ let customTemplates: AITemplate[] = [];
 const MY_TEMPLATES_CATEGORY: AITemplateCategory = {
   id: 'my_templates',
   icon: '📁',
-  nameKey: 'templates.myTemplates.name',
-  descKey: 'templates.myTemplates.desc',
+  nameKey: 'templates.my_templates.name',
+  descKey: 'templates.my_templates.desc',
   sortOrder: 0,
 };
 

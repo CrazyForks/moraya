@@ -40,19 +40,19 @@ export function resolveContent(
 
     case 'document':
       if (!documentContent.trim()) {
-        return { content: '', error: 'templates.error.noDocument' };
+        return { content: '', error: 'templates.error.no_document' };
       }
       return { content: documentContent.slice(-3000) };
 
     case 'selection':
       if (!selectedText.trim()) {
-        return { content: '', error: 'templates.error.noSelection' };
+        return { content: '', error: 'templates.error.no_selection' };
       }
       return { content: selectedText };
 
     case 'document_or_selection':
       if (!selectedText.trim() && !documentContent.trim()) {
-        return { content: '', error: 'templates.error.noContent' };
+        return { content: '', error: 'templates.error.no_content' };
       }
       return { content: selectedText || documentContent.slice(-3000) };
   }

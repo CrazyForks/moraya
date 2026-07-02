@@ -261,7 +261,7 @@ export async function saveMarketplaceSource(source: MarketplaceSource): Promise<
 }
 
 export const MARKETPLACE_SOURCES: Array<{ value: MarketplaceSource; labelKey: string }> = [
-  { value: 'lobehub', labelKey: 'mcp.marketplace.sourceLobehub' },
-  { value: 'smithery', labelKey: 'mcp.marketplace.sourceSmithery' },
-  { value: 'official', labelKey: 'mcp.marketplace.sourceOfficial' },
+  { value: 'lobehub', labelKey: 'mcp.marketplace.source_lobehub' },
+  { value: 'smithery', labelKey: 'mcp.marketplace.source_smithery' },
+  { value: 'official', labelKey: 'mcp.marketplace.source_official' },
 ];

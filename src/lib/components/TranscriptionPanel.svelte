@@ -288,8 +288,8 @@
       setSourceStatus(
         $t(
           sourceMode === 'mixed'
-            ? 'transcription.systemSourceNativeMixedHint'
-            : 'transcription.systemSourceNativeHint',
+            ? 'transcription.system_source_native_mixed_hint'
+            : 'transcription.system_source_native_hint',
         ),
         'info',
       );
@@ -326,8 +326,8 @@
     ) {
       error = $t(
         usesNativeMacSystemSource(mode)
-          ? 'transcription.systemSourceNativePermissionDenied'
-          : 'transcription.systemSourcePermissionDenied',
+          ? 'transcription.system_source_native_permission_denied'
+          : 'transcription.system_source_permission_denied',
       );
       setSourceStatus(null);
       return true;
@@ -769,7 +769,7 @@
   function handleSendToAI() {
     if (!fullTranscript.trim()) return;
     // Build a summarization request
-    const prompt = `${$t(sessionMode === 'interview' ? 'transcription.interviewSummarizePrompt' : 'transcription.summarizePrompt')}\n\n${fullTranscript}`;
+    const prompt = `${$t(sessionMode === 'interview' ? 'transcription.interview_summarize_prompt' : 'transcription.summarize_prompt')}\n\n${fullTranscript}`;
     onSendToAI?.(prompt);
   }
 

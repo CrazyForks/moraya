@@ -134,6 +134,13 @@ pub fn mcp_lan_expose(
     state: State<'_, LanBridge>,
     server_id: String,
 ) -> Result<ExposeInfo, String> {
+    // Layered guard (defense-in-depth): the bridge only forwards to stdio
+    // subprocesses managed by MCPProcessManager. http/sse servers have no
+    // child here and would fail forwarding — reject them up front even if the
+    // frontend gate is bypassed.
+    if !app.state::<MCPProcessManager>().is_running(&server_id) {
+        return Err("Only running stdio MCP servers can be exposed over LAN".to_string());
+    }
     let port = state.ensure_started(app)?;
     let token = gen_token();
     state

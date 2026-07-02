@@ -283,7 +283,7 @@
   {#if picoraTargets.length === 0}
     <div class="empty-state">
       <p>{tr('settings.picora.account.empty')}</p>
-      <button class="btn-primary" onclick={onOpenImport}>{tr('settings.picora.account.addFirst')}</button>
+      <button class="btn-primary" onclick={onOpenImport}>{tr('settings.picora.account.add_first')}</button>
     </div>
   {:else}
     <div class="account-list">
@@ -294,18 +294,18 @@
           <div class="card-head">
             <div class="title-row">
               {#if target.id === defaultPicoraId}<span class="star">★</span>{/if}
-              <span class="email">{target.picoraUserEmail || tr('settings.picora.account.unknownEmail')}</span>
+              <span class="email">{target.picoraUserEmail || tr('settings.picora.account.unknown_email')}</span>
               {#if quota?.data}
                 <span class="plan-badge {planBadgeClass(quota.data.plan)}">{planLabel(quota.data.plan)}</span>
               {/if}
-              <span class="endpoint">{target.picoraApiUrl || tr('settings.picora.account.noEndpoint')}</span>
+              <span class="endpoint">{target.picoraApiUrl || tr('settings.picora.account.no_endpoint')}</span>
               {#if inUseCount > 0}
-                <span class="in-use-badge">{tr('settings.picora.account.inUse', { n: String(inUseCount) })}</span>
+                <span class="in-use-badge">{tr('settings.picora.account.in_use', { n: String(inUseCount) })}</span>
               {/if}
             </div>
             <div class="actions">
               {#if target.id !== defaultPicoraId}
-                <button class="action-btn" onclick={() => setDefault(target.id)} title={tr('settings.picora.account.setDefault')}>★</button>
+                <button class="action-btn" onclick={() => setDefault(target.id)} title={tr('settings.picora.account.set_default')}>★</button>
               {/if}
               <button
                 class="action-btn"
@@ -341,72 +341,72 @@
             </div>
 
             {#if quota?.loading && !quota.data}
-              <div class="quota-loading">{tr('settings.picora.account.quotaLoading')}</div>
+              <div class="quota-loading">{tr('settings.picora.account.quota_loading')}</div>
             {:else if quota?.error && !quota.data}
-              <div class="quota-error">{tr('settings.picora.account.quotaUnavailable')}</div>
+              <div class="quota-error">{tr('settings.picora.account.quota_unavailable')}</div>
             {:else if quota?.data}
               {@const d = quota.data}
               {@const limits = d.planLimits ?? getFallbackPlanLimits(d.plan)}
               {#if d.plan === 'none' && (limits.imgStorageBytes === 0)}
                 <div class="cta-card">
-                  <p>{tr('settings.picora.account.notActivated')}</p>
+                  <p>{tr('settings.picora.account.not_activated')}</p>
                   <a href="https://center.picora.me" target="_blank" rel="noreferrer">{tr('settings.picora.account.activate')} ↗</a>
                 </div>
               {:else}
-                <div class="quota-rows">
-                  <div class="quota-row">
-                    <span class="row-label">{tr('settings.picora.quota.images')}</span>
+                <div class="quota-chips">
+                  <div class="chip">
+                    <span class="chip-label">{tr('settings.picora.quota.images')}</span>
                     {#if d.images === null}
-                      <span class="row-na" title={tr('settings.picora.account.dataPointNa')}>-</span>
+                      <span class="chip-value chip-na" title={tr('settings.picora.account.data_point_na')}>-</span>
                     {:else}
                       {@const used = d.images.storageUsed ?? 0}
                       {@const pct = fmtPercent(used, limits.imgStorageBytes)}
-                      <div class="bar"><div class="bar-fill {progressClass(pct)}" style="width:{pct}%"></div></div>
-                      <span class="row-info">{fmtBytes(used)} / {fmtBytes(limits.imgStorageBytes)}</span>
+                      <span class="chip-value">{fmtBytes(used)} / {fmtBytes(limits.imgStorageBytes)}</span>
+                      <span class="chip-dot {progressClass(pct)}" title="{pct}%"></span>
                     {/if}
                   </div>
-                  <div class="quota-row">
-                    <span class="row-label">{tr('settings.picora.quota.docs')}</span>
+                  <div class="chip">
+                    <span class="chip-label">{tr('settings.picora.quota.docs')}</span>
                     {#if d.docs === null}
-                      <span class="row-na" title={d.usageV2 ? tr('settings.picora.account.dataPointNa') : tr('settings.picora.account.needsPicoraV017')}>-</span>
+                      <span class="chip-value chip-na" title={d.usageV2 ? tr('settings.picora.account.data_point_na') : tr('settings.picora.account.needs_picora_v017')}>-</span>
                     {:else}
                       {@const used = d.docs.totalCount ?? 0}
                       {@const pct = fmtPercent(used, limits.docCount)}
-                      <div class="bar"><div class="bar-fill {progressClass(pct)}" style="width:{pct}%"></div></div>
-                      <span class="row-info">{used} / {limits.docCount}</span>
+                      <span class="chip-value">{used} / {limits.docCount}</span>
+                      <span class="chip-dot {progressClass(pct)}" title="{pct}%"></span>
                     {/if}
                   </div>
-                  <div class="quota-row">
-                    <span class="row-label">{tr('settings.picora.quota.audio')}</span>
+                  <div class="chip">
+                    <span class="chip-label">{tr('settings.picora.quota.audio')}</span>
                     {#if d.audio === null}
-                      <span class="row-na" title={d.usageV2 ? tr('settings.picora.account.dataPointNa') : tr('settings.picora.account.needsPicoraV017')}>-</span>
+                      <span class="chip-value chip-na" title={d.usageV2 ? tr('settings.picora.account.data_point_na') : tr('settings.picora.account.needs_picora_v017')}>-</span>
                     {:else}
                       {@const used = d.audio.storageUsed ?? 0}
                       {@const pct = fmtPercent(used, limits.audioStorageBytes)}
-                      <div class="bar"><div class="bar-fill {progressClass(pct)}" style="width:{pct}%"></div></div>
-                      <span class="row-info">{fmtBytes(used)} / {fmtBytes(limits.audioStorageBytes)}</span>
+                      <span class="chip-value">{fmtBytes(used)} / {fmtBytes(limits.audioStorageBytes)}</span>
+                      <span class="chip-dot {progressClass(pct)}" title="{pct}%"></span>
                     {/if}
                   </div>
-                  <div class="quota-row">
-                    <span class="row-label">{tr('settings.picora.quota.videos')}</span>
+                  <div class="chip">
+                    <span class="chip-label">{tr('settings.picora.quota.videos')}</span>
                     {#if d.videos === null}
-                      <span class="row-na" title={tr('settings.picora.account.dataPointNa')}>-</span>
+                      <span class="chip-value chip-na" title={tr('settings.picora.account.data_point_na')}>-</span>
                     {:else}
                       {@const used = d.videos.storageUsed ?? 0}
                       {@const pct = fmtPercent(used, limits.videoStorageBytes)}
-                      <div class="bar"><div class="bar-fill {progressClass(pct)}" style="width:{pct}%"></div></div>
-                      <span class="row-info">{fmtBytes(used)} / {fmtBytes(limits.videoStorageBytes)}</span>
+                      <span class="chip-value">{fmtBytes(used)} / {fmtBytes(limits.videoStorageBytes)}</span>
+                      <span class="chip-dot {progressClass(pct)}" title="{pct}%"></span>
                     {/if}
                   </div>
-                  <div class="quota-row">
-                    <span class="row-label">{tr('settings.picora.quota.kbs')}</span>
+                  <div class="chip">
+                    <span class="chip-label">{tr('settings.picora.quota.kbs')}</span>
                     {#if d.kbs === null}
-                      <span class="row-na" title={d.usageV2 ? tr('settings.picora.account.dataPointNa') : tr('settings.picora.account.needsPicoraV017')}>-</span>
+                      <span class="chip-value chip-na" title={d.usageV2 ? tr('settings.picora.account.data_point_na') : tr('settings.picora.account.needs_picora_v017')}>-</span>
                     {:else}
                       {@const used = d.kbs.totalCount ?? 0}
                       {@const pct = fmtPercent(used, limits.kbCount)}
-                      <div class="bar"><div class="bar-fill {progressClass(pct)}" style="width:{pct}%"></div></div>
-                      <span class="row-info">{used} / {limits.kbCount}</span>
+                      <span class="chip-value">{used} / {limits.kbCount}</span>
+                      <span class="chip-dot {progressClass(pct)}" title="{pct}%"></span>
                     {/if}
                   </div>
                 </div>
@@ -423,24 +423,24 @@
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal">
-      <h4>{tr('settings.picora.editTitle')}</h4>
+      <h4>{tr('settings.picora.edit_title')}</h4>
       <div class="field">
-        <label for="picora-edit-name">{tr('imageHost.targetName')}</label>
+        <label for="picora-edit-name">{tr('image_host.target_name')}</label>
         <input id="picora-edit-name" type="text" bind:value={editing.name} />
       </div>
       <div class="field">
-        <label for="picora-edit-api">{tr('imageHost.picoraApiUrl')}</label>
+        <label for="picora-edit-api">{tr('image_host.picora_api_url')}</label>
         <input id="picora-edit-api" type="text" bind:value={editing.picoraApiUrl} />
       </div>
       <div class="field">
-        <label for="picora-edit-img">{tr('imageHost.picoraImgDomain')}</label>
+        <label for="picora-edit-img">{tr('image_host.picora_img_domain')}</label>
         <input id="picora-edit-img" type="text" bind:value={editing.picoraImgDomain} />
       </div>
       <div class="field">
-        <label for="picora-edit-key">{tr('imageHost.picoraApiKey')}</label>
+        <label for="picora-edit-key">{tr('image_host.picora_api_key')}</label>
         <input id="picora-edit-key" type="password"
           bind:value={editing.picoraApiKey}
-          placeholder={editing.picoraKeyMigratedV069 ? tr('imageHost.picoraApiKeyKeychain') : ''} />
+          placeholder={editing.picoraKeyMigratedV069 ? tr('image_host.picora_api_key_keychain') : ''} />
       </div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick={cancelEdit}>{tr('common.cancel')}</button>
@@ -454,23 +454,23 @@
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal">
-      <h4>⚠ {tr('settings.picora.account.removeConfirmTitle')}</h4>
-      <p>{tr('settings.picora.account.removeConfirmBody', { email: removing.picoraUserEmail || removing.name })}</p>
+      <h4>⚠ {tr('settings.picora.account.remove_confirm_title')}</h4>
+      <p>{tr('settings.picora.account.remove_confirm_body', { email: removing.picoraUserEmail || removing.name })}</p>
       <ul class="cascade-list">
         {#if removing.id === defaultPicoraId}
-          <li>{tr('settings.picora.account.cascadeDefault')}</li>
+          <li>{tr('settings.picora.account.cascade_default')}</li>
         {/if}
         {#if removing.id === defaultImageHostId}
-          <li>{tr('settings.picora.account.cascadeImageHost')}</li>
+          <li>{tr('settings.picora.account.cascade_image_host')}</li>
         {/if}
         {#if (kbBindingsByTargetId.get(removing.id) ?? 0) > 0}
-          <li>{tr('settings.picora.account.cascadeKbBindings', { n: String(kbBindingsByTargetId.get(removing.id) ?? 0) })}</li>
+          <li>{tr('settings.picora.account.cascade_kb_bindings', { n: String(kbBindingsByTargetId.get(removing.id) ?? 0) })}</li>
         {/if}
       </ul>
-      <p class="cloud-data-note">{tr('settings.picora.account.cloudDataPreserved')}</p>
+      <p class="cloud-data-note">{tr('settings.picora.account.cloud_data_preserved')}</p>
       <div class="modal-actions">
         <button class="btn-cancel" onclick={cancelRemove}>{tr('common.cancel')}</button>
-        <button class="btn-danger" onclick={confirmRemove}>{tr('settings.picora.account.confirmRemove')}</button>
+        <button class="btn-danger" onclick={confirmRemove}>{tr('settings.picora.account.confirm_remove')}</button>
       </div>
     </div>
   </div>
@@ -606,17 +606,45 @@
   .quota-refresh:hover { color: var(--accent-color); }
   .quota-loading, .quota-error { font-size: var(--font-size-xs); color: var(--text-muted); padding: 0.3rem 0; }
 
-  .quota-rows { display: grid; grid-template-columns: max-content 1fr max-content; gap: 0.3rem 0.6rem; align-items: center; }
-  .quota-row { display: contents; }
-  .row-label { font-size: var(--font-size-xs); color: var(--text-muted); white-space: nowrap; }
-  .row-info { font-size: var(--font-size-xs); color: var(--text-secondary); white-space: nowrap; }
-  .row-na { font-size: var(--font-size-xs); color: var(--text-muted); grid-column: 2 / span 2; }
-  .bar { height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden; }
-  .bar-fill { height: 100%; transition: width 0.2s ease; }
-  .bar-fill.green { background: #28a745; }
-  .bar-fill.yellow { background: #ffc107; }
-  .bar-fill.orange { background: #fd7e14; }
-  .bar-fill.red { background: #dc3545; }
+  /* 3-column chip grid: 5 metrics land in 2 rows (2nd row half-full).
+     Each chip is a pill with label + value + a small colored dot that
+     encodes the percentage bucket (green→red). Percentage available on
+     hover via the dot's title attribute. */
+  .quota-chips {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem 0.5rem;
+  }
+  .chip {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+    padding: 0.22rem 0.55rem;
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    font-size: var(--font-size-xs);
+    line-height: 1.3;
+  }
+  .chip-label { color: var(--text-muted); flex-shrink: 0; }
+  .chip-value {
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    margin-left: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chip-value.chip-na { opacity: 0.55; }
+  .chip-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .chip-dot.green  { background: #28a745; }
+  .chip-dot.yellow { background: #ffc107; }
+  .chip-dot.orange { background: #fd7e14; }
+  .chip-dot.red    { background: #dc3545; }
 
   .cta-card {
     padding: 0.75rem;

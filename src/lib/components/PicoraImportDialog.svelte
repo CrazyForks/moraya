@@ -93,7 +93,7 @@
         };
         mode = 'preview';
       } else {
-        errorMsg = tr('imageHost.picoraImportInvalid');
+        errorMsg = tr('image_host.picora_import_invalid');
         mode = 'failed';
       }
     } catch (e: unknown) {
@@ -150,7 +150,7 @@
       imageHostTargets: [target, ...targets],
       defaultImageHostId: target.id,
     });
-    const successMsg = tr('imageHost.picoraImportSuccess').replace('{email}', preview.user.email);
+    const successMsg = tr('image_host.picora_import_success').replace('{email}', preview.user.email);
     onToast?.(successMsg, 'success');
     close();
   }
@@ -192,31 +192,31 @@
     <div class="picora-dialog">
       <header class="picora-header">
         <span class="picora-icon">⭐</span>
-        <h3>{tr('imageHost.picoraImportTitle')}</h3>
+        <h3>{tr('image_host.picora_import_title')}</h3>
       </header>
 
       {#if mode === 'verifying'}
-        <p class="picora-status">{tr('imageHost.picoraVerifying')}</p>
+        <p class="picora-status">{tr('image_host.picora_verifying')}</p>
       {:else if mode === 'preview' && preview}
         <dl class="picora-preview">
-          <dt>{tr('imageHost.picoraUserEmail')}</dt>
+          <dt>{tr('image_host.picora_user_email')}</dt>
           <dd>{preview.user.email} <span class="picora-plan">{preview.user.plan}</span></dd>
-          <dt>{tr('imageHost.picoraApiUrl')}</dt>
+          <dt>{tr('image_host.picora_api_url')}</dt>
           <dd>{preview.apiUrl}</dd>
-          <dt>{tr('imageHost.picoraImgDomain')}</dt>
+          <dt>{tr('image_host.picora_img_domain')}</dt>
           <dd>{preview.imgDomain}</dd>
-          <dt>{tr('imageHost.picoraTokenPreview')}</dt>
+          <dt>{tr('image_host.picora_token_preview')}</dt>
           <dd><code>{maskToken(preview.apiKey)}</code></dd>
         </dl>
       {:else if mode === 'failed'}
-        <p class="picora-error">{errorMsg || tr('imageHost.picoraVerifyFailed')}</p>
+        <p class="picora-error">{errorMsg || tr('image_host.picora_verify_failed')}</p>
       {:else if mode === 'manual'}
-        <p class="picora-hint">{tr('imageHost.picoraImportHint')}</p>
+        <p class="picora-hint">{tr('image_host.picora_import_hint')}</p>
         <button class="picora-link" onclick={openPicoraConsole}>
-          {tr('imageHost.picoraOpenConsole')} ↗
+          {tr('image_host.picora_open_console')} ↗
         </button>
         <div class="picora-field">
-          <label for="picora-manual-base">{tr('imageHost.picoraApiUrl')}</label>
+          <label for="picora-manual-base">{tr('image_host.picora_api_url')}</label>
           <input
             id="picora-manual-base"
             type="text"
@@ -225,12 +225,12 @@
           />
         </div>
         <div class="picora-field">
-          <label for="picora-manual-key">{tr('imageHost.picoraApiKey')}</label>
+          <label for="picora-manual-key">{tr('image_host.picora_api_key')}</label>
           <input
             id="picora-manual-key"
             type="password"
             bind:value={manualKey}
-            placeholder={tr('imageHost.picoraApiKeyPlaceholder')}
+            placeholder={tr('image_host.picora_api_key_placeholder')}
           />
         </div>
       {/if}
@@ -245,15 +245,15 @@
             onclick={verifyManual}
             disabled={busy || !manualKey.trim()}
           >
-            {busy ? tr('imageHost.picoraVerifying') : tr('imageHost.picoraVerify')}
+            {busy ? tr('image_host.picora_verifying') : tr('image_host.picora_verify')}
           </button>
         {:else if mode === 'preview'}
           <button class="picora-btn picora-btn-primary" onclick={applyImport} disabled={busy}>
-            {tr('imageHost.picoraConfirmImport')}
+            {tr('image_host.picora_confirm_import')}
           </button>
         {:else if mode === 'failed'}
           <button class="picora-btn picora-btn-primary" onclick={openManual} disabled={busy}>
-            {tr('imageHost.picoraManualEntry')}
+            {tr('image_host.picora_manual_entry')}
           </button>
         {/if}
       </footer>

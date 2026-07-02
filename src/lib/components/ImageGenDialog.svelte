@@ -142,13 +142,13 @@
   // Step 1: Generate prompts
   async function handleGeneratePrompts() {
     if (!textAIConfig?.apiKey) {
-      promptError = tr('errors.aiNotConfigured');
+      promptError = tr('errors.ai_not_configured');
       return;
     }
 
     const content = getEffectiveDocumentContent();
     if (!content || content.trim().length < 50) {
-      promptError = tr('imageGen.contentTooShort');
+      promptError = tr('image_gen.content_too_short');
       return;
     }
 
@@ -324,7 +324,7 @@
   <div class="dialog" onclick={(e) => e.stopPropagation()}>
     <!-- Header -->
     <div class="dialog-header">
-      <h3>{tr('imageGen.title')}</h3>
+      <h3>{tr('image_gen.title')}</h3>
       <button class="close-btn" onclick={onClose}>×</button>
     </div>
 
@@ -344,15 +344,15 @@
         <div class="step-content">
           {#if preDefinedPrompts && preDefinedPrompts.length > 0 && !hasGenerated}
             <div class="predefined-banner">
-              <span>{tr('imageGen.preDefinedDetected').replace('{count}', String(preDefinedPrompts.length))}</span>
+              <span>{tr('image_gen.pre_defined_detected').replace('{count}', String(preDefinedPrompts.length))}</span>
               <button class="use-predefined-btn" onclick={usePredefinedPrompts}>
-                {tr('imageGen.usePredefined')}
+                {tr('image_gen.use_predefined')}
               </button>
             </div>
           {/if}
           <!-- Row 1: Title + Mode pills + Style dropdown -->
           <div class="mode-row">
-            <h4 class="mode-label">{tr('imageGen.step1Title')}</h4>
+            <h4 class="mode-label">{tr('image_gen.step1_title')}</h4>
             {#each MODE_OPTIONS as m}
               <button
                 class="mode-btn"
@@ -363,7 +363,7 @@
               </button>
             {/each}
             <div class="mode-row-spacer"></div>
-            <label class="mini-label" for="imggen-style">{tr('imageGen.styleLabel')}</label>
+            <label class="mini-label" for="imggen-style">{tr('image_gen.style_label')}</label>
             <select id="imggen-style" class="mini-select style-select" bind:value={imageStyle} onchange={() => { if (!preDefinedPrompts || !hasGenerated) { prompts = []; } }}>
               {#each availableStyles as s}
                 <option value={s}>{tr(`imageGen.style_${s}`)}</option>
@@ -374,13 +374,13 @@
           <!-- Row 3: Ratio + Resolution + Count -->
           <div class="step-header">
             <div class="step-controls">
-              <label class="mini-label" for="imggen-ratio">{tr('ai.imageConfig.ratio')}</label>
+              <label class="mini-label" for="imggen-ratio">{tr('ai.image_config.ratio')}</label>
               <select id="imggen-ratio" class="mini-select" bind:value={imgRatio}>
                 {#each RATIO_OPTIONS as r}
                   <option value={r}>{r}</option>
                 {/each}
               </select>
-              <label class="mini-label" for="imggen-size-level">{tr('ai.imageConfig.sizeLevel')}</label>
+              <label class="mini-label" for="imggen-size-level">{tr('ai.image_config.size_level')}</label>
               <select id="imggen-size-level" class="mini-select" bind:value={imgSizeLevel}>
                 {#each SIZE_LEVEL_OPTIONS as s}
                   <option value={s}>{tr(`ai.imageConfig.size_${s}`)}</option>
@@ -389,7 +389,7 @@
               <span class="mini-hint">{imgResolvedSize}</span>
             </div>
             <div class="step-controls">
-              <label class="mini-label" for="imggen-count">{tr('imageGen.countLabel')}</label>
+              <label class="mini-label" for="imggen-count">{tr('image_gen.count_label')}</label>
               <select id="imggen-count" class="mini-select style-select" bind:value={imageCount} onchange={() => { if (!preDefinedPrompts || !hasGenerated) { prompts = []; } }}>
                 {#each Array.from({length: 10}, (_, i) => i + 1) as n}
                   <option value={n}>{n}</option>
@@ -402,23 +402,23 @@
             <div class="config-status">
               <div class="config-item" class:ready={isTextAIReady} class:missing={!isTextAIReady}>
                 <span>{isTextAIReady ? '✓' : '✗'}</span>
-                <span>{tr('ai.textAiLabel')}</span>
+                <span>{tr('ai.text_ai_label')}</span>
               </div>
               <div class="config-item" class:ready={isImageAIReady} class:missing={!isImageAIReady}>
                 <span>{isImageAIReady ? '✓' : '✗'}</span>
-                <span>{tr('ai.imageAiLabel')}</span>
+                <span>{tr('ai.image_ai_label')}</span>
               </div>
-              <p class="config-hint">{tr('ai.unconfiguredHint', { shortcut: navigator.platform.includes('Mac') ? 'Cmd+,' : 'Ctrl+,' })}</p>
+              <p class="config-hint">{tr('ai.unconfigured_hint', { shortcut: navigator.platform.includes('Mac') ? 'Cmd+,' : 'Ctrl+,' })}</p>
               {#if onOpenSettings}
                 <button class="btn btn-settings" onclick={onOpenSettings}>
-                  {!isImageAIReady && isTextAIReady ? tr('ai.openImageSettings') : tr('ai.openSettings')}
+                  {!isImageAIReady && isTextAIReady ? tr('ai.open_image_settings') : tr('ai.open_settings')}
                 </button>
               {/if}
             </div>
           {:else if isGeneratingPrompts}
             <div class="loading-state">
               <span class="spinner"></span>
-              <span>{tr('imageGen.generatingPrompts')}</span>
+              <span>{tr('image_gen.generating_prompts')}</span>
             </div>
           {:else if promptError}
             <div class="error-state">
@@ -437,7 +437,7 @@
                     class="prompt-text"
                     bind:value={prompt.prompt}
                     rows="2"
-                    aria-label={tr('imageGen.step1Title')}
+                    aria-label={tr('image_gen.step1_title')}
                   ></textarea>
                 </div>
               {/each}
@@ -448,7 +448,7 @@
       {:else if step === 2}
         <!-- Step 2: Generate images -->
         <div class="step-content">
-          <h4>{tr('imageGen.step2Title')}</h4>
+          <h4>{tr('image_gen.step2_title')}</h4>
           <div class="image-grid">
             {#each generatedImages as img, i}
               <div class="image-card" class:selected={img.selected}>
@@ -479,29 +479,29 @@
               </div>
             {/each}
           </div>
-          <div class="selected-count">{tr('imageGen.selected', { count: String(selectedCount) })}</div>
+          <div class="selected-count">{tr('image_gen.selected', { count: String(selectedCount) })}</div>
         </div>
 
       {:else}
         <!-- Step 3: Insert -->
         <div class="step-content">
-          <h4>{tr('imageGen.step3Title')}</h4>
+          <h4>{tr('image_gen.step3_title')}</h4>
           <div class="insert-options">
             <label class="insert-option">
               <input type="radio" name="insert-mode" value="paragraph" bind:group={insertMode} />
-              <span>{tr('imageGen.insertParagraph')}</span>
+              <span>{tr('image_gen.insert_paragraph')}</span>
             </label>
             <label class="insert-option">
               <input type="radio" name="insert-mode" value="end" bind:group={insertMode} />
-              <span>{tr('imageGen.insertEnd')}</span>
+              <span>{tr('image_gen.insert_end')}</span>
             </label>
             <label class="insert-option">
               <input type="radio" name="insert-mode" value="replace" bind:group={insertMode} />
-              <span>{tr('imageGen.insertReplace')}</span>
+              <span>{tr('image_gen.insert_replace')}</span>
             </label>
             <label class="insert-option">
               <input type="radio" name="insert-mode" value="clipboard" bind:group={insertMode} />
-              <span>{tr('imageGen.insertClipboard')}</span>
+              <span>{tr('image_gen.insert_clipboard')}</span>
             </label>
           </div>
 
@@ -518,27 +518,27 @@
     <!-- Footer -->
     <div class="dialog-footer">
       {#if step > 1}
-        <button class="btn btn-secondary" onclick={() => step--}>{tr('imageGen.back')}</button>
+        <button class="btn btn-secondary" onclick={() => step--}>{tr('image_gen.back')}</button>
       {/if}
       <div class="footer-spacer"></div>
       {#if step === 1}
         {#if hasGenerated}
           <button class="btn btn-secondary" onclick={handleGeneratePrompts} disabled={isGeneratingPrompts || !isBothReady}>↻ {tr('seo.regenerate')}</button>
           <button class="btn btn-primary" onclick={goToStep2} disabled={prompts.length === 0 || isGeneratingPrompts}>
-            {tr('imageGen.next')}
+            {tr('image_gen.next')}
           </button>
         {:else}
           <button class="btn btn-primary" onclick={handleGeneratePrompts} disabled={isGeneratingPrompts || !isBothReady}>
-            {tr('imageGen.generate')}
+            {tr('image_gen.generate')}
           </button>
         {/if}
       {:else if step === 2}
         <button class="btn btn-primary" onclick={goToStep3} disabled={selectedCount === 0 || isGeneratingImages}>
-          {tr('imageGen.next')}
+          {tr('image_gen.next')}
         </button>
       {:else}
         <button class="btn btn-primary" onclick={handleInsert}>
-          {tr('imageGen.insertConfirm')}
+          {tr('image_gen.insert_confirm')}
         </button>
       {/if}
     </div>

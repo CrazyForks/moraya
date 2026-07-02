@@ -192,15 +192,15 @@ export async function createService(params: CreateServiceParams): Promise<Dynami
   if (!settingsStore.getState().mcpAutoApprove) {
     const tr = get(t);
     const confirmed = await ask(
-      tr('mcp.aiServices.launchConfirmMsg', {
+      tr('mcp.ai_services.launch_confirm_msg', {
         name,
         tools: tools.map((t) => t.name).join(', '),
       }),
       {
-        title: tr('mcp.aiServices.launchConfirmTitle'),
+        title: tr('mcp.ai_services.launch_confirm_title'),
         kind: 'warning',
-        okLabel: tr('mcp.aiServices.launchConfirmOk'),
-        cancelLabel: tr('mcp.aiServices.launchConfirmCancel'),
+        okLabel: tr('mcp.ai_services.launch_confirm_ok'),
+        cancelLabel: tr('mcp.ai_services.launch_confirm_cancel'),
       },
     );
     if (!confirmed) {

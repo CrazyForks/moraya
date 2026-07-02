@@ -23,11 +23,11 @@
 
   function targetLabel(targetId: string): string {
     const t = picoraTargets.find(t => t.id === targetId);
-    return t ? (t.picoraUserEmail || t.name || targetId.slice(0, 8)) : tr('settings.picora.kbSync.missingTarget');
+    return t ? (t.picoraUserEmail || t.name || targetId.slice(0, 8)) : tr('settings.picora.kb_sync.missing_target');
   }
 
   function fmtSync(at: string | null): string {
-    if (!at) return tr('settings.picora.kbSync.never');
+    if (!at) return tr('settings.picora.kb_sync.never');
     try {
       const d = new Date(at);
       return `${d.getMonth() + 1}-${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -37,12 +37,12 @@
 
 <section class="kb-sync-section">
   <header class="section-header">
-    <h3>{tr('settings.picora.kbSync.title')}</h3>
-    <button class="btn-link" onclick={onOpenKbSync}>{tr('settings.picora.kbSync.openManager')} →</button>
+    <h3>{tr('settings.picora.kb_sync.title')}</h3>
+    <button class="btn-link" onclick={onOpenKbSync}>{tr('settings.picora.kb_sync.open_manager')} →</button>
   </header>
 
   {#if bound.length === 0 && unbound.length === 0}
-    <p class="empty">{tr('settings.picora.kbSync.empty')}</p>
+    <p class="empty">{tr('settings.picora.kb_sync.empty')}</p>
   {:else}
     <div class="kb-list">
       {#each bound as kb (kb.id)}
@@ -54,7 +54,7 @@
           </div>
           <div class="kb-status">
             {#if kb.picoraBinding!.lastSyncError}
-              <span class="status-error" title={kb.picoraBinding!.lastSyncError}>⚠ {tr('settings.picora.kbSync.error')}</span>
+              <span class="status-error" title={kb.picoraBinding!.lastSyncError}>⚠ {tr('settings.picora.kb_sync.error')}</span>
             {:else}
               <span class="status-ok">✓ {fmtSync(kb.picoraBinding!.lastSyncAt)}</span>
             {/if}
@@ -63,11 +63,11 @@
       {/each}
       {#if unbound.length > 0}
         <div class="unbound-block">
-          <div class="unbound-label">{tr('settings.picora.kbSync.unboundLabel')}</div>
+          <div class="unbound-label">{tr('settings.picora.kb_sync.unbound_label')}</div>
           {#each unbound as kb (kb.id)}
             <div class="kb-row unbound">
               <span class="kb-name">{kb.name}</span>
-              <button class="btn-link" onclick={onOpenKbSync}>+ {tr('settings.picora.kbSync.bindAction')}</button>
+              <button class="btn-link" onclick={onOpenKbSync}>+ {tr('settings.picora.kb_sync.bind_action')}</button>
             </div>
           {/each}
         </div>

@@ -39,7 +39,7 @@
     <div class="banner">
       <span class="banner-icon">✨</span>
       <p class="banner-text">{tr('settings.picora.banner')}</p>
-      <button class="banner-dismiss" onclick={dismissBanner}>{tr('settings.picora.bannerDismiss')}</button>
+      <button class="banner-dismiss" onclick={dismissBanner}>{tr('settings.picora.banner_dismiss')}</button>
       <button class="banner-close" onclick={dismissBanner} aria-label={tr('common.close')}>✕</button>
     </div>
   {/if}
@@ -51,7 +51,7 @@
       <h3>{tr('settings.picora.welcome.title')}</h3>
       <p>{tr('settings.picora.welcome.body')}</p>
       <div class="welcome-actions">
-        <button class="btn-primary" onclick={openImport}>✨ {tr('settings.picora.welcome.oneClick')}</button>
+        <button class="btn-primary" onclick={openImport}>✨ {tr('settings.picora.welcome.one_click')}</button>
         <button class="btn-secondary" onclick={openImport}>{tr('settings.picora.welcome.manual')}</button>
       </div>
       <div class="welcome-divider"><span>{tr('settings.picora.welcome.or')}</span></div>

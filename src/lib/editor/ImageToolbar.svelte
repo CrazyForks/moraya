@@ -22,7 +22,7 @@
     { label: '50%', value: '50%' },
     { label: '75%', value: '75%' },
     { label: '100%', value: '100%' },
-    { label: tr('imageMenu.originalSize'), value: '' },
+    { label: tr('image_menu.original_size'), value: '' },
   ];
 
   function handleResize(value: string) {
@@ -62,7 +62,7 @@
         class="size-btn"
         class:active={currentWidth === opt.value}
         onclick={() => handleResize(opt.value)}
-        title={opt.value || tr('imageMenu.originalSize')}
+        title={opt.value || tr('image_menu.original_size')}
       >
         {opt.label}
       </button>

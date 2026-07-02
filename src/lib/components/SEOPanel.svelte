@@ -31,13 +31,13 @@
 
   async function generate() {
     if (!providerConfig || !providerConfig.apiKey) {
-      error = tr('errors.aiNotConfigured');
+      error = tr('errors.ai_not_configured');
       return;
     }
 
     const content = editorStore.getState().content;
     if (!content || content.trim().length < 50) {
-      error = tr('seo.contentTooShort');
+      error = tr('seo.content_too_short');
       return;
     }
 
@@ -108,10 +108,10 @@
       </div>
     {:else if !isAIConfigured}
       <div class="error-state">
-        <p>{tr('errors.aiNotConfigured')}</p>
-        <p class="config-hint">{tr('ai.unconfiguredHint', { shortcut: navigator.platform.includes('Mac') ? 'Cmd+,' : 'Ctrl+,' })}</p>
+        <p>{tr('errors.ai_not_configured')}</p>
+        <p class="config-hint">{tr('ai.unconfigured_hint', { shortcut: navigator.platform.includes('Mac') ? 'Cmd+,' : 'Ctrl+,' })}</p>
         {#if onOpenSettings}
-          <button class="btn btn-settings" onclick={onOpenSettings}>{tr('ai.openSettings')}</button>
+          <button class="btn btn-settings" onclick={onOpenSettings}>{tr('ai.open_settings')}</button>
         {/if}
       </div>
     {:else if error}
@@ -141,7 +141,7 @@
             class="custom-title-input"
             value={seoData.selectedTitle}
             oninput={handleCustomTitle}
-            placeholder={tr('seo.customTitle')}
+            placeholder={tr('seo.custom_title')}
           />
         </div>
       </div>
@@ -175,7 +175,7 @@
             id="seo-tag-input"
             type="text"
             class="tag-input"
-            placeholder={tr('seo.addTag')}
+            placeholder={tr('seo.add_tag')}
             onkeydown={addTag}
           />
         </div>
@@ -190,7 +190,7 @@
       <!-- Meta Description -->
       <div class="seo-section">
         <label class="section-label" for="seo-meta-desc">
-          {tr('seo.metaDescription')}
+          {tr('seo.meta_description')}
           <span class="char-count">{seoData.metaDescription.length}/160</span>
         </label>
         <textarea

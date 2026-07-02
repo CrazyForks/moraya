@@ -609,7 +609,7 @@ export async function executeAICommand(
   const rawConfig = aiStore.getActiveConfig();
   const tr = get(t);
   if (!rawConfig || !state.isConfigured) {
-    throw new Error(tr('errors.aiNotConfigured'));
+    throw new Error(tr('errors.ai_not_configured'));
   }
 
   // Apply global aiMaxTokens setting
@@ -618,7 +618,7 @@ export async function executeAICommand(
 
   const commandDef = COMMANDS.find(c => c.command === command);
   if (!commandDef && command !== 'custom') {
-    throw new Error(tr('errors.unknownCommand', { command }));
+    throw new Error(tr('errors.unknown_command', { command }));
   }
 
   aiStore.setLoading(true);
@@ -1693,9 +1693,9 @@ export async function sendChatMessage(message: string, documentContext?: string,
 
       // UI-level hint: tell the user they can increase the limit
       const tr = get(t);
-      const settingsHint = tr('settings.permissions.aiMaxToolRounds');
+      const settingsHint = tr('settings.permissions.ai_max_tool_rounds');
       aiStore.appendStreamContent(
-        `\n\n⚠️ [${tr('settings.permissions.aiTitle')} → ${settingsHint}: ${MAX_TOOL_ROUNDS}]`
+        `\n\n⚠️ [${tr('settings.permissions.ai_title')} → ${settingsHint}: ${MAX_TOOL_ROUNDS}]`
       );
 
       const summaryPrompt: ChatMessage = {

@@ -172,7 +172,7 @@
                   onclick={() => { picoraBindingKb = kb; }}
                   title={kb.picoraBinding ? $t('kb_sync.card.settings') : $t('kb_sync.card.bind')}
                 >
-                  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="vertical-align:-1px;display:inline-block" aria-hidden="true"><path fill-rule="evenodd" d="M8 8m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0zM8 8m-4.5 0a4.5 4.5 0 1 0 9 0a4.5 4.5 0 1 0-9 0zM8 8m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0z"/></svg>{#if kb.picoraBinding}{@const _s = syncStates.get(kb.id)}{#if _s?.status === 'conflict'} ⚠{_s.conflictCount}{:else if _s?.status === 'error'} ✗{:else if _s?.status === 'syncing'} ⟳{:else} {kb.picoraBinding.picoraKbName.slice(0, 12)}{/if}{/if}
+                  <svg width="13" height="13" viewBox="8 6 16 20" fill="none" style="vertical-align:-1px;display:inline-block" aria-hidden="true"><path d="M9.5 7.5v17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="14" r="6.5" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="14" r="2.4" fill="currentColor"/></svg>{#if kb.picoraBinding}{@const _s = syncStates.get(kb.id)}{#if _s?.status === 'conflict'} ⚠{_s.conflictCount}{:else if _s?.status === 'error'} ✗{:else if _s?.status === 'syncing'} ⟳{:else} {kb.picoraBinding.picoraKbName.slice(0, 12)}{/if}{/if}
                 </button>
                 {#if kb.git}
                   <button class="kb-action-btn" onclick={() => unbindGit(kb)} title={$t('git.unbind')}>

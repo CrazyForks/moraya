@@ -42,14 +42,14 @@
 
   {#if defaultTarget}
     <div class="field">
-      <label for="picora-img-domain">{tr('settings.picora.advanced.imgDomain')}</label>
+      <label for="picora-img-domain">{tr('settings.picora.advanced.img_domain')}</label>
       <input
         id="picora-img-domain"
         type="text"
         value={defaultTarget.picoraImgDomain}
         onchange={(e) => setImgDomain((e.target as HTMLInputElement).value)}
       />
-      <p class="hint">{tr('settings.picora.advanced.imgDomainHint')}</p>
+      <p class="hint">{tr('settings.picora.advanced.img_domain_hint')}</p>
     </div>
   {/if}
 
@@ -59,7 +59,7 @@
       checked={picoraRewriteBase64}
       onchange={(e) => settingsStore.update({ picoraRewriteBase64: (e.target as HTMLInputElement).checked })}
     />
-    <span>{tr('settings.picora.advanced.rewriteBase64')}</span>
+    <span>{tr('settings.picora.advanced.rewrite_base64')}</span>
   </label>
 
   <label class="toggle-row">
@@ -68,7 +68,7 @@
       checked={picoraSidebarPinned}
       onchange={(e) => settingsStore.update({ picoraSidebarPinned: (e.target as HTMLInputElement).checked })}
     />
-    <span>{tr('settings.picora.advanced.sidebarPin')}</span>
+    <span>{tr('settings.picora.advanced.sidebar_pin')}</span>
   </label>
 
   <label class="toggle-row">

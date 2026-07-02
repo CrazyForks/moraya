@@ -147,7 +147,7 @@
       <textarea
         bind:this={searchInputEl}
         class="search-input"
-        placeholder={tr('search.findPlaceholder')}
+        placeholder={tr('search.find_placeholder')}
         bind:value={searchText}
         oninput={handleSearchInput}
         onkeydown={handleSearchKeydown}
@@ -166,7 +166,7 @@
           class="search-btn"
           class:active={caseSensitive}
           onclick={toggleCaseSensitive}
-          title={tr('search.caseSensitive')}
+          title={tr('search.case_sensitive')}
         >
           Aa
         </button>
@@ -193,7 +193,7 @@
         <textarea
           bind:this={replaceInputEl}
           class="search-input"
-          placeholder={tr('search.replacePlaceholder')}
+          placeholder={tr('search.replace_placeholder')}
           bind:value={replaceText}
           onkeydown={handleReplaceKeydown}
           rows={replaceRows}
@@ -203,7 +203,7 @@
             {tr('search.replace')}
           </button>
           <button class="search-btn text-btn" onclick={() => onReplaceAll(searchText, replaceText, caseSensitive, useRegex)}>
-            {tr('search.replaceAll')}
+            {tr('search.replace_all')}
           </button>
         </div>
       </div>

@@ -81,7 +81,7 @@
     seoError = null;
     try {
       if (!aiProviderConfig || !aiProviderConfig.apiKey) {
-        seoError = tr('publish.seoNoProvider');
+        seoError = tr('publish.seo_no_provider');
         return;
       }
       const data = await generateSEOData(aiProviderConfig, documentContent);
@@ -131,15 +131,15 @@
     {#if stage === 'targets'}
       <!-- Stage 1: Select publish targets -->
       <div class="dialog-header">
-        <h3>{tr('workflow.selectTargets')}</h3>
+        <h3>{tr('workflow.select_targets')}</h3>
         <button class="close-btn" onclick={onClose}>×</button>
       </div>
 
       <div class="dialog-body">
         {#if targets.length === 0}
           <div class="empty-state">
-            <p>{tr('publish.settingsEmpty')}</p>
-            <p class="hint">{tr('publish.settingsHint')}</p>
+            <p>{tr('publish.settings_empty')}</p>
+            <p class="hint">{tr('publish.settings_hint')}</p>
           </div>
         {:else}
           <div class="target-list">
@@ -156,7 +156,7 @@
                 <div class="target-info">
                   <span class="target-name">{target.name || '(unnamed)'}</span>
                   <span class="target-type">
-                    {target.type === 'github' ? tr('publish.github') : tr('publish.customApi')}
+                    {target.type === 'github' ? tr('publish.github') : tr('publish.custom_api')}
                   </span>
                 </div>
               </label>
@@ -166,9 +166,9 @@
           <div class="seo-toggle">
             <label class="seo-checkbox">
               <input type="checkbox" bind:checked={enableSEO} />
-              <span>{tr('publish.enableSEO')}</span>
+              <span>{tr('publish.enable_seo')}</span>
             </label>
-            <span class="seo-hint">{tr('publish.enableSEOHint')}</span>
+            <span class="seo-hint">{tr('publish.enable_seohint')}</span>
           </div>
         {/if}
       </div>
@@ -180,15 +180,15 @@
           onclick={handleNext}
           disabled={selectedIds.size === 0}
         >
-          {enableSEO ? tr('publish.nextSEO') : tr('workflow.confirmPublish')}
+          {enableSEO ? tr('publish.next_seo') : tr('workflow.confirm_publish')}
         </button>
       </div>
     {:else}
       <!-- Stage 2: SEO form -->
       <div class="dialog-header">
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <span class="back-btn" onclick={handleBack}>← {tr('publish.backToTargets')}</span>
-        <h3>{tr('menu.seoOptimization')}</h3>
+        <span class="back-btn" onclick={handleBack}>← {tr('publish.back_to_targets')}</span>
+        <h3>{tr('menu.seo_optimization')}</h3>
         <button class="close-btn" onclick={onClose}>×</button>
       </div>
 
@@ -221,7 +221,7 @@
             <input
               type="text"
               class="form-input"
-              placeholder={tr('seo.customTitle')}
+              placeholder={tr('seo.custom_title')}
               value={seoData.selectedTitle}
               oninput={(e) => { seoData = { ...seoData, selectedTitle: (e.target as HTMLInputElement).value }; }}
             />
@@ -253,7 +253,7 @@
               <input
                 type="text"
                 class="tag-input"
-                placeholder={tr('seo.addTag')}
+                placeholder={tr('seo.add_tag')}
                 bind:value={tagInput}
                 onkeydown={handleTagKeydown}
               />
@@ -273,7 +273,7 @@
 
           <!-- Meta Description -->
           <div class="seo-field">
-            <label class="field-label">{tr('seo.metaDescription')}</label>
+            <label class="field-label">{tr('seo.meta_description')}</label>
             <textarea
               class="form-input seo-textarea"
               maxlength="160"
@@ -294,7 +294,7 @@
           onclick={handlePublish}
           disabled={seoLoading}
         >
-          {tr('workflow.confirmPublish')}
+          {tr('workflow.confirm_publish')}
         </button>
       </div>
     {/if}

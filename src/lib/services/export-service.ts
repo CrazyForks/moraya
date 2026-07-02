@@ -31,7 +31,7 @@ interface ExportOption {
 export const exportOptions: ExportOption[] = [
   { format: 'pdf', labelKey: 'export.pdf', extension: 'pdf', mimeType: 'application/pdf' },
   { format: 'html', labelKey: 'export.html', extension: 'html', mimeType: 'text/html' },
-  { format: 'html-plain', labelKey: 'export.htmlPlain', extension: 'html', mimeType: 'text/html' },
+  { format: 'html-plain', labelKey: 'export.html_plain', extension: 'html', mimeType: 'text/html' },
   { format: 'image', labelKey: 'export.image', extension: 'png', mimeType: 'image/png' },
   { format: 'doc', labelKey: 'export.doc', extension: 'doc', mimeType: 'application/msword' },
   { format: 'latex', labelKey: 'export.latex', extension: 'tex', mimeType: 'application/x-latex' },
@@ -674,7 +674,7 @@ export async function exportDocument(
   // busy. Resolving the markdown beforehand would block the JS main thread
   // and delay the dialog by however long serialization takes.
   const path = await saveDialog({
-    title: tr('export.exportAs', { format: label }),
+    title: tr('export.export_as', { format: label }),
     defaultPath: `document.${option.extension}`,
     filters: [{ name: label, extensions: [option.extension] }],
   });

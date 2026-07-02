@@ -48,7 +48,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="dialog-overlay" onclick={onClose} onkeydown={handleKeydown}>
   <div class="dialog-panel" onclick={(e) => e.stopPropagation()}>
-    <h3 class="dialog-title">{tr('imageDialog.title')}</h3>
+    <h3 class="dialog-title">{tr('image_dialog.title')}</h3>
 
     <div class="tab-bar">
       <button
@@ -56,14 +56,14 @@
         class:active={activeTab === 'url'}
         onclick={() => activeTab = 'url'}
       >
-        {tr('imageDialog.urlTab')}
+        {tr('image_dialog.url_tab')}
       </button>
       <button
         class="tab-btn"
         class:active={activeTab === 'file'}
         onclick={() => activeTab = 'file'}
       >
-        {tr('imageDialog.fileTab')}
+        {tr('image_dialog.file_tab')}
       </button>
     </div>
 
@@ -73,17 +73,17 @@
           <input
             type="text"
             class="text-input"
-            placeholder={tr('imageDialog.urlPlaceholder')}
+            placeholder={tr('image_dialog.url_placeholder')}
             bind:value={imageUrl}
           />
         </div>
       {:else}
         <div class="field file-field">
           <button class="file-btn" onclick={handleSelectFile}>
-            {tr('imageDialog.selectFile')}
+            {tr('image_dialog.select_file')}
           </button>
           <span class="file-path" title={filePath}>
-            {filePath || tr('imageDialog.noFileSelected')}
+            {filePath || tr('image_dialog.no_file_selected')}
           </span>
         </div>
       {/if}
@@ -92,7 +92,7 @@
         <input
           type="text"
           class="text-input"
-          placeholder={tr('imageDialog.altPlaceholder')}
+          placeholder={tr('image_dialog.alt_placeholder')}
           bind:value={altText}
         />
       </div>
@@ -100,10 +100,10 @@
 
     <div class="dialog-actions">
       <button class="btn btn-secondary" onclick={onClose}>
-        {tr('imageDialog.cancel')}
+        {tr('image_dialog.cancel')}
       </button>
       <button class="btn btn-primary" disabled={!canInsert} onclick={handleInsert}>
-        {tr('imageDialog.insert')}
+        {tr('image_dialog.insert')}
       </button>
     </div>
   </div>

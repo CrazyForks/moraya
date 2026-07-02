@@ -116,7 +116,12 @@ watermarks.local.json.ots
 /moraya-web
 /moraya-mobile
 
-# v0.96.0 pre-publication tarball bridge — local-iteration only (per CLAUDE.md
-# external shared markdown core rule). Don't commit; publish @moraya/core to
-# npm and bump the dep instead when ready.
-/vendor/
+# v0.96.0 pre-publication tarball bridge (per CLAUDE.md external shared markdown
+# core rule — vendored tarballs are allowed as a pre-publication bridge).
+# Ignore everything under vendor/ EXCEPT the pinned bridge tarball, which MUST
+# be committed so `pnpm install --frozen-lockfile` resolves it in CI (the
+# lockfile references `file:./vendor/moraya-core-0.5.1.tgz`). Remove this
+# exception once @moraya/core@0.5.1 is published to npm and the dep is switched
+# back to the registry version.
+/vendor/*
+!/vendor/moraya-core-0.5.1.tgz

@@ -52,7 +52,7 @@
           <line x1="9" y1="7" x2="15" y2="7"/>
         </svg>
       </span>
-      <span class="menu-label">{tr('table.insertRowAbove')}</span>
+      <span class="menu-label">{tr('table.insert_row_above')}</span>
     </button>
 
     <button class="menu-item" onclick={() => handleAction(onAddRowAfter)}>
@@ -64,7 +64,7 @@
           <line x1="9" y1="17" x2="15" y2="17"/>
         </svg>
       </span>
-      <span class="menu-label">{tr('table.insertRowBelow')}</span>
+      <span class="menu-label">{tr('table.insert_row_below')}</span>
       <span class="shortcut">⌘↩</span>
     </button>
 
@@ -79,7 +79,7 @@
           <line x1="7" y1="9" x2="7" y2="15"/>
         </svg>
       </span>
-      <span class="menu-label">{tr('table.insertColLeft')}</span>
+      <span class="menu-label">{tr('table.insert_col_left')}</span>
     </button>
 
     <button class="menu-item" onclick={() => handleAction(onAddColAfter)}>
@@ -91,7 +91,7 @@
           <line x1="17" y1="9" x2="17" y2="15"/>
         </svg>
       </span>
-      <span class="menu-label">{tr('table.insertColRight')}</span>
+      <span class="menu-label">{tr('table.insert_col_right')}</span>
     </button>
 
     <div class="menu-divider"></div>
@@ -105,7 +105,7 @@
           <line x1="15" y1="5.5" x2="9" y2="10.5"/>
         </svg>
       </span>
-      <span class="menu-label">{tr('table.deleteRow')}</span>
+      <span class="menu-label">{tr('table.delete_row')}</span>
       <span class="shortcut danger">⇧⌘⌫</span>
     </button>
 
@@ -118,7 +118,7 @@
           <line x1="10.5" y1="9" x2="5.5" y2="15"/>
         </svg>
       </span>
-      <span class="menu-label">{tr('table.deleteCol')}</span>
+      <span class="menu-label">{tr('table.delete_col')}</span>
     </button>
 
     <div class="menu-divider"></div>
@@ -130,7 +130,7 @@
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
         </svg>
       </span>
-      <span class="menu-label">{tr('table.copyTable')}</span>
+      <span class="menu-label">{tr('table.copy_table')}</span>
     </button>
 
     <button class="menu-item" onclick={() => handleAction(onFormatTableSource)}>
@@ -140,7 +140,7 @@
           <polyline points="8 6 2 12 8 18"/>
         </svg>
       </span>
-      <span class="menu-label">{tr('table.formatTableSource')}</span>
+      <span class="menu-label">{tr('table.format_table_source')}</span>
     </button>
 
     <div class="menu-divider"></div>
@@ -156,7 +156,7 @@
           <line x1="16" y1="13" x2="8" y2="21"/>
         </svg>
       </span>
-      <span class="menu-label">{tr('table.deleteTable')}</span>
+      <span class="menu-label">{tr('table.delete_table')}</span>
     </button>
   </div>
 </div>

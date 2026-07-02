@@ -68,6 +68,16 @@ impl MCPProcessManager {
             pids: Mutex::new(HashMap::new()),
         }
     }
+
+    /// Whether the given server_id currently has a live stdio subprocess.
+    /// Used by the LAN bridge to reject exposing non-stdio (http/sse) servers,
+    /// which are not proxyable — the bridge only forwards to stdio children.
+    pub fn is_running(&self, server_id: &str) -> bool {
+        self.processes
+            .lock()
+            .map(|p| p.contains_key(server_id))
+            .unwrap_or(false)
+    }
 }
 
 impl Default for MCPProcessManager {

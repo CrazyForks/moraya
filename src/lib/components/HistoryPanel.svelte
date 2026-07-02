@@ -312,13 +312,13 @@
 				$t('audit.resolved_section', { count: String(resolved.length) }),
 				resolved,
 				true,
-				'audit.resolvedNote',
+				'audit.resolved_note',
 			);
 			sectionFor(
 				$t('audit.wontfix_section', { count: String(wontfix.length) }),
 				wontfix,
 				true,
-				'audit.wontfixNote',
+				'audit.wontfix_note',
 			);
 			sectionFor(
 				$t('audit.open_section', { count: String(open.length) }),

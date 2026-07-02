@@ -52,11 +52,11 @@
   }
 
   const PAPER_OPTIONS: { value: ExportPaperSize; labelKey: string }[] = [
-    { value: 'a4',     labelKey: 'settings.export.paperA4' },
-    { value: 'letter', labelKey: 'settings.export.paperLetter' },
-    { value: 'legal',  labelKey: 'settings.export.paperLegal' },
-    { value: 'a3',     labelKey: 'settings.export.paperA3' },
-    { value: 'a5',     labelKey: 'settings.export.paperA5' },
+    { value: 'a4',     labelKey: 'settings.export.paper_a4' },
+    { value: 'letter', labelKey: 'settings.export.paper_letter' },
+    { value: 'legal',  labelKey: 'settings.export.paper_legal' },
+    { value: 'a3',     labelKey: 'settings.export.paper_a3' },
+    { value: 'a5',     labelKey: 'settings.export.paper_a5' },
   ];
 
   const FONT_SIZE_OPTIONS = [9, 10, 11, 12, 14];

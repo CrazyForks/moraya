@@ -86,7 +86,7 @@
     <div class="dialog-body">
       <!-- Current version -->
       <div class="version-row">
-        <span class="version-label">{tr('update.currentVersion')}</span>
+        <span class="version-label">{tr('update.current_version')}</span>
         <span class="version-value">v{__APP_VERSION__}</span>
       </div>
 
@@ -98,7 +98,7 @@
 
       {:else if checkStatus === 'error'}
         <div class="status-message error">
-          <span>{tr('update.checkFailed')}</span>
+          <span>{tr('update.check_failed')}</span>
           {#if error}
             <span class="error-detail">{error}</span>
           {/if}
@@ -106,18 +106,18 @@
 
       {:else if checkStatus === 'latest'}
         <div class="status-message success">
-          {tr('update.upToDate')}
+          {tr('update.up_to_date')}
         </div>
 
       {:else if checkStatus === 'available' && updateInfo}
         <div class="version-row">
-          <span class="version-label">{tr('update.latestVersion')}</span>
+          <span class="version-label">{tr('update.latest_version')}</span>
           <span class="version-value new-version">v{updateInfo.latestVersion}</span>
         </div>
 
         {#if updateInfo.releaseNotes}
           <div class="release-notes">
-            <div class="notes-label">{tr('update.releaseNotes')}</div>
+            <div class="notes-label">{tr('update.release_notes')}</div>
             <div class="notes-content">{updateInfo.releaseNotes.slice(0, 500)}{updateInfo.releaseNotes.length > 500 ? '...' : ''}</div>
           </div>
         {/if}
@@ -131,11 +131,11 @@
           </div>
         {:else if downloadStatus === 'completed'}
           <div class="status-message success">
-            {tr('update.installLaunched')}
+            {tr('update.install_launched')}
           </div>
         {:else if downloadStatus === 'error'}
           <div class="status-message error">
-            <span>{tr('update.downloadFailed')}</span>
+            <span>{tr('update.download_failed')}</span>
             {#if error}
               <span class="error-detail">{error}</span>
             {/if}
@@ -144,7 +144,7 @@
 
         {#if !updateInfo.downloadUrl}
           <div class="status-message warning">
-            {tr('update.noAsset')}
+            {tr('update.no_asset')}
           </div>
         {/if}
       {/if}
@@ -153,7 +153,7 @@
     <div class="dialog-footer">
       {#if checkStatus === 'available' && updateInfo?.releaseUrl}
         <button class="btn btn-secondary" onclick={handleViewRelease}>
-          {tr('update.viewRelease')}
+          {tr('update.view_release')}
         </button>
       {/if}
 

@@ -87,7 +87,7 @@ export function resolveMCPToolPrompt(
   const tool = state.tools.find(x => x.serverId === serverId && x.name === toolName);
   if (!server || !tool) return { kind: 'not-found' };
   const tt = get(t);
-  const message = tt('ai.prompts.mcpToolPrompt', {
+  const message = tt('ai.prompts.mcp_tool_prompt', {
     toolName: tool.name,
     serverName: server.name,
   });

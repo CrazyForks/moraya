@@ -1027,10 +1027,10 @@
         disabled={status === 'syncing'}
         title={$t('kb_sync.sync_now')}
       >
-        <!-- Wrap icon in inner span so rotation only spins the glyph,
-             not the button border (which would tilt the rounded rectangle). -->
-        <span class="kb-sync-btn-icon" class:spin={status === 'syncing'}>
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8 8m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0zM8 8m-4.5 0a4.5 4.5 0 1 0 9 0a4.5 4.5 0 1 0-9 0zM8 8m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0z"/></svg>
+        <!-- Wrap icon in inner span so the breathing animation only affects the
+             glyph, not the button border. -->
+        <span class="kb-sync-btn-icon" class:breathing={status === 'syncing'}>
+          <svg width="13" height="13" viewBox="8 6 16 20" fill="none" aria-hidden="true"><path d="M9.5 7.5v17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="14" r="6.5" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="14" r="2.4" fill="currentColor"/></svg>
         </span>
       </button>
     {/if}
@@ -1056,7 +1056,7 @@
                 class:error={status === 'error'}
                 class:conflict={status === 'conflict'}
                 title={$t('kb_sync.statusbar.tooltip')}
-              ><svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" style="vertical-align:-1px;display:inline-block" aria-hidden="true"><path fill-rule="evenodd" d="M8 8m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0zM8 8m-4.5 0a4.5 4.5 0 1 0 9 0a4.5 4.5 0 1 0-9 0zM8 8m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0z"/></svg>{status === 'error' ? ' ✗' : status === 'conflict' ? ' ⚠' : ''}</span>
+              ><svg width="10" height="10" viewBox="8 6 16 20" fill="none" style="vertical-align:-1px;display:inline-block" aria-hidden="true"><path d="M9.5 7.5v17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="14" r="6.5" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="14" r="2.4" fill="currentColor"/></svg>{status === 'error' ? ' ✗' : status === 'conflict' ? ' ⚠' : ''}</span>
             {/if}
           </button>
         {/each}
@@ -1903,7 +1903,7 @@
     line-height: 1;
     transform-origin: center;
   }
-  .kb-sync-badge.syncing { color: var(--accent-color); animation: kb-sync-spin 1s linear infinite; }
+  .kb-sync-badge.syncing { color: var(--accent-color); animation: kb-sync-breathe 1.6s ease-in-out infinite; }
   .kb-sync-badge.error { color: var(--color-error, #e53e3e); }
   .kb-sync-badge.conflict { color: var(--warning-color, #e8a838); }
 
@@ -1932,17 +1932,37 @@
   .kb-sync-btn.error { color: var(--color-error, #e53e3e); border-color: var(--color-error, #e53e3e); }
   .kb-sync-btn.conflict { color: var(--warning-color, #e8a838); border-color: var(--warning-color, #e8a838); }
 
-  /* Inner-span rotation — only spins the glyph, leaves the button border still. */
+  /* Inner-span breathing — pulses the glyph (opacity + scale + accent glow),
+     leaving the button border still. */
   .kb-sync-btn-icon {
     display: inline-block;
     line-height: 1;
     transform-origin: center;
   }
-  .kb-sync-btn-icon.spin { animation: kb-sync-spin 1s linear infinite; }
+  .kb-sync-btn-icon.breathing { animation: kb-sync-breathe 1.6s ease-in-out infinite; }
 
-  @keyframes kb-sync-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+  /* Breathing-light effect for the "syncing" state. Opacity + subtle scale
+     give the pulse; the drop-shadow adds a soft accent halo that swells and
+     fades like a breathing indicator light. */
+  @keyframes kb-sync-breathe {
+    0%, 100% {
+      opacity: 0.45;
+      transform: scale(0.9);
+      filter: drop-shadow(0 0 0 transparent);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.1);
+      filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent-color) 55%, transparent));
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .kb-sync-btn-icon.breathing,
+    .kb-sync-badge.syncing {
+      animation: none;
+      opacity: 0.75;
+    }
   }
 
   .kb-dropdown-divider {

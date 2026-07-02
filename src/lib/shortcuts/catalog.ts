@@ -88,16 +88,16 @@ export interface MCPToolStub { name: string; serverId: string; description?: str
 export const SHORTCUT_CATALOG_STATIC: ShortcutEntry[] = [
   // ── File (native menu) ─────────────────────────────────────────
   { id: 'file.new',         category: 'file', labelKey: 'shortcuts.actions.file.new',         mac: 'Cmd+N',       win: 'Ctrl+N',       customizable: true, menuItemId: 'file_new'},
-  { id: 'file.newWindow',   category: 'file', labelKey: 'shortcuts.actions.file.newWindow',   mac: 'Cmd+Shift+N', win: 'Ctrl+Shift+N', customizable: true, menuItemId: 'file_new_window'},
+  { id: 'file.newWindow',   category: 'file', labelKey: 'shortcuts.actions.file.new_window',   mac: 'Cmd+Shift+N', win: 'Ctrl+Shift+N', customizable: true, menuItemId: 'file_new_window'},
   { id: 'file.open',        category: 'file', labelKey: 'shortcuts.actions.file.open',        mac: 'Cmd+O',       win: 'Ctrl+O',       customizable: true, menuItemId: 'file_open'},
   { id: 'file.save',        category: 'file', labelKey: 'shortcuts.actions.file.save',        mac: 'Cmd+S',       win: 'Ctrl+S',       customizable: true, menuItemId: 'file_save'},
-  { id: 'file.saveAs',      category: 'file', labelKey: 'shortcuts.actions.file.saveAs',      mac: 'Cmd+Shift+S', win: 'Ctrl+Shift+S', customizable: true, menuItemId: 'file_save_as'},
-  { id: 'file.exportHtml',  category: 'file', labelKey: 'shortcuts.actions.file.exportHtml',  mac: 'Cmd+Shift+E', win: 'Ctrl+Shift+E', customizable: true, menuItemId: 'file_export_html'},
+  { id: 'file.saveAs',      category: 'file', labelKey: 'shortcuts.actions.file.save_as',      mac: 'Cmd+Shift+S', win: 'Ctrl+Shift+S', customizable: true, menuItemId: 'file_save_as'},
+  { id: 'file.exportHtml',  category: 'file', labelKey: 'shortcuts.actions.file.export_html',  mac: 'Cmd+Shift+E', win: 'Ctrl+Shift+E', customizable: true, menuItemId: 'file_export_html'},
   // v0.41.5 (Phase B): export PDF/Image/Word — no default accelerators;
   // user can set their own via Settings → Shortcuts.
-  { id: 'file.exportPdf',   category: 'file', labelKey: 'shortcuts.actions.file.exportPdf',   mac: '', win: '', customizable: true, menuItemId: 'file_export_pdf' },
-  { id: 'file.exportImage', category: 'file', labelKey: 'shortcuts.actions.file.exportImage', mac: '', win: '', customizable: true, menuItemId: 'file_export_image' },
-  { id: 'file.exportDoc',   category: 'file', labelKey: 'shortcuts.actions.file.exportDoc',   mac: '', win: '', customizable: true, menuItemId: 'file_export_doc' },
+  { id: 'file.exportPdf',   category: 'file', labelKey: 'shortcuts.actions.file.export_pdf',   mac: '', win: '', customizable: true, menuItemId: 'file_export_pdf' },
+  { id: 'file.exportImage', category: 'file', labelKey: 'shortcuts.actions.file.export_image', mac: '', win: '', customizable: true, menuItemId: 'file_export_image' },
+  { id: 'file.exportDoc',   category: 'file', labelKey: 'shortcuts.actions.file.export_doc',   mac: '', win: '', customizable: true, menuItemId: 'file_export_doc' },
 
   // ── Edit (native menu + page-level) ────────────────────────────
   { id: 'edit.undo',        category: 'edit', labelKey: 'shortcuts.actions.edit.undo',        mac: 'Cmd+Z',       win: 'Ctrl+Z',       customizable: true, menuItemId: 'edit_undo'},
@@ -112,7 +112,7 @@ export const SHORTCUT_CATALOG_STATIC: ShortcutEntry[] = [
   { id: 'paragraph.h4',     category: 'paragraph', labelKey: 'shortcuts.actions.paragraph.h4',         mac: 'Cmd+4',       win: 'Ctrl+4',       customizable: true, menuItemId: 'para_h4'},
   { id: 'paragraph.h5',     category: 'paragraph', labelKey: 'shortcuts.actions.paragraph.h5',         mac: 'Cmd+5',       win: 'Ctrl+5',       customizable: true, menuItemId: 'para_h5'},
   { id: 'paragraph.h6',     category: 'paragraph', labelKey: 'shortcuts.actions.paragraph.h6',         mac: 'Cmd+6',       win: 'Ctrl+6',       customizable: true, menuItemId: 'para_h6'},
-  { id: 'paragraph.codeBlock', category: 'paragraph', labelKey: 'shortcuts.actions.paragraph.codeBlock', mac: 'Cmd+Shift+K', win: 'Ctrl+Shift+K', customizable: true, menuItemId: 'para_code_block'},
+  { id: 'paragraph.codeBlock', category: 'paragraph', labelKey: 'shortcuts.actions.paragraph.code_block', mac: 'Cmd+Shift+K', win: 'Ctrl+Shift+K', customizable: true, menuItemId: 'para_code_block'},
   { id: 'paragraph.quote',  category: 'paragraph', labelKey: 'shortcuts.actions.paragraph.quote',      mac: 'Cmd+Shift+Q', win: 'Ctrl+Shift+Q', customizable: true, menuItemId: 'para_quote'},
 
   // ── Format (native menu) ───────────────────────────────────────
@@ -121,28 +121,28 @@ export const SHORTCUT_CATALOG_STATIC: ShortcutEntry[] = [
   { id: 'format.strike',       category: 'format', labelKey: 'shortcuts.actions.format.strike',       mac: 'Cmd+Shift+X', win: 'Ctrl+Shift+X', customizable: true, menuItemId: 'fmt_strikethrough'},
   { id: 'format.code',         category: 'format', labelKey: 'shortcuts.actions.format.code',         mac: 'Cmd+E',       win: 'Ctrl+E',       customizable: true, menuItemId: 'fmt_code'},
   { id: 'format.link',         category: 'format', labelKey: 'shortcuts.actions.format.link',         mac: 'Cmd+K',       win: 'Ctrl+K',       customizable: true, menuItemId: 'fmt_link'},
-  { id: 'format.insertImage',  category: 'format', labelKey: 'shortcuts.actions.format.insertImage',  mac: 'Cmd+Shift+G', win: 'Ctrl+Shift+G', customizable: true, menuItemId: 'fmt_image'},
+  { id: 'format.insertImage',  category: 'format', labelKey: 'shortcuts.actions.format.insert_image',  mac: 'Cmd+Shift+G', win: 'Ctrl+Shift+G', customizable: true, menuItemId: 'fmt_image'},
 
   // ── View ───────────────────────────────────────────────────────
-  { id: 'view.toggleMode',     category: 'view', labelKey: 'shortcuts.actions.view.toggleMode',     mac: 'Cmd+/',       win: 'Ctrl+/',       customizable: true, menuItemId: 'view_mode_visual'},
-  { id: 'view.toggleSplit',    category: 'view', labelKey: 'shortcuts.actions.view.toggleSplit',    mac: 'Cmd+Shift+/', win: 'Ctrl+Shift+/', customizable: true, menuItemId: 'view_mode_split'},
-  { id: 'view.toggleSidebar',  category: 'view', labelKey: 'shortcuts.actions.view.toggleSidebar',  mac: 'Cmd+\\',      win: 'Ctrl+\\',      customizable: true, menuItemId: 'view_sidebar'},
-  { id: 'view.toggleAIPanel',  category: 'view', labelKey: 'shortcuts.actions.view.toggleAIPanel',  mac: 'Cmd+Shift+I', win: 'Ctrl+Shift+I', customizable: true, menuItemId: 'view_ai_panel'},
-  { id: 'view.toggleOutline',  category: 'view', labelKey: 'shortcuts.actions.view.toggleOutline',  mac: 'Cmd+Shift+O', win: 'Ctrl+Shift+O', customizable: true, menuItemId: 'view_outline'},
-  { id: 'view.openSettings',   category: 'view', labelKey: 'shortcuts.actions.view.openSettings',   mac: 'Cmd+,',       win: 'Ctrl+,',       customizable: true, menuItemId: 'preferences'},
-  { id: 'view.zoomIn',         category: 'view', labelKey: 'shortcuts.actions.view.zoomIn',         mac: 'Cmd+=',       win: 'Ctrl+=',       customizable: true, menuItemId: 'view_zoom_in'},
-  { id: 'view.zoomOut',        category: 'view', labelKey: 'shortcuts.actions.view.zoomOut',        mac: 'Cmd+-',       win: 'Ctrl+-',       customizable: true, menuItemId: 'view_zoom_out'},
-  { id: 'view.zoomReset',      category: 'view', labelKey: 'shortcuts.actions.view.zoomReset',      mac: 'Cmd+0',       win: 'Ctrl+0',       customizable: true, menuItemId: 'view_actual_size'},
+  { id: 'view.toggleMode',     category: 'view', labelKey: 'shortcuts.actions.view.toggle_mode',     mac: 'Cmd+/',       win: 'Ctrl+/',       customizable: true, menuItemId: 'view_mode_visual'},
+  { id: 'view.toggleSplit',    category: 'view', labelKey: 'shortcuts.actions.view.toggle_split',    mac: 'Cmd+Shift+/', win: 'Ctrl+Shift+/', customizable: true, menuItemId: 'view_mode_split'},
+  { id: 'view.toggleSidebar',  category: 'view', labelKey: 'shortcuts.actions.view.toggle_sidebar',  mac: 'Cmd+\\',      win: 'Ctrl+\\',      customizable: true, menuItemId: 'view_sidebar'},
+  { id: 'view.toggleAIPanel',  category: 'view', labelKey: 'shortcuts.actions.view.toggle_aipanel',  mac: 'Cmd+Shift+I', win: 'Ctrl+Shift+I', customizable: true, menuItemId: 'view_ai_panel'},
+  { id: 'view.toggleOutline',  category: 'view', labelKey: 'shortcuts.actions.view.toggle_outline',  mac: 'Cmd+Shift+O', win: 'Ctrl+Shift+O', customizable: true, menuItemId: 'view_outline'},
+  { id: 'view.openSettings',   category: 'view', labelKey: 'shortcuts.actions.view.open_settings',   mac: 'Cmd+,',       win: 'Ctrl+,',       customizable: true, menuItemId: 'preferences'},
+  { id: 'view.zoomIn',         category: 'view', labelKey: 'shortcuts.actions.view.zoom_in',         mac: 'Cmd+=',       win: 'Ctrl+=',       customizable: true, menuItemId: 'view_zoom_in'},
+  { id: 'view.zoomOut',        category: 'view', labelKey: 'shortcuts.actions.view.zoom_out',        mac: 'Cmd+-',       win: 'Ctrl+-',       customizable: true, menuItemId: 'view_zoom_out'},
+  { id: 'view.zoomReset',      category: 'view', labelKey: 'shortcuts.actions.view.zoom_reset',      mac: 'Cmd+0',       win: 'Ctrl+0',       customizable: true, menuItemId: 'view_actual_size'},
 
   // ── Workflow (frontend) ────────────────────────────────────────
-  { id: 'workflow.quickOpen',     category: 'workflow', labelKey: 'shortcuts.actions.workflow.quickOpen',     mac: 'Cmd+P',       win: 'Ctrl+P',       customizable: true},
-  { id: 'workflow.commandPalette', category: 'workflow', labelKey: 'shortcuts.actions.workflow.commandPalette', mac: 'Cmd+Shift+P', win: 'Ctrl+Shift+P', customizable: true},
+  { id: 'workflow.quickOpen',     category: 'workflow', labelKey: 'shortcuts.actions.workflow.quick_open',     mac: 'Cmd+P',       win: 'Ctrl+P',       customizable: true},
+  { id: 'workflow.commandPalette', category: 'workflow', labelKey: 'shortcuts.actions.workflow.command_palette', mac: 'Cmd+Shift+P', win: 'Ctrl+Shift+P', customizable: true},
 
   // ── AI Chat ────────────────────────────────────────────────────
   // The actual binding is derived from `aiChatEnterBehavior`. Shown here
   // so the user sees the current value in the same place as other shortcuts.
-  { id: 'aiChat.send',     category: 'aiChat', labelKey: 'shortcuts.actions.aiChat.send',     mac: 'Cmd+Enter',  win: 'Ctrl+Enter',  customizable: true },
-  { id: 'aiChat.newline',  category: 'aiChat', labelKey: 'shortcuts.actions.aiChat.newline',  mac: 'Enter',      win: 'Enter',       customizable: true },
+  { id: 'aiChat.send',     category: 'aiChat', labelKey: 'shortcuts.actions.ai_chat.send',     mac: 'Cmd+Enter',  win: 'Ctrl+Enter',  customizable: true },
+  { id: 'aiChat.newline',  category: 'aiChat', labelKey: 'shortcuts.actions.ai_chat.newline',  mac: 'Enter',      win: 'Enter',       customizable: true },
 ];
 
 export const CATEGORY_LABEL_KEYS: Record<ShortcutCategory, string> = {
@@ -151,7 +151,7 @@ export const CATEGORY_LABEL_KEYS: Record<ShortcutCategory, string> = {
   paragraph: 'shortcuts.categories.paragraph',
   format: 'shortcuts.categories.format',
   view: 'shortcuts.categories.view',
-  aiChat: 'shortcuts.categories.aiChat',
+  aiChat: 'shortcuts.categories.ai_chat',
   workflow: 'shortcuts.categories.workflow',
   mcp: 'shortcuts.categories.mcp',
 };

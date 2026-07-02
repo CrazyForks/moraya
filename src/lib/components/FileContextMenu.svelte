@@ -106,30 +106,30 @@
     onclick={(e) => e.stopPropagation()}
   >
     <button class="menu-item" onclick={() => handleAction(onNewFile)}>
-      {tr('sidebar.contextMenu.newFile')}
+      {tr('sidebar.context_menu.new_file')}
     </button>
 
     <button class="menu-item" onclick={() => handleAction(onNewFolder)}>
-      {tr('sidebar.contextMenu.newFolder')}
+      {tr('sidebar.context_menu.new_folder')}
     </button>
 
     <button class="menu-item" onclick={() => handleAction(onSearch)}>
-      {tr('sidebar.contextMenu.searchFiles')}
+      {tr('sidebar.context_menu.search_files')}
     </button>
 
     <button class="menu-item" onclick={() => handleAction(onRefresh)}>
-      {tr('sidebar.contextMenu.refresh')}
+      {tr('sidebar.context_menu.refresh')}
     </button>
 
     {#if onIndexAll}
       <button class="menu-item" onclick={() => handleAction(onIndexAll)}>
-        {tr('kb.indexAll')}
+        {tr('kb.index_all')}
       </button>
     {/if}
 
     {#if onIndexFile && targetType === 'file'}
       <button class="menu-item" onclick={() => handleAction(onIndexFile)}>
-        {tr('kb.indexFile')}
+        {tr('kb.index_file')}
       </button>
     {/if}
 
@@ -137,23 +137,23 @@
       <div class="menu-divider"></div>
 
       <button class="menu-item" onclick={() => handleAction(onRename)}>
-        {tr('sidebar.contextMenu.rename')}
+        {tr('sidebar.context_menu.rename')}
       </button>
 
       {#if targetType === 'file'}
         <button class="menu-item" onclick={() => handleAction(onDuplicate)}>
-          {tr('sidebar.contextMenu.duplicate')}
+          {tr('sidebar.context_menu.duplicate')}
         </button>
       {/if}
 
       <button class="menu-item danger" onclick={() => handleAction(onDelete)}>
-        {tr('sidebar.contextMenu.delete')}
+        {tr('sidebar.context_menu.delete')}
       </button>
 
       <div class="menu-divider"></div>
 
       <button class="menu-item" onclick={() => handleAction(onCopyPath)}>
-        {tr('sidebar.contextMenu.copyPath')}
+        {tr('sidebar.context_menu.copy_path')}
       </button>
 
       <button class="menu-item" onclick={() => handleAction(onRevealInFinder)}>
@@ -169,7 +169,7 @@
           onmouseleave={onSubmenuLeave}
         >
           <div class="menu-item submenu-trigger" role="menuitem" tabindex="-1">
-            <span>{tr('sidebar.contextMenu.historyVersions')}</span>
+            <span>{tr('sidebar.context_menu.history_versions')}</span>
             <span class="submenu-arrow">▶</span>
           </div>
           {#if showHistorySubmenu}

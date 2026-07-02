@@ -28,7 +28,7 @@ export const MCP_PRESETS: MCPPreset[] = [
   {
     id: 'filesystem',
     name: 'Filesystem',
-    descriptionKey: 'mcp.servers.presetDesc.filesystem',
+    descriptionKey: 'mcp.servers.preset_desc.filesystem',
     createConfig: () => ({
       name: 'Filesystem',
       transport: {
@@ -42,7 +42,7 @@ export const MCP_PRESETS: MCPPreset[] = [
   {
     id: 'fetch',
     name: 'Fetch',
-    descriptionKey: 'mcp.servers.presetDesc.fetch',
+    descriptionKey: 'mcp.servers.preset_desc.fetch',
     createConfig: () => ({
       name: 'Fetch',
       transport: {
@@ -56,7 +56,7 @@ export const MCP_PRESETS: MCPPreset[] = [
   {
     id: 'git',
     name: 'Git',
-    descriptionKey: 'mcp.servers.presetDesc.git',
+    descriptionKey: 'mcp.servers.preset_desc.git',
     createConfig: () => ({
       name: 'Git',
       transport: {
@@ -70,7 +70,7 @@ export const MCP_PRESETS: MCPPreset[] = [
   {
     id: 'memory',
     name: 'Memory',
-    descriptionKey: 'mcp.servers.presetDesc.memory',
+    descriptionKey: 'mcp.servers.preset_desc.memory',
     createConfig: () => ({
       name: 'Memory',
       transport: {
@@ -84,7 +84,7 @@ export const MCP_PRESETS: MCPPreset[] = [
   {
     id: 'puppeteer',
     name: 'Puppeteer',
-    descriptionKey: 'mcp.servers.presetDesc.puppeteer',
+    descriptionKey: 'mcp.servers.preset_desc.puppeteer',
     createConfig: () => ({
       name: 'Puppeteer',
       transport: {
@@ -98,7 +98,7 @@ export const MCP_PRESETS: MCPPreset[] = [
   {
     id: 'sqlite',
     name: 'SQLite',
-    descriptionKey: 'mcp.servers.presetDesc.sqlite',
+    descriptionKey: 'mcp.servers.preset_desc.sqlite',
     createConfig: () => ({
       name: 'SQLite',
       transport: {
@@ -112,10 +112,10 @@ export const MCP_PRESETS: MCPPreset[] = [
   {
     id: 'slack',
     name: 'Slack',
-    descriptionKey: 'mcp.servers.presetDesc.slack',
+    descriptionKey: 'mcp.servers.preset_desc.slack',
     envVars: [
-      { name: 'SLACK_BOT_TOKEN', descriptionKey: 'mcp.servers.presetEnvDesc.slackBotToken', isSecret: true, required: true },
-      { name: 'SLACK_TEAM_ID', descriptionKey: 'mcp.servers.presetEnvDesc.slackTeamId', isSecret: false, required: false },
+      { name: 'SLACK_BOT_TOKEN', descriptionKey: 'mcp.servers.preset_env_desc.slack_bot_token', isSecret: true, required: true },
+      { name: 'SLACK_TEAM_ID', descriptionKey: 'mcp.servers.preset_env_desc.slack_team_id', isSecret: false, required: false },
     ],
     createConfig: (envValues) => ({
       name: 'Slack',
@@ -131,9 +131,9 @@ export const MCP_PRESETS: MCPPreset[] = [
   {
     id: 'google-maps',
     name: 'Google Maps',
-    descriptionKey: 'mcp.servers.presetDesc.googleMaps',
+    descriptionKey: 'mcp.servers.preset_desc.google_maps',
     envVars: [
-      { name: 'GOOGLE_MAPS_API_KEY', descriptionKey: 'mcp.servers.presetEnvDesc.googleMapsApiKey', isSecret: true, required: true },
+      { name: 'GOOGLE_MAPS_API_KEY', descriptionKey: 'mcp.servers.preset_env_desc.google_maps_api_key', isSecret: true, required: true },
     ],
     createConfig: (envValues) => ({
       name: 'Google Maps',
@@ -149,7 +149,7 @@ export const MCP_PRESETS: MCPPreset[] = [
   {
     id: 'sequential-thinking',
     name: 'Sequential Thinking',
-    descriptionKey: 'mcp.servers.presetDesc.sequentialThinking',
+    descriptionKey: 'mcp.servers.preset_desc.sequential_thinking',
     createConfig: () => ({
       name: 'Sequential Thinking',
       transport: {
@@ -163,7 +163,7 @@ export const MCP_PRESETS: MCPPreset[] = [
   {
     id: 'everything',
     name: 'Everything',
-    descriptionKey: 'mcp.servers.presetDesc.everything',
+    descriptionKey: 'mcp.servers.preset_desc.everything',
     platform: 'windows',
     createConfig: () => ({
       name: 'Everything',

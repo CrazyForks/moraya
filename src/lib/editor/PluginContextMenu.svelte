@@ -27,7 +27,7 @@
     style="top: {position.top}px; left: {position.left}px"
     onclick={(e) => e.stopPropagation()}
   >
-    <div class="menu-header">{tr('pluginAction.title')}</div>
+    <div class="menu-header">{tr('plugin_action.title')}</div>
     {#each plugins as plugin}
       <button
         class="menu-item"
@@ -37,14 +37,14 @@
       >
         <span class="plugin-name">{plugin.manifest.name}</span>
         {#if invokingId === plugin.manifest.id}
-          <span class="status-badge invoking">{tr('pluginAction.invoking')}</span>
+          <span class="status-badge invoking">{tr('plugin_action.invoking')}</span>
         {:else}
-          <span class="plugin-action">{tr('pluginAction.runAction')}</span>
+          <span class="plugin-action">{tr('plugin_action.run_action')}</span>
         {/if}
       </button>
     {/each}
     {#if plugins.length === 0}
-      <div class="menu-empty">{tr('pluginAction.noPlugins')}</div>
+      <div class="menu-empty">{tr('plugin_action.no_plugins')}</div>
     {/if}
   </div>
 </div>

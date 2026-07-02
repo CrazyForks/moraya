@@ -45,13 +45,13 @@
     style="top: {position.top}px; left: {position.left}px"
     onclick={(e) => e.stopPropagation()}
   >
-    <label class="alt-label" for="alt-input">{tr('imageMenu.editAlt')}</label>
+    <label class="alt-label" for="alt-input">{tr('image_menu.edit_alt')}</label>
     <input
       id="alt-input"
       bind:this={inputEl}
       bind:value
       type="text"
-      placeholder={tr('imageMenu.editAlt')}
+      placeholder={tr('image_menu.edit_alt')}
       onkeydown={handleKeydown}
     />
     <div class="alt-actions">

@@ -876,7 +876,11 @@
                 <button class="btn-sm danger" onclick={() => handleRemoveServer(server.id)}>{$t('common.remove')}</button>
               </div>
 
-              {#if connectedServers.has(server.id)}
+              {#if connectedServers.has(server.id) && server.transport.type !== 'stdio'}
+                <!-- LAN bridge only proxies stdio subprocesses. http/sse servers
+                     already have a reachable URL, so bridging is not applicable. -->
+                <p class="lan-na">{$t('mcp.lan.only_stdio')}</p>
+              {:else if connectedServers.has(server.id)}
                 <div class="lan-expose">
                   <label class="lan-toggle">
                     <input type="checkbox" checked={!!lanExposed[server.id]} onchange={() => toggleLanExpose(server)} />
@@ -1390,17 +1394,20 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.5rem;
-    border: 1px solid var(--border-light);
-    border-radius: 6px;
-    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    gap: 0.5rem 0.75rem;
+    row-gap: 0;
   }
 
   .server-info, .target-info, .sync-info {
     display: flex;
     flex-direction: column;
-    gap: 0.1rem;
+    gap: 0.15rem;
     min-width: 0;
+    flex: 1 1 auto;
   }
 
   .server-name, .target-name, .sync-name {
@@ -1415,6 +1422,7 @@
   .server-status {
     font-size: var(--font-size-xs);
     color: var(--text-muted);
+    white-space: nowrap;
   }
 
   .server-status.connected { color: #28a745; }
@@ -1423,6 +1431,7 @@
     display: flex;
     align-items: center;
     gap: 0.35rem;
+    flex-wrap: wrap;
   }
 
   .server-transport-label {
@@ -1448,17 +1457,30 @@
   /* ── LAN expose (per connected server) ── */
   .lan-expose {
     flex-basis: 100%;
+    width: 100%;
     margin-top: 0.5rem;
     padding-top: 0.5rem;
-    border-top: 1px solid var(--border-color, #e5e5e5);
+    border-top: 1px solid var(--border-light);
   }
   .lan-toggle {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    font-size: 0.8rem;
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
     cursor: pointer;
     user-select: none;
+  }
+  /* Muted note shown for http/sse servers where LAN bridge doesn't apply. */
+  .lan-na {
+    flex-basis: 100%;
+    width: 100%;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-light);
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    line-height: 1.45;
   }
   .lan-card {
     margin-top: 0.5rem;
