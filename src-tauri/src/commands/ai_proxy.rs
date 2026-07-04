@@ -392,7 +392,33 @@ pub async fn ai_proxy_stream(
         flags.insert(request_id.clone(), abort_flag.clone());
     }
 
+    // Liveness heartbeat ticker for the WHOLE request lifetime — crucially
+    // including the initial `req.send().await` wait, before any SSE byte
+    // arrives. A slow first token (large tool lists, reasoning models that
+    // buffer, or a provider under load) can exceed the frontend's 120s
+    // stall-watchdog while the request is perfectly healthy. This background
+    // task sends a heartbeat (\x01, which the frontend renders nothing for)
+    // every 15s so the watchdog tracks true request liveness. It stops on
+    // user-abort (flag) or when the request finishes (handle aborted below).
+    let hb_handle = {
+        let ch = on_event.clone();
+        let abort = abort_flag.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+                if abort.load(Ordering::SeqCst) {
+                    break;
+                }
+                if ch.send("\u{1}".to_string()).is_err() {
+                    break; // channel closed — receiver gone
+                }
+            }
+        })
+    };
+
     let result = do_stream(&on_event, &provider, req, &abort_flag).await;
+
+    hb_handle.abort();
 
     // Cleanup
     if let Ok(mut flags) = state.abort_flags.lock() {
