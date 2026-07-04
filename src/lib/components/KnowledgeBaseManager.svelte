@@ -172,7 +172,7 @@
                   onclick={() => { picoraBindingKb = kb; }}
                   title={kb.picoraBinding ? $t('kb_sync.card.settings') : $t('kb_sync.card.bind')}
                 >
-                  <svg width="13" height="13" viewBox="8 6 16 20" fill="none" style="vertical-align:-1px;display:inline-block" aria-hidden="true"><path d="M9.5 7.5v17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="14" r="6.5" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="14" r="2.4" fill="currentColor"/></svg>{#if kb.picoraBinding}{@const _s = syncStates.get(kb.id)}{#if _s?.status === 'conflict'} ⚠{_s.conflictCount}{:else if _s?.status === 'error'} ✗{:else if _s?.status === 'syncing'} ⟳{:else} {kb.picoraBinding.picoraKbName.slice(0, 12)}{/if}{/if}
+                  <span class="picora-icon"><svg width="13" height="13" viewBox="8 6 16 20" fill="none" style="vertical-align:-1px;display:inline-block" aria-hidden="true"><path d="M9.5 7.5v17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="14" r="6.5" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="14" r="2.4" fill="currentColor"/></svg></span>{#if kb.picoraBinding}{@const _s = syncStates.get(kb.id)}{#if _s?.status === 'conflict'} ⚠{_s.conflictCount}{:else if _s?.status === 'error'} ✗{:else if _s?.status === 'syncing'}{:else} {kb.picoraBinding.picoraKbName.slice(0, 12)}{/if}{/if}
                 </button>
                 {#if kb.git}
                   <button class="kb-action-btn" onclick={() => unbindGit(kb)} title={$t('git.unbind')}>
@@ -423,4 +423,30 @@
   .kb-picora-btn.picora-warn { color: var(--warning-color, #e8a838); border-color: var(--warning-color, #e8a838) !important; }
   .kb-picora-btn.picora-err { color: var(--color-error, #e53e3e); border-color: var(--color-error, #e53e3e) !important; }
   .kb-picora-btn.picora-sync { color: var(--accent-color); border-color: var(--accent-color) !important; }
+
+  .picora-icon {
+    display: inline-block;
+    transform-origin: center;
+  }
+  /* Syncing → breathing-light on the Picora glyph (matches the sidebar &
+     status bar sync indicators): opacity + subtle scale pulse with a soft
+     accent halo, replacing the old rotation-looking ⟳ glyph. */
+  .kb-picora-btn.picora-sync .picora-icon {
+    animation: kb-sync-breathe 1.6s ease-in-out infinite;
+  }
+  @keyframes kb-sync-breathe {
+    0%, 100% {
+      opacity: 0.45;
+      transform: scale(0.9);
+      filter: drop-shadow(0 0 0 transparent);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.1);
+      filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent-color) 55%, transparent));
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .kb-picora-btn.picora-sync .picora-icon { animation: none; opacity: 0.75; }
+  }
 </style>
