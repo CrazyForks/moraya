@@ -189,11 +189,25 @@ fn try_read_stderr(stderr: &mut ChildStderr) -> String {
     }
 }
 
+/// Max stderr bytes surfaced in an error message. Kept generous so the real
+/// failure line is visible past any leading `npm warn` noise (e.g. EBADENGINE
+/// warnings that precede the actual fatal error).
+const MAX_STDERR_BYTES: usize = 1500;
+
 /// Truncate and sanitize stderr output for error messages.
 /// Strips home directory paths for privacy but preserves overall message structure.
 fn sanitize_stderr(stderr_msg: &str) -> String {
-    let truncated = if stderr_msg.len() > 500 {
-        &stderr_msg[..500]
+    // Boundary-safe truncation: slicing a &str at a raw byte index PANICS when
+    // the index lands mid-UTF-8-character. MCP servers emit non-ASCII stderr
+    // (e.g. the Chinese 文颜/wenyan tool), so a raw `&stderr_msg[..N]` could
+    // abort the entire app — the release profile is `panic = "abort"`. Walk
+    // back to the nearest char boundary before slicing.
+    let truncated = if stderr_msg.len() > MAX_STDERR_BYTES {
+        let mut end = MAX_STDERR_BYTES;
+        while end > 0 && !stderr_msg.is_char_boundary(end) {
+            end -= 1;
+        }
+        &stderr_msg[..end]
     } else {
         stderr_msg
     };
@@ -602,5 +616,43 @@ pub fn check_command_exists(command: String) -> Result<String, String> {
         } else {
             String::from_utf8_lossy(&output.stderr).trim().to_string()
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_stderr_does_not_panic_on_multibyte_at_boundary() {
+        // A long non-ASCII stderr whose byte length exceeds the cap and whose
+        // cap index lands mid-character. Before the fix, `&s[..1500]` panicked
+        // here → with panic=abort the whole app aborted ("restart").
+        let s = "文".repeat(1000); // 3 bytes each = 3000 bytes; byte 1500 is mid-char
+        let out = sanitize_stderr(&s);
+        // Must return a valid (boundary-safe) truncation, not panic.
+        assert!(out.len() <= MAX_STDERR_BYTES);
+        assert!(!out.is_empty());
+    }
+
+    #[test]
+    fn sanitize_stderr_preserves_short_ascii() {
+        let s = "npm warn EBADENGINE Unsupported engine";
+        assert_eq!(sanitize_stderr(s), s);
+    }
+
+    #[test]
+    fn sanitize_stderr_redacts_home_paths() {
+        let s = "error at /Users/alice/project/index.js line 3";
+        let out = sanitize_stderr(s);
+        assert!(!out.contains("/Users/alice"));
+        assert!(out.contains("<path>"));
+    }
+
+    #[test]
+    fn sanitize_stderr_truncates_long_ascii_to_cap() {
+        let s = "x".repeat(5000);
+        let out = sanitize_stderr(&s);
+        assert!(out.len() <= MAX_STDERR_BYTES);
     }
 }
