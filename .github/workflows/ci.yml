@@ -92,8 +92,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Rust cache
-        # v3 (2025) runs on Node 24 shim; cache key structure unchanged from v2.
-        uses: swatinem/rust-cache@v3
+        # Stays on v2 — no v3 has been published yet. v2 still runs on the
+        # Node 20 shim (logs the deprecation warning) but that's a warning,
+        # not a failure. Bump to v3 once swatinem releases it.
+        uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
 

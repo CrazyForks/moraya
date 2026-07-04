@@ -133,8 +133,10 @@ jobs:
           targets: ${{ matrix.rust-targets }}
 
       - name: Rust cache
-        # v3 (2025) runs on Node 24 shim; cache key structure unchanged from v2.
-        uses: swatinem/rust-cache@v3
+        # Stays on v2 — no v3 has been published yet. Bump when swatinem
+        # releases it (`gh api repos/Swatinem/rust-cache/releases/latest
+        # --jq .tag_name` to check).
+        uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
 
@@ -184,7 +186,7 @@ jobs:
   #         targets: aarch64-apple-ios
 
   #     - name: Rust cache
-  #       uses: swatinem/rust-cache@v3
+  #       uses: swatinem/rust-cache@v2
   #       with:
   #         workspaces: './src-tauri -> target'
 
