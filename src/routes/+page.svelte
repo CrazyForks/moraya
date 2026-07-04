@@ -2830,6 +2830,20 @@ ${tr('welcome.tip')}
     // Preload enhancement plugins in background (warms cache for editor creation)
     preloadEnhancementPlugins();
 
+    // Warm the SettingsPanel chunk on idle so the first open (menu → 设置 /
+    // Cmd+,) is instant. It's dynamically imported at the `{#await}` below, so
+    // without this the first click pays the chunk fetch+parse cost — a visible
+    // delay before the panel appears. Fire-and-forget; the module cache makes
+    // the later `import()` resolve immediately.
+    {
+      const warmSettings = () => { void import('$lib/components/SettingsPanel.svelte'); };
+      if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(warmSettings, { timeout: 2000 });
+      } else {
+        setTimeout(warmSettings, 400);
+      }
+    }
+
     // macOS only: detect stale `/Volumes/Moraya*` DMG mounts left by older
     // downloads and offer to eject. Fire-and-forget — runs after a short
     // delay so the editor mount path stays uncontested. Skipped on

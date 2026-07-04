@@ -1321,7 +1321,16 @@
   {/if}
 
   {#if error}
-    <div class="error-bar">{error}</div>
+    <div class="error-bar">
+      <span class="error-bar-msg">{error}</span>
+      <button
+        type="button"
+        class="error-bar-close"
+        aria-label={$t('common.close')}
+        title={$t('common.close')}
+        onclick={() => mcpStore.setError(null)}
+      >×</button>
+    </div>
   {/if}
 </div>
 
@@ -1756,11 +1765,36 @@
   }
 
   .error-bar {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
     padding: 0.4rem 0.75rem;
     background: #fee;
     border-top: 1px solid #fcc;
     color: #c33;
     font-size: var(--font-size-xs);
+  }
+
+  .error-bar-msg {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+  }
+
+  .error-bar-close {
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    color: #c33;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0.15rem;
+    opacity: 0.7;
+  }
+
+  .error-bar-close:hover {
+    opacity: 1;
   }
 
   /* ── Marketplace ── */

@@ -31,6 +31,15 @@
   // svelte-ignore state_referenced_locally
   let activeTab = $state<Tab>(initialTab);
 
+  // Lazy tab mounting. The heavy tab components (AI/MCP/Voice/Plugins/…) used
+  // to ALL mount on every panel open, which is the source of the noticeable
+  // open delay. Instead, a tab's component mounts on first visit and stays
+  // mounted afterwards (so switching back is instant). The effect marks the
+  // active tab visited — covering both clicks and programmatic jumps.
+  // svelte-ignore state_referenced_locally
+  let visitedTabs = $state<Record<string, boolean>>({ [initialTab]: true });
+  $effect(() => { visitedTabs[activeTab] = true; });
+
   let theme = $state<Theme>('system');
   let colorTheme = $state('default-light');
   let darkColorTheme = $state('default-dark');
@@ -244,24 +253,29 @@
             <p class="tab-desc">{$t('settings.tab_desc.publish')}</p>
           {/if}
 
-          <!-- Heavy components: always mounted, shown/hidden via CSS to avoid remount lag -->
-          <div class="tab-pane" class:active={activeTab === 'ai'}><AISettings /></div>
-          <div class="tab-pane" class:active={activeTab === 'image-ai'}><ImageAISettings /></div>
-        <div class="tab-pane" class:active={activeTab === 'mcp'}><MCPPanel /></div>
+          <!-- Heavy components: mounted lazily on first visit, then kept mounted
+               (shown/hidden via CSS) so switching back has no remount lag. -->
+          <div class="tab-pane" class:active={activeTab === 'ai'}>{#if visitedTabs['ai']}<AISettings />{/if}</div>
+          <div class="tab-pane" class:active={activeTab === 'image-ai'}>{#if visitedTabs['image-ai']}<ImageAISettings />{/if}</div>
+        <div class="tab-pane" class:active={activeTab === 'mcp'}>{#if visitedTabs['mcp']}<MCPPanel />{/if}</div>
         <div class="tab-pane" class:active={activeTab === 'image'}>
-          <ImageHostingSettings
-            onImportPicora={openPicoraManualImport}
-            onJumpToPicora={() => activeTab = 'picora'}
-          />
+          {#if visitedTabs['image']}
+            <ImageHostingSettings
+              onImportPicora={openPicoraManualImport}
+              onJumpToPicora={() => activeTab = 'picora'}
+            />
+          {/if}
         </div>
-        <div class="tab-pane" class:active={activeTab === 'publish'}><PublishSettings /></div>
-        <div class="tab-pane" class:active={activeTab === 'voice'}><VoiceSettings /></div>
-        <div class="tab-pane" class:active={activeTab === 'knowledge-base'}><KBIndexSettings onOpenKBManager={() => showKBManager = true} /></div>
-        <div class="tab-pane" class:active={activeTab === 'kb-sync'}><KbSyncSettings /></div>
+        <div class="tab-pane" class:active={activeTab === 'publish'}>{#if visitedTabs['publish']}<PublishSettings />{/if}</div>
+        <div class="tab-pane" class:active={activeTab === 'voice'}>{#if visitedTabs['voice']}<VoiceSettings />{/if}</div>
+        <div class="tab-pane" class:active={activeTab === 'knowledge-base'}>{#if visitedTabs['knowledge-base']}<KBIndexSettings onOpenKBManager={() => showKBManager = true} />{/if}</div>
+        <div class="tab-pane" class:active={activeTab === 'kb-sync'}>{#if visitedTabs['kb-sync']}<KbSyncSettings />{/if}</div>
         <div class="tab-pane" class:active={activeTab === 'picora'}>
-          <PicoraSettingsTab onJumpToKbSync={() => activeTab = 'kb-sync'} />
+          {#if visitedTabs['picora']}
+            <PicoraSettingsTab onJumpToKbSync={() => activeTab = 'kb-sync'} />
+          {/if}
         </div>
-        <div class="tab-pane" class:active={activeTab === 'plugins'}><PluginsPanel /></div>
+        <div class="tab-pane" class:active={activeTab === 'plugins'}>{#if visitedTabs['plugins']}<PluginsPanel />{/if}</div>
 
         {#if activeTab === 'general'}
           <div class="gx-tab">
