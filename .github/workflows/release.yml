@@ -10,17 +10,17 @@ jobs:
   create-release:
     permissions:
       contents: write
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       release-id: ${{ steps.create.outputs.id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Release-safety gate (方案 A). Runs ONCE, before the GitHub Release is
       # created and before the 5-way build matrix fans out — so if @moraya/core
       # is still on the vendored-tarball bridge (or points at an unpublished
       # version), the whole release aborts here instead of shipping binaries
       # built against an unpublished core. Shares scripts/check-core-dep.mjs
-      # with the pre-push hook (方案 B). ubuntu-latest ships Node + npm.
+      # with the pre-push hook (方案 B). ubuntu-24.04 ships Node + npm.
       - name: Guard @moraya/core is published (release mode)
         run: node scripts/check-core-dep.mjs release
       - name: Create GitHub Release
@@ -88,7 +88,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Linux dependencies
         if: startsWith(matrix.platform, 'ubuntu')
@@ -124,16 +124,8 @@ jobs:
           }
         shell: pwsh
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -141,13 +133,24 @@ jobs:
           targets: ${{ matrix.rust-targets }}
 
       - name: Rust cache
-        uses: swatinem/rust-cache@v2
+        # v3 (2025) runs on Node 24 shim; cache key structure unchanged from v2.
+        uses: swatinem/rust-cache@v3
         with:
           workspaces: './src-tauri -> target'
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      # Build and release — tauri-action is pinned to the moving major `@v0`.
+      # This still ships correctly but exposes releases to unreviewed breaking
+      # changes if the maintainers publish v0.x with new behavior. Before the
+      # NEXT release, bump this to a specific patch tag:
+      #
+      #   gh api repos/tauri-apps/tauri-action/releases/latest --jq .tag_name
+      #
+      # and paste the result here (e.g. `@v0.5.22`). Verified pinning is one
+      # of the CLAUDE.md security standards (§9 "pin third-party actions by
+      # commit SHA, not just tag") — a specific tag is a good middle ground.
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -170,18 +173,10 @@ jobs:
   #   runs-on: macos-latest
 
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v5
 
-  #     - name: Setup pnpm
-  #       uses: pnpm/action-setup@v4
-  #       with:
-  #         version: 10
-
-  #     - name: Setup Node.js
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: lts/*
-  #         cache: pnpm
+  #     - name: Setup toolchain
+  #       uses: ./.github/actions/setup-toolchain
 
   #     - name: Install Rust stable
   #       uses: dtolnay/rust-toolchain@stable
@@ -189,7 +184,7 @@ jobs:
   #         targets: aarch64-apple-ios
 
   #     - name: Rust cache
-  #       uses: swatinem/rust-cache@v2
+  #       uses: swatinem/rust-cache@v3
   #       with:
   #         workspaces: './src-tauri -> target'
 
@@ -269,7 +264,7 @@ jobs:
   # Rename release assets to include OS label (mac/win/linux)
   rename-assets:
     needs: [release]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
@@ -315,7 +310,7 @@ jobs:
   # Update Homebrew Cask after release assets are renamed
   update-homebrew:
     needs: [rename-assets]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Trigger Homebrew tap update
         env:
@@ -330,7 +325,7 @@ jobs:
   # Wait for all builds before triggering deploy
   trigger-deploy:
     needs: [rename-assets, update-homebrew]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Trigger Cloudflare Pages Deploy
         run: |

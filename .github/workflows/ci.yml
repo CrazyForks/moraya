@@ -8,21 +8,17 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-22.04
+    # Explicit runner pin — `ubuntu-latest` resolves to 24.04 at time of
+    # writing, but the alias moves. Pinning avoids surprise runner rollouts
+    # affecting reproducibility (see also the build job below which stays on
+    # 22.04 for libwebkit2gtk-4.1 LTS compatibility during Tauri bundling).
+    runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -74,33 +70,30 @@ jobs:
           echo "OK: @moraya/core dependency form is allowed ($core_spec)."
 
   build:
+    # Kept on 22.04 (not bumped to 24.04) for tauri-app bundling: 22.04 is the
+    # oldest LTS still under Ubuntu Pro, giving the deb/AppImage bundles the
+    # widest glibc + libwebkit2gtk-4.1 compatibility target. Bump to 24.04 only
+    # after confirming Homebrew Cask + Linux distributor consumers accept it.
     runs-on: ubuntu-22.04
     needs: check
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
       - name: Rust cache
-        uses: swatinem/rust-cache@v2
+        # v3 (2025) runs on Node 24 shim; cache key structure unchanged from v2.
+        uses: swatinem/rust-cache@v3
         with:
           workspaces: './src-tauri -> target'
 

@@ -1,0 +1,33 @@
+name: 'Setup Moraya toolchain'
+description: >-
+  Installs pnpm (version resolved from `packageManager` in package.json via
+  corepack) + Node.js + pnpm cache. Centralises the "checkout is already done,
+  now get me a working JS/TS toolchain" step so future action-version bumps
+  are one-line changes here instead of touching every workflow. Callers must
+  run `actions/checkout@v5` themselves before this — composite actions live in
+  the repo and can't check out their own code.
+
+inputs:
+  node-version:
+    description: 'Node.js major version (default 22 LTS "Jod").'
+    required: false
+    default: '22'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup pnpm
+      # v4 reads `packageManager` from package.json — do NOT pass `with.version`
+      # here; both sources of truth trigger `ERR_PNPM_BAD_PM_VERSION`. Local
+      # dev goes through corepack against the same `packageManager` line,
+      # keeping CI + workstations bit-identical.
+      uses: pnpm/action-setup@v4
+
+    - name: Setup Node.js
+      # v5 (Sep 2025) runs on Node 24 shim — silences the "Node 20 is being
+      # deprecated" warning that v4 emits. Node-version + cache inputs are
+      # compatible with v4.
+      uses: actions/setup-node@v5
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: pnpm

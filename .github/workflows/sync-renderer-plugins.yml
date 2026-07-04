@@ -18,19 +18,13 @@ permissions:
 jobs:
   sync:
     name: Sync renderer plugin versions from npm
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
