@@ -82,11 +82,14 @@
      code blocks and blue hljs so an open formula source reads as its own
      mode. Used by .math-src-row / .math-src-inline in editor.css. */
   --math-src-bg: #f5f3fc;
-  --math-src-border: #a78be0;
   --math-src-delim: #7c3aed;
   --math-src-text: #37306b;
   --math-src-caret: #7c3aed;
   --math-src-error: #cc2f2f;
+  /* LaTeX token colors (syntax-highlight backdrop) */
+  --math-src-tok-cmd: #7c3aed;
+  --math-src-tok-brace: #be185d;
+  --math-src-tok-script: #b45309;
 }
 
 /* Dark theme */
@@ -153,11 +156,13 @@
 
   /* Math source editing (in-place LaTeX) - Dark. */
   --math-src-bg: #2b2640;
-  --math-src-border: #7c6bc4;
   --math-src-delim: #c9b0f7;
   --math-src-text: #e4dffa;
   --math-src-caret: #c9b0f7;
   --math-src-error: #ff8a8a;
+  --math-src-tok-cmd: #c9b0f7;
+  --math-src-tok-brace: #f0a6cf;
+  --math-src-tok-script: #f0b866;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -219,11 +224,13 @@
 
     /* Math source editing (in-place LaTeX) - Dark (system). */
     --math-src-bg: #2b2640;
-    --math-src-border: #7c6bc4;
     --math-src-delim: #c9b0f7;
     --math-src-text: #e4dffa;
     --math-src-caret: #c9b0f7;
     --math-src-error: #ff8a8a;
+    --math-src-tok-cmd: #c9b0f7;
+    --math-src-tok-brace: #f0a6cf;
+    --math-src-tok-script: #f0b866;
   }
 }
 

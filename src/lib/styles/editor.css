@@ -792,16 +792,15 @@
 }
 
 /* Source line: $$ [textarea] $$ — dedicated "math zone" palette (indigo/violet),
-   distinct from the gray code blocks. Left accent stripe signals edit mode. */
+   distinct from the gray code blocks. */
 .moraya-editor .math-src-row {
   display: flex;
   align-items: flex-start;
   gap: 0.45em;
-  padding: 0.35em 0.6em 0.35em 0.55em;
+  padding: 0.35em 0.6em;
   margin-bottom: 0.5em;
   background: var(--math-src-bg);
   border-radius: 6px;
-  border-left: 3px solid var(--math-src-border);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.88em;
   line-height: 1.55;
@@ -814,24 +813,69 @@
   flex-shrink: 0;
 }
 
-.moraya-editor .math-src-row .math-src-input {
+/* Overlay: transparent textarea over a synced syntax-highlight backdrop.
+   The backdrop (.math-src-highlight) carries the visible, colored glyphs;
+   the textarea provides editing + caret only. Both MUST share identical
+   font metrics / padding / wrapping so glyphs and caret align exactly. */
+.moraya-editor .math-src-field {
+  position: relative;
   flex: 1;
   min-width: 0;
+}
+
+.moraya-editor .math-src-highlight {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  font: inherit;
+  line-height: inherit;
+  color: var(--math-src-text);
+}
+
+.moraya-editor .math-src-row .math-src-input {
+  position: relative;
+  display: block;
+  width: 100%;
   border: none;
   outline: none;
   resize: none;
   padding: 0;
   margin: 0;
   background: transparent;
-  color: var(--math-src-text);
+  color: transparent;
   font: inherit;
   line-height: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
   caret-color: var(--math-src-caret);
 }
 
 .moraya-editor .math-src-row .math-src-input::placeholder {
   color: var(--math-src-delim);
   opacity: 0.5;
+}
+
+/* LaTeX token colors (shared by block + inline backdrops) */
+.moraya-editor .math-src-highlight .tok-cmd,
+.moraya-editor .math-src-highlight-inline .tok-cmd {
+  color: var(--math-src-tok-cmd);
+  font-weight: 600;
+}
+.moraya-editor .math-src-highlight .tok-brace,
+.moraya-editor .math-src-highlight-inline .tok-brace {
+  color: var(--math-src-tok-brace);
+}
+.moraya-editor .math-src-highlight .tok-script,
+.moraya-editor .math-src-highlight-inline .tok-script {
+  color: var(--math-src-tok-script);
+  font-weight: 600;
+}
+.moraya-editor .math-src-highlight .tok-amp,
+.moraya-editor .math-src-highlight-inline .tok-amp {
+  color: var(--math-src-tok-script);
 }
 
 /* Inline variant: $ [input] $ replaces the rendered formula in place */
@@ -850,18 +894,33 @@
   padding: 0.05em 0.35em;
   background: var(--math-src-bg);
   border-radius: 4px;
-  box-shadow: inset 2px 0 0 var(--math-src-border);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.9em;
 }
 
+.moraya-editor .math-src-field-inline {
+  position: relative;
+  display: inline-block;
+}
+
+.moraya-editor .math-src-highlight-inline {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  white-space: pre;
+  font: inherit;
+  color: var(--math-src-text);
+}
+
 .moraya-editor .math-src-inline .math-src-input {
+  position: relative;
   border: none;
   outline: none;
   padding: 0;
   margin: 0;
   background: transparent;
-  color: var(--math-src-text);
+  color: transparent;
   font: inherit;
   caret-color: var(--math-src-caret);
 }

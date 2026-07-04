@@ -44,6 +44,24 @@ test('click formula → source opens in place and holds focus', async ({ page })
   await expect(ta).toBeFocused()
 })
 
+test('open source shows a syntax-highlighted backdrop with colored tokens', async ({ page }) => {
+  await bootEditor(page)
+  await page.click('.math-block-nodeview .math-preview')
+  await page.fill('textarea.math-src-input', '\\frac{a}{b}^2')
+
+  const backdrop = page.locator('.math-src-highlight')
+  await expect(backdrop.locator('.tok-cmd')).toContainText('\\frac')
+  await expect(backdrop.locator('.tok-brace').first()).toHaveText('{')
+  await expect(backdrop.locator('.tok-script')).toHaveText('^')
+
+  // The command token must actually render in a non-default color.
+  const cmdColor = await backdrop.locator('.tok-cmd').evaluate(
+    (el) => getComputedStyle(el).color,
+  )
+  const plainColor = await backdrop.evaluate((el) => getComputedStyle(el).color)
+  expect(cmdColor).not.toBe(plainColor)
+})
+
 test('edit + blur commits, formula re-renders', async ({ page }) => {
   await bootEditor(page)
   await page.click('.math-block-nodeview .math-preview')

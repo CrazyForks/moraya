@@ -22,7 +22,7 @@ vi.mock('$lib/i18n', async () => {
 
 import { schema } from './schema';
 import { parseMarkdown } from './markdown';
-import { mathBlockNodeView, mathInlineNodeView } from './math-node-views';
+import { mathBlockNodeView, mathInlineNodeView, highlightLatex } from './math-node-views';
 
 let host: HTMLDivElement;
 let view: EditorView | null = null;
@@ -181,4 +181,40 @@ describe('stopEvent swallows mouse events (focus-race guard)', () => {
       expect(nv.stopEvent!(new MouseEvent(type))).toBe(true);
     });
   }
+});
+
+// ── LaTeX syntax-highlight backdrop ───────────────────────────────────
+describe('highlightLatex (source token coloring)', () => {
+  it('wraps control sequences in .tok-cmd', () => {
+    expect(highlightLatex('\\frac{a}{b}')).toContain('<span class="tok-cmd">\\frac</span>');
+  });
+
+  it('colors braces and sub/superscript markers distinctly', () => {
+    const html = highlightLatex('x^2_i');
+    expect(html).toContain('<span class="tok-script">^</span>');
+    expect(html).toContain('<span class="tok-script">_</span>');
+    expect(highlightLatex('{x}')).toContain('<span class="tok-brace">{</span>');
+  });
+
+  it('treats an escaped single char as one command token', () => {
+    // \\ (line break) and \, (thin space) are single-char control sequences
+    expect(highlightLatex('a\\\\b')).toContain('<span class="tok-cmd">\\\\</span>');
+  });
+
+  it('escapes HTML so the innerHTML backdrop cannot be injected', () => {
+    const html = highlightLatex('a < b > c & d');
+    expect(html).toContain('&lt;');
+    expect(html).toContain('&gt;');
+    expect(html).not.toContain('<b >');
+    // & inside plain text is escaped; & as an alignment tab is its own token
+    expect(highlightLatex('a & b')).toContain('<span class="tok-amp">&amp;</span>');
+  });
+
+  it('pads a trailing newline so the backdrop keeps caret alignment', () => {
+    expect(highlightLatex('a\n')).toBe('a\n ');
+  });
+
+  it('leaves plain identifiers/numbers uncolored', () => {
+    expect(highlightLatex('abc123')).toBe('abc123');
+  });
 });

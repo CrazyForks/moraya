@@ -44,12 +44,68 @@ function renderKatex(target: HTMLElement, latex: string, displayMode: boolean) {
   }
 }
 
+/** HTML-escape (the highlight layer is set via innerHTML — never trust input). */
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/**
+ * Tokenize LaTeX source into colored spans for the syntax-highlight backdrop.
+ * Native textarea/input cannot color individual tokens, so the visible text is
+ * this layer (the input's own glyphs are transparent, overlaid for the caret).
+ *
+ * Token classes (styled in editor.css → var(--math-src-tok-*)):
+ *   .tok-cmd    control sequences: \frac \alpha \\ \{ ...
+ *   .tok-brace  grouping braces { }
+ *   .tok-script sub/superscript markers ^ _
+ *   .tok-amp    alignment tab &
+ * Everything else (identifiers, numbers, operators) uses the default color.
+ */
+export function highlightLatex(src: string): string {
+  let out = ''
+  let i = 0
+  const n = src.length
+  while (i < n) {
+    const c = src[i]
+    if (c === '\\') {
+      // \word (letters) OR a single escaped char (\\, \{, \, , ...)
+      let j = i + 1
+      if (j < n && /[a-zA-Z]/.test(src[j])) {
+        while (j < n && /[a-zA-Z]/.test(src[j])) j++
+      } else {
+        j = Math.min(j + 1, n)
+      }
+      out += `<span class="tok-cmd">${escapeHtml(src.slice(i, j))}</span>`
+      i = j
+    } else if (c === '{' || c === '}') {
+      out += `<span class="tok-brace">${c}</span>`
+      i++
+    } else if (c === '^' || c === '_') {
+      out += `<span class="tok-script">${c}</span>`
+      i++
+    } else if (c === '&') {
+      out += `<span class="tok-amp">&amp;</span>`
+      i++
+    } else {
+      let j = i
+      while (j < n && !'\\{}^_&'.includes(src[j])) j++
+      out += escapeHtml(src.slice(i, j))
+      i = j
+    }
+  }
+  // A trailing newline has no glyph line in a <div>, so the backdrop would be
+  // one line shorter than the textarea — pad it to keep caret alignment.
+  if (src.endsWith('\n')) out += ' '
+  return out
+}
+
 // ── math_block ─────────────────────────────────────────────────────────
 
 class MathBlockView implements NodeView {
   dom: HTMLDivElement
   private srcRow: HTMLDivElement
   private textarea: HTMLTextAreaElement
+  private highlight: HTMLDivElement
   private preview: HTMLDivElement
   private node: PMNode
   private view: EditorView
@@ -80,7 +136,15 @@ class MathBlockView implements NodeView {
     this.textarea.setAttribute('autocapitalize', 'off')
     this.textarea.setAttribute('autocorrect', 'off')
     this.textarea.placeholder = get(t)('math.placeholder')
-    this.srcRow.append(open, this.textarea, close)
+    // Syntax-highlight backdrop: colored token layer behind the transparent
+    // textarea (native textareas cannot color individual tokens).
+    this.highlight = document.createElement('div')
+    this.highlight.className = 'math-src-highlight'
+    this.highlight.setAttribute('aria-hidden', 'true')
+    const field = document.createElement('div')
+    field.className = 'math-src-field'
+    field.append(this.highlight, this.textarea)
+    this.srcRow.append(open, field, close)
 
     this.preview = document.createElement('div')
     this.preview.className = 'math-preview'
@@ -108,7 +172,12 @@ class MathBlockView implements NodeView {
 
     this.textarea.addEventListener('input', () => {
       this.autosize()
+      this.updateHighlight()
       renderKatex(this.preview, this.textarea.value.trim(), true)
+    })
+    this.textarea.addEventListener('scroll', () => {
+      this.highlight.scrollTop = this.textarea.scrollTop
+      this.highlight.scrollLeft = this.textarea.scrollLeft
     })
     this.textarea.addEventListener('blur', () => {
       if (this.editing) this.commitAndExit(false)
@@ -131,10 +200,15 @@ class MathBlockView implements NodeView {
     this.textarea.rows = Math.max(1, Math.min(lines, 12))
   }
 
+  private updateHighlight() {
+    this.highlight.innerHTML = highlightLatex(this.textarea.value)
+  }
+
   private enterEdit() {
     this.editing = true
     this.textarea.value = String(this.node.attrs.value ?? '')
     this.autosize()
+    this.updateHighlight()
     this.srcRow.style.display = ''
     this.dom.classList.add('editing')
     this.textarea.focus()
@@ -214,6 +288,7 @@ class MathInlineView implements NodeView {
   dom: HTMLSpanElement
   private srcWrap: HTMLSpanElement
   private input: HTMLInputElement
+  private highlight: HTMLSpanElement
   private preview: HTMLSpanElement
   private node: PMNode
   private view: EditorView
@@ -242,7 +317,13 @@ class MathInlineView implements NodeView {
     this.input.className = 'math-src-input'
     this.input.spellcheck = false
     this.input.setAttribute('autocapitalize', 'off')
-    this.srcWrap.append(open, this.input, close)
+    this.highlight = document.createElement('span')
+    this.highlight.className = 'math-src-highlight-inline'
+    this.highlight.setAttribute('aria-hidden', 'true')
+    const field = document.createElement('span')
+    field.className = 'math-src-field-inline'
+    field.append(this.highlight, this.input)
+    this.srcWrap.append(open, field, close)
 
     this.preview = document.createElement('span')
     this.preview.className = 'math-preview-inline'
@@ -263,7 +344,13 @@ class MathInlineView implements NodeView {
         this.enterEdit()
       }
     })
-    this.input.addEventListener('input', () => this.resizeToContent())
+    this.input.addEventListener('input', () => {
+      this.resizeToContent()
+      this.updateHighlight()
+    })
+    this.input.addEventListener('scroll', () => {
+      this.highlight.scrollLeft = this.input.scrollLeft
+    })
     this.input.addEventListener('blur', () => {
       if (this.editing) this.commitAndExit(false)
     })
@@ -285,10 +372,15 @@ class MathInlineView implements NodeView {
     this.input.style.width = `${Math.max(2, this.input.value.length + 1)}ch`
   }
 
+  private updateHighlight() {
+    this.highlight.innerHTML = highlightLatex(this.input.value)
+  }
+
   private enterEdit() {
     this.editing = true
     this.input.value = this.node.textContent
     this.resizeToContent()
+    this.updateHighlight()
     this.srcWrap.style.display = ''
     this.preview.style.display = 'none'
     this.dom.classList.add('editing')
