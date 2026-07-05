@@ -1,178 +1,174 @@
+<!-- AUTO-GENERATED from moraya-site/src/content/legal/privacy.en.md (v2.0).
+     DO NOT EDIT — run `pnpm sync:legal` in moraya-site. -->
+
 # Privacy Policy for Moraya
 
-**Effective Date:** March 28, 2026
+**Effective Date:** 2026-08-05 · **Version:** 2.0
 
-[moraya.app](https://moraya.app) develops and distributes Moraya, an open-source AI-powered Markdown editor (the "Software"). This Software is provided by moraya.app and is intended for use as is.
+Moraya is a local-first Markdown editor and knowledge workspace: **your writing, your keys, your AI — on your device.** This Privacy Policy explains what data Moraya handles, where it lives, and which third parties are involved — across every platform we ship.
 
-This Privacy Policy informs you of our policies regarding the collection, use, and disclosure of information when you use Moraya. By using Moraya, you agree to the collection and use of information in accordance with this policy.
+By using Moraya, you agree to the practices described in this policy.
 
-The terms used in this Privacy Policy have the same meanings as in our Terms of Service (if any), accessible via our documentation or website, unless otherwise defined here.
+## Summary
 
-This Privacy Policy applies only to the use of the Moraya Software itself. Visiting our official website (moraya.app), documentation, GitHub repository, or other related sites is governed by their respective privacy policies (if any).
+- **Moraya does not operate servers that store your documents.** Your notes live on your device by default. Cloud sync is optional and, on Moraya Web and Moraya Mobile, end-to-end encrypted.
+- **Zero telemetry.** Moraya contains no analytics, no usage tracking, and no crash reporting. We cannot see how you use the app.
+- **Bring Your Own Key.** AI features connect directly from your device to the AI provider you choose, using your own API key. There is no Moraya relay in between.
+- **Offline first.** Every platform works without an account and without a network connection. Connecting a cloud account (Picora) is always opt-in.
+- **We never sell your data and never train AI models on your content.**
 
-## Information Collection and Use
+## 1. Scope and Platforms
 
-Moraya is designed to operate primarily locally on your device with minimal data collection. **We do not collect any personal or usage data by default.**
+This policy covers the Moraya product family:
 
-### Anonymous Usage Data (Optional)
+| Platform | Distribution | Source code |
+|---|---|---|
+| **Moraya Desktop** (macOS, Windows, Linux) | Direct download, Homebrew | Open source (Apache-2.0) |
+| **Moraya Web** (PWA at app.moraya.app) | Browser | Proprietary |
+| **Moraya Mobile** (iOS, Android) | App Store, Google Play | Proprietary |
+| **@moraya/core** (shared editor engine) | npm | Open source (GPL-3.0) |
 
-Moraya does not enable anonymous usage statistics by default. If a future update introduces an optional "Send Anonymous Usage Info" setting in the preferences panel, the following will apply:
+Sections below are marked with the platforms they apply to. Visiting our website (moraya.app) or GitHub repositories is governed by those services' own policies.
 
-- Anonymous data will only be sent if you explicitly enable this option.
-- You may disable it at any time (a restart may be required for changes to take effect).
-- Collected data would be strictly anonymous and used solely for improving the Software, including:
-  - Moraya version, operating system, screen resolution, locale, and approximate country (derived from IP address).
-  - General operation names (e.g., "launch", "new document", "AI assist") for aggregate usage statistics. No detailed user-specific sequences or sensitive content will be collected.
-  - Session duration.
-  - Non-sensitive preference settings (e.g., theme, editor mode).
+## 2. What Moraya Does NOT Collect
 
-When errors occur, and if anonymous reporting is enabled, we may collect stack traces, relevant settings, and runtime state to diagnose issues. This data will not contain personal or sensitive information.
+- **No telemetry, no analytics, no crash reporting.** Moraya ships with no tracking SDK of any kind. We do not collect usage statistics, error reports, performance metrics, device fingerprints, or advertising identifiers — on any platform, ever. If a future version introduces optional diagnostics, it will be off by default and this policy will be updated first.
+- **No document content on Moraya servers.** We do not run infrastructure that receives your notes in readable form. When you enable cloud sync on Moraya Web or Mobile, only end-to-end encrypted ciphertext leaves your device.
+- **No tracking across apps or websites.** No IDFA/IDFV, no contacts, no location, no browsing history.
+- **No data sales, no AI training on your content.**
 
-### No Personal Data Collection
+## 3. Local Data Storage *(all platforms)*
 
-Moraya does not collect, store, or transmit any personal identifiers, document content, or sensitive data to our servers unless explicitly initiated by you (e.g., via feedback or the third-party features described below).
+Moraya is local-first. Without any account or configuration:
 
-## AI Features and Third-Party Services
+- **Desktop** — documents are ordinary Markdown files in folders you choose. Settings live in the app's local configuration directory. All credentials (API keys, tokens) are stored in the operating system's native secure storage: macOS Keychain, Windows Credential Manager, or Linux Secret Service (libsecret). Knowledge-base search indexes are stored in a local `.moraya/indexes/` directory. Nothing is uploaded.
+- **Web** — documents, settings, and AI conversation history are stored inside your browser (localStorage, sessionStorage, and IndexedDB). A service worker caches the app so it keeps working offline (PWA). By default your notes stay in a local IndexedDB store; cloud storage is opt-in.
+- **Mobile** — same storage model as Web, inside the app's sandboxed WebView storage on your device.
 
-Moraya includes built-in AI assistance supporting multiple providers: Claude (Anthropic), OpenAI, Gemini (Google), DeepSeek, Grok (xAI), Mistral, GLM (Zhipu AI), MiniMax, Doubao (ByteDance), custom OpenAI-compatible endpoints, and Ollama.
+Local logs (if any) stay on your device and are never transmitted unless you choose to share them when reporting a bug.
 
-- **Cloud-based AI Models** (Claude, OpenAI, Gemini, DeepSeek, Grok, Mistral, GLM, MiniMax, Doubao, and custom endpoints):
-  When you use these models, your selected text, prompt, or context is sent **directly** from your device to the respective third-party provider's servers for processing. Streaming responses are received in real-time.
-  **We do not store, log, or access this data.** Transmission occurs only when you explicitly invoke an AI feature.
-  These providers may collect and process your input according to their own privacy policies. We strongly recommend reviewing their policies:
-  - Anthropic (Claude): https://www.anthropic.com/legal/privacy
-  - OpenAI: https://openai.com/policies/privacy
-  - Google Gemini: https://policies.google.com/privacy
-  - DeepSeek: https://www.deepseek.com/privacy_policy
-  - xAI (Grok): https://x.ai/legal/privacy-policy
-  - Mistral: https://mistral.ai/privacy-policy
-  - Zhipu AI (GLM): https://open.bigmodel.cn/privacy
-  - MiniMax: Check their official site for the current policy
-  - ByteDance (Doubao): https://www.volcengine.com/docs/82379/1263975
+## 4. Optional Cloud Account: Picora *(Desktop, Web, Mobile — opt-in)*
 
-- **Local AI Model** (Ollama):
-  When configured to use Ollama, all processing occurs entirely on your device. No data is sent externally.
+Moraya works fully without an account. You may optionally connect a **Picora** account (api.picora.me) for cloud features:
 
-- **Custom OpenAI-Compatible Endpoints**:
-  When you configure a custom base URL, your data is sent to that endpoint. You are responsible for reviewing the privacy policy of the custom service you connect to.
+- **What is uploaded, and only when you trigger it:** knowledge-base documents you choose to sync, and images/videos you upload through Picora media hosting. On Moraya Web and Mobile, synced note content is end-to-end encrypted before upload (see Section 5); Picora stores ciphertext plus minimal object metadata (path, size, ETag).
+- **Account data held by Picora:** your email address, Picora user ID, and — if you subscribe — your subscription tier and billing status.
+- **How sign-in works:** OAuth 2.0 Device Flow. On Desktop the refresh token is stored in the OS keychain; access tokens are short-lived and held in memory. On Web the access token is kept in browser sessionStorage; the refresh token is never exposed to the page.
+- **Disconnecting:** you can sign out at any time; local documents are unaffected. Account deletion and data export are described in Section 13.
 
-Moraya does not automatically install or launch any third-party services. AI usage requires user configuration (e.g., API keys) and explicit activation.
+Picora is operated as a separate service with its own privacy policy, available at picora.me.
 
-### API Key Storage (Bring Your Own Key)
+## 5. End-to-End Encryption *(Web, Mobile — opt-in)*
 
-Moraya follows a **Bring Your Own Key (BYOK)** model — you provide your own API keys for the AI providers you choose to use. Your API keys are:
+When you enable encryption on Moraya Web or Mobile:
 
-- **Stored exclusively on your device** in the operating system's native secure storage (macOS Keychain, Windows Credential Manager, or Linux Secret Service/libsecret). Keys are encrypted at rest by the OS.
-- **Never transmitted to Moraya's servers.** We do not operate any server infrastructure that receives, stores, or processes your API keys.
-- **Never included in logs, telemetry, error reports, or crash data.** API keys are resolved at runtime by the local Rust backend and are never exposed to the frontend or written to disk in plaintext.
+- Note content is encrypted **on your device** with AES-256-GCM. The encryption key is derived from your master passphrase using Argon2id. **Your master passphrase and master key never leave your device.**
+- Recovery is via a 12-word BIP-39 recovery code that you generate and store yourself. **If you lose both the passphrase and the recovery code, your encrypted notes are unrecoverable — by design, we cannot reset them.**
+- Optionally, per-document data keys can be wrapped by a cloud KMS **that you provide**: AWS KMS, Alibaba Cloud KMS, Tencent Cloud KMS, or Google Cloud KMS. KMS credentials are yours, configured by you, and requests go directly from your device to your KMS. Key-usage audit logs, if any, are maintained by your cloud provider.
+- Encryption uses standard WebCrypto APIs (NIST-exempt for export-control purposes; we file `ITSAppUsesNonExemptEncryption = false` with Apple).
 
-You are responsible for obtaining and managing your own API keys from the respective providers.
+## 6. AI Features — Bring Your Own Key *(all platforms — opt-in)*
 
-### Direct Data Transfer (No Intermediary)
+Moraya's AI assistance is disabled until you configure a provider and your own API key.
 
-When you use AI features, your prompts and content are sent **directly from your device** to the selected provider's API endpoint. Specifically:
+- **Direct connection, no intermediary.** When you invoke an AI feature, your selected text, prompt, and relevant context are sent **directly from your device** to the provider you chose (e.g. `api.anthropic.com`, `api.openai.com`). Moraya operates no relay, proxy, or logging layer in between. Responses stream directly back to your device.
+- **Key storage.** On Desktop, API keys live in the OS keychain and are injected into requests by the local Rust backend — they are never exposed to the UI layer, logs, or disk in plaintext. On Web and Mobile, keys are stored in your browser/app's local storage on your device and used directly from there.
+- **Supported providers** (each processes your input under its own privacy policy):
+  - Anthropic (Claude) — anthropic.com/legal/privacy
+  - OpenAI — openai.com/policies/privacy
+  - Google (Gemini) — policies.google.com/privacy
+  - DeepSeek — deepseek.com/privacy_policy
+  - xAI (Grok) — x.ai/legal/privacy-policy
+  - Mistral — mistral.ai/privacy-policy
+  - Zhipu AI (GLM) — open.bigmodel.cn/privacy
+  - MiniMax — see their official site
+  - ByteDance (Doubao / Volcano Engine) — volcengine.com
+  - **Ollama and other local models** — processing happens entirely on your device; nothing is sent externally
+  - **Custom OpenAI-compatible endpoints** — data goes to the endpoint you configure; review that service's policy
+- **Knowledge-base embeddings.** Building or searching a semantic index sends document text chunks or your query to the embedding endpoint of your configured provider (or a local model). Indexes themselves are stored locally (Desktop) or in your chosen storage (Web).
 
-- **No relay or proxy servers.** Moraya does not operate any intermediary servers. There is no Moraya-hosted backend that your data passes through.
-- **On-device authentication.** Moraya's local Rust backend retrieves your API key from the OS secure storage and injects the authentication header on your device — before the request leaves your machine.
-- **Direct data path.** The network path is: **Your Device → Provider API** (e.g., `api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`). No intermediate stops.
-- **Direct response streaming.** Response data streams directly from the provider back to your device via the same direct connection.
+We do not store, log, or have any ability to access your AI conversations.
 
-This architecture ensures that Moraya never has access to your AI conversations or the ability to intercept, log, or analyze your prompts and responses.
+## 7. Bring Your Own Cloud Storage *(opt-in)*
 
-We have no control over, and assume no responsibility for, the privacy practices of these third-party AI providers.
+- **Web/Mobile knowledge-base storage:** besides the default local IndexedDB store, you may connect your own object storage — Picora, AWS S3, Alibaba Cloud OSS, Tencent Cloud COS, Cloudflare R2, or Backblaze B2. Credentials are entered by you, used from your device to sign requests, and are not sent to Moraya.
+- **Desktop image hosting:** you may configure Qiniu, Alibaba Cloud OSS, Tencent Cloud COS, AWS S3, or Google Cloud Storage to host images in your documents. Upload requests are HMAC-signed by the local Rust backend using credentials from the OS keychain and sent directly to the provider.
 
-## Knowledge Base and Embedding
+Files stored with these providers are governed by their respective policies. Moraya keeps no copies.
 
-Moraya includes a local Knowledge Base feature that supports semantic (vector) search over your documents.
+## 8. Voice Features *(Desktop cloud transcription — opt-in; Mobile — on-device)*
 
-- **Index storage is fully local.** Vector indexes, BM25 indexes, and chunk metadata are stored in a `.moraya/indexes/` directory within your knowledge base folder on your device. No index data is uploaded to our servers.
-- **Embedding API calls.** To build the vector index, Moraya sends document text chunks to the embedding API endpoint of your configured AI provider (e.g., OpenAI's `text-embedding-3-small`, or a local Ollama model). This occurs only when you explicitly trigger indexing. The same BYOK and direct-data-transfer principles described above apply.
-- **Search queries.** When you perform a semantic search, your query text is sent to the same embedding provider to generate a query vector. No search history is stored on our servers.
-- **Local offline models (if configured).** If you configure a local embedding model (e.g., via Ollama or a downloaded ONNX model), all indexing and search processing occurs entirely on your device.
+- **Desktop cloud transcription:** if you configure a speech provider (Deepgram, Gladia, AssemblyAI, Azure Speech, Tencent ASR, or OpenAI Realtime), your microphone audio streams in real time **directly from your device** to that provider over WebSocket. We do not record, store, or access your audio. Optional local recording backup saves audio only to a folder you choose. Speaker profiles for speaker identification are stored locally only.
+- **Mobile:** speech-to-text and text-to-speech use the operating system's on-device engines. Audio does not leave your device unless you explicitly configure a cloud provider.
 
-## Voice Transcription
+## 9. Publishing and Git *(Desktop, Web — opt-in)*
 
-Moraya includes an AI-powered voice transcription feature supporting multiple providers: Deepgram, Gladia, AssemblyAI, and Azure Speech.
+- Publishing to **GitHub** sends the document content directly from your device to the GitHub API using your personal access token (stored in the OS keychain on Desktop). Published content is governed by GitHub's Privacy Statement.
+- Publishing to a **custom API endpoint** or generating an **RSS feed** sends content to the endpoint you configure.
+- Git sync credentials (usernames, passwords, SSH keys) on Desktop are stored in the OS keychain.
 
-- **Audio data transmission.** When you use voice transcription, your microphone audio (captured as PCM audio via an AudioWorklet) is sent in real-time **directly from your device** to the transcription provider's servers via a Rust-side WebSocket proxy. We do not record, store, or access your audio data.
-- **Provider policies.** Your audio may be processed according to each provider's privacy policy:
-  - Deepgram: https://deepgram.com/privacy
-  - Gladia: https://www.gladia.io/privacy-policy
-  - AssemblyAI: https://www.assemblyai.com/legal/privacy-policy
-  - Azure Speech: https://privacy.microsoft.com/en-us/privacystatement
-- **API key storage.** Voice transcription API keys follow the same OS keychain storage model described above.
-- **Local audio backup (if enabled).** If you enable the voice recording backup feature, audio segments are saved locally to a directory you specify on your device. This data is never uploaded to our servers.
-- **Speaker profiles.** Voice speaker profiles (used for speaker identification) are stored locally in Moraya's settings on your device and are never transmitted.
+## 10. MCP Servers *(Desktop, Web — opt-in)*
 
-## Image Hosting
+Moraya can connect to Model Context Protocol (MCP) servers to extend AI capabilities:
 
-Moraya supports uploading images to third-party object storage services for use in your documents. Supported providers include Qiniu Cloud, Aliyun OSS, Tencent COS, AWS S3, Google Cloud Storage (GCS), and GitHub.
+- **Local (stdio) servers** on Desktop run as child processes on your device; Moraya asks for your explicit confirmation before launching one for the first time.
+- **Remote (SSE/HTTP) servers**: tool invocations — including arguments that may contain your content — are sent to the server URL you configure. Server configurations (URL, headers) are stored locally on your device.
+- We do not operate MCP servers and have no visibility into data exchanged with servers you configure. You are responsible for trusting the servers you connect.
 
-- **Image data.** When you upload an image via Moraya, the image file is sent **directly from your device** to the storage service you have configured. Moraya's local Rust backend handles HMAC request signing using your credentials stored in the OS keychain — the signed request is sent directly to the provider's API.
-- **No intermediary.** We do not operate image relay or CDN services. Moraya does not store copies of your uploaded images.
-- **Credentials storage.** Object storage credentials (access keys, secret keys, tokens) are stored exclusively in the OS native secure storage, following the same BYOK model.
-- **Provider policies.** Images uploaded to these services are governed by the respective provider's privacy and data policies.
+## 11. Mobile Device Permissions *(Mobile — each opt-in at the OS level)*
 
-## Publishing
+- **Camera** — photos you capture for OCR are processed locally on your device; images never leave it.
+- **Microphone** — used for on-device speech recognition, or streamed to a speech provider only if you configured one (Section 8).
+- **Biometrics (Face ID / Touch ID / fingerprint)** — used only to ask the OS to confirm a match for app unlock; biometric data never leaves your device and is never accessible to Moraya.
+- **Photo library** — images you attach are stored inside your (optionally end-to-end encrypted) notes.
+- **Push notifications** — if you enable notifications, a push token (APNs on iOS, FCM on Android) is registered so notifications you asked for can be delivered. Disable notifications at any time in system settings.
 
-Moraya supports publishing documents to GitHub (via the GitHub Contents API).
+## 12. Account, Subscription and Billing *(Web, Mobile — opt-in)*
 
-- **Content transmission.** When you publish a document, the document content is sent **directly from your device** to the GitHub API on your behalf.
-- **GitHub token storage.** Your GitHub personal access token is stored in the OS native secure storage and is never transmitted to Moraya's servers.
-- **GitHub's privacy policy.** Published content is subject to GitHub's Privacy Statement: https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement
+If you subscribe to a paid plan:
 
-## MCP Servers (Model Context Protocol)
+- Payments are processed by **Stripe**, **Alipay**, **Apple In-App Purchase**, or **Google Play Billing**. **Moraya never receives or stores your card or payment credentials** — we receive only your subscription tier and billing status.
+- Entitlements are delivered as a signed token stored in your browser's sessionStorage.
+- To enforce plan limits, aggregate usage counters (number of AI calls, knowledge bases, and registered devices — never content) are synced with the billing service. Your device list (device name, platform, last-active time) is visible to you and used for seat management; you can revoke devices at any time.
 
-Moraya supports connecting to MCP (Model Context Protocol) servers, which extend AI capabilities with external tools and resources.
+## 13. Your Rights and Data Control
 
-- **stdio-based servers.** Local MCP servers launched as child processes run entirely on your device and communicate only via standard I/O. No network transmission occurs for the MCP protocol itself (though the tools invoked by the server may make their own network calls).
-- **SSE and HTTP servers.** If you configure remote MCP servers (via SSE or HTTP transport), tool invocations and results are sent to the server URL you specify. You are responsible for reviewing the privacy practices of any remote MCP server you connect to.
-- **User confirmation required.** Moraya requires your explicit confirmation before launching any stdio-based MCP server process for the first time.
-- **We do not operate MCP servers** and have no visibility into any data exchanged between Moraya and user-configured MCP endpoints.
+- **Access / Portability** — export all your notes as Markdown files at any time (your documents are plain Markdown to begin with).
+- **Deletion** — delete your Picora account in Settings → Account; associated server records are purged within 30 days. Local data is deleted by uninstalling the app or clearing browser storage.
+- **Cookies** — Moraya Web uses no tracking cookies; authentication state is kept in browser session storage.
+- If you are in the EU, UK, or California, you have additional rights under GDPR / UK-GDPR / CCPA. Contact privacy@moraya.app.
 
-## External Resources and Links
+## 14. App Updates *(Desktop)*
 
-Moraya supports embedding images, videos, iframes, and other resources from remote websites in your Markdown documents. When you open or preview such documents:
+Update checks download release information and installers directly from GitHub Releases. No identifying information, version pings, or usage data are sent by Moraya.
 
-- These resources are loaded directly from their source URLs.
-- The external sites may collect information about your request (e.g., IP address, user agent).
+## 15. External Resources and Links *(all platforms)*
 
-If your document contains links to third-party sites and you click them, you will be directed outside Moraya. We have no control over external sites and recommend reviewing their privacy policies.
+Documents may embed images, videos, or iframes from remote URLs. When rendered, those resources load directly from their source, and the external site may see your request metadata (IP address, user agent). Links you click open outside Moraya; external sites have their own policies.
 
-## Log Data
+## 16. Open Source and Auditability
 
-Moraya generates minimal local logs on your device for debugging and performance purposes. These logs remain stored locally and are never transmitted unless you explicitly share them (e.g., during feedback).
+- **Moraya Desktop** is open source under Apache-2.0 (github.com/zouwei/moraya). Every claim in this policy about the Desktop app — zero telemetry, keychain storage, direct provider connections — is verifiable in the source code.
+- **@moraya/core**, the shared editor engine used by all platforms, is open source under GPL-3.0.
+- **Moraya Web and Moraya Mobile** are proprietary, but follow the same data principles described here and are built on the same open-source core.
 
-## Backups and Local Storage
+## 17. Security
 
-All documents, settings, knowledge base indexes, and backups created by Moraya are stored exclusively on your local device. Automatic backups (if enabled) are designed to prevent data loss and remain local. No data is uploaded to our servers.
+Sensitive credentials are kept in OS-native secure storage (Desktop) or browser storage scoped to your device (Web/Mobile); all external communication is authenticated on-device before it leaves your machine. No method of storage or transmission is 100% secure — please protect your device, your passphrase, and the API keys you configure. Report vulnerabilities to security@moraya.app.
 
-## Feedback and Bug Reports
+## 18. Children's Privacy
 
-If you submit feedback, bug reports, or support requests (via GitHub, email, or other channels), you may voluntarily provide information such as system details, steps to reproduce, or sample files. You control what you share and may refuse or redact sensitive content.
+Moraya is not intended for users under 13 (16 in the EU). We do not knowingly collect personal information from children; contact us if you believe a child has provided data through a Picora account.
 
-Any shared files will be used solely for debugging and improvement purposes. We will not disclose them to third parties without your permission and will delete them upon request after resolution.
+## 19. Changes to This Policy
 
-Communication channels (e.g., GitHub, email) are third-party services with their own privacy policies.
+We will post updates on moraya.app and, for material changes affecting account holders, notify in-app and by email at least 30 days before they take effect. The English version of this policy is authoritative; translations are provided for convenience.
 
-## Service Providers
+## 20. Contact
 
-We do not share your data with third-party companies or individuals except as described above (AI, voice transcription, image hosting, and publishing providers, each contacted directly from your device during active use).
+- Privacy questions: privacy@moraya.app
+- Security disclosures: security@moraya.app
+- Legal: legal@moraya.app
+- Open-source issues: github.com/zouwei/moraya/issues
 
-## Security
-
-We prioritize local-first design to minimize risks. All sensitive credentials are stored in OS-native secure storage, and all external communications are authenticated on-device before leaving your machine. However, no method of electronic storage or transmission is 100% secure. You are responsible for securing your device and all API keys and tokens you configure.
-
-## Children's Privacy
-
-Moraya is not intended for users under 13. We do not knowingly collect personal information from children under 13. If discovered, we will delete such information promptly. Parents/guardians should contact us if concerned.
-
-## Changes to This Privacy Policy
-
-We may update this Privacy Policy periodically. Changes will be posted on our website (moraya.app) or announced via update notes. Continued use of Moraya after changes constitutes acceptance.
-
-## Contact Us
-
-For questions or concerns about this Privacy Policy, please open an issue on our GitHub repository: https://github.com/zouwei/moraya/issues.
-
-Thank you for using Moraya!
+Thank you for using Moraya.

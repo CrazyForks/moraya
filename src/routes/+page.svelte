@@ -54,7 +54,8 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { ask } from '@tauri-apps/plugin-dialog';
-  import { t } from '$lib/i18n';
+  import { t, locale } from '$lib/i18n';
+  import { get } from 'svelte/store';
   import { getPlatformClass, isIPadOS, isMacOS, isTauri, isVirtualKeyboardVisible } from '$lib/utils/platform';
   import { SHORTCUT_CATALOG, effectiveBinding, eventMatchesBinding } from '$lib/shortcuts/catalog';
   import TabBar from '$lib/components/TabBar.svelte';
@@ -1037,6 +1038,7 @@ ${tr('welcome.tip')}
       // Help menu
       help_version_info: tr('menu.version_info'),
       help_changelog: tr('menu.changelog'),
+      help_terms: tr('menu.terms_of_service'),
       help_privacy: tr('menu.privacy_policy'),
       help_website: tr('menu.official_website'),
       help_about: tr('menu.about_moraya'),
@@ -3149,6 +3151,26 @@ ${tr('welcome.tip')}
       }
     }
 
+    /**
+     * Open an embedded legal document (Help → Terms of Service / Privacy
+     * Policy) in the editor. Documents ship in English (authoritative) and
+     * Simplified Chinese; the zh-CN copy is served for the Chinese locales,
+     * every other locale gets English — matching the languages maintained in
+     * the legal master (moraya-site/src/content/legal/).
+     */
+    async function openLegalDocument(doc: 'terms-of-service' | 'privacy-policy') {
+      const loc = get(locale);
+      const suffix = loc === 'zh-CN' || loc === 'zh-Hant' ? '.zh-CN' : '';
+      try {
+        const docContent = await invoke<string>('read_resource_file', { name: `${doc}${suffix}.md` });
+        content = docContent;
+        editorStore.setContent(docContent);
+        syncVisualEditor(content);
+      } catch {
+        // Resource not found
+      }
+    }
+
     if (isTauri) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const menuHandlers: Record<string, (payload?: any) => void> = {
@@ -3307,16 +3329,8 @@ ${tr('welcome.tip')}
         // Help
         'menu:help_version_info': () => { showUpdateDialog = true; },
         'menu:help_changelog': () => { openUrl('https://github.com/zouwei/moraya/releases'); },
-        'menu:help_privacy': async () => {
-          try {
-            const privacyContent = await invoke<string>('read_resource_file', { name: 'privacy-policy.md' });
-            content = privacyContent;
-            editorStore.setContent(privacyContent);
-            syncVisualEditor(content);
-          } catch {
-            // Resource not found
-          }
-        },
+        'menu:help_terms': () => openLegalDocument('terms-of-service'),
+        'menu:help_privacy': () => openLegalDocument('privacy-policy'),
         'menu:help_website': () => { openUrl('https://moraya.app'); },
         'menu:help_about': () => { openUrl('https://moraya.app/en/about/'); },
         'menu:help_feedback': () => { openUrl('https://github.com/zouwei/moraya/issues'); },

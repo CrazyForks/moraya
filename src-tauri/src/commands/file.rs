@@ -133,12 +133,24 @@ pub fn read_file_binary(path: String) -> Result<Vec<u8>, String> {
     fs::read(&safe_path).map_err(sanitize_io_error)
 }
 
-/// Return the embedded privacy policy content.
-/// The file is included at compile time so no runtime path resolution is needed.
+/// Return an embedded legal document (privacy policy / terms of service).
+/// Files are included at compile time so no runtime path resolution is needed.
+/// They are AUTO-GENERATED copies of the legal master in moraya-site
+/// (src/content/legal/, synced by its scripts/sync-legal.mjs) — do not edit
+/// them here.
 #[tauri::command]
 pub fn read_resource_file(name: String) -> Result<String, String> {
     match name.as_str() {
         "privacy-policy.md" => Ok(include_str!("../../resources/privacy-policy.md").to_string()),
+        "privacy-policy.zh-CN.md" => {
+            Ok(include_str!("../../resources/privacy-policy.zh-CN.md").to_string())
+        }
+        "terms-of-service.md" => {
+            Ok(include_str!("../../resources/terms-of-service.md").to_string())
+        }
+        "terms-of-service.zh-CN.md" => {
+            Ok(include_str!("../../resources/terms-of-service.zh-CN.md").to_string())
+        }
         _ => Err("Unknown resource".to_string()),
     }
 }
