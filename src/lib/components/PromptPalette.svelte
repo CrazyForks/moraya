@@ -10,6 +10,9 @@
     bindContextFile,
     promoteToTemplate,
     archivePrompt,
+    findDuplicateGroups,
+    duplicatePaths,
+    groupFor,
     type PromptAssetDoc,
   } from '$lib/services/prompt-asset';
 
@@ -37,6 +40,8 @@
 
   let ranked = $derived(rankPrompts(docs, query, nowMs()));
   let selected = $derived(ranked[Math.min(activeIndex, ranked.length - 1)] ?? null);
+  let dupGroups = $derived(findDuplicateGroups(docs));
+  let dupPaths = $derived(duplicatePaths(dupGroups));
 
   function nowMs(): number {
     return new Date().getTime();
@@ -143,6 +148,22 @@
     }
   }
 
+  /** Keep `doc`, archive every other member of its near-duplicate group. */
+  async function dedupKeep(doc: PromptAssetDoc) {
+    const kb = filesStore.getActiveKnowledgeBase();
+    if (!kb) return;
+    const group = groupFor(dupGroups, doc.relativePath);
+    if (!group) return;
+    const others = group.filter((d) => d.relativePath !== doc.relativePath);
+    let archived = 0;
+    for (const d of others) {
+      if (await archivePrompt(kb.path, d.relativePath)) archived += 1;
+    }
+    const removed = new Set(others.map((d) => d.relativePath));
+    docs = docs.filter((d) => !removed.has(d.relativePath));
+    onToast?.($t('prompt_recall.dedup_done', { n: String(archived) }));
+  }
+
   function onKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -197,6 +218,7 @@
                 <span class="pp-item-title">
                   {doc.title}
                   {#if hasContext(doc)}<span class="pp-ctx-badge" title={$t('prompt_recall.has_context')}>📎</span>{/if}
+                  {#if dupPaths.has(doc.relativePath)}<span class="pp-ctx-badge" title={$t('prompt_recall.duplicate')}>⚠</span>{/if}
                 </span>
                 <span class="pp-item-meta">
                   {doc.meta.project}
@@ -225,6 +247,9 @@
               {/if}
               {#if onInsertToEditor}
                 <button class="pp-btn" onclick={() => insertPrompt(selected!)}>{$t('prompt_recall.insert')}</button>
+              {/if}
+              {#if dupPaths.has(selected.relativePath)}
+                <button class="pp-btn subtle" onclick={() => dedupKeep(selected!)}>{$t('prompt_recall.dedup')}</button>
               {/if}
               <button class="pp-btn subtle" onclick={() => promote(selected!)}>{$t('prompt_recall.promote')}</button>
               <button class="pp-btn subtle" onclick={() => archive(selected!)}>{$t('prompt_recall.archive')}</button>

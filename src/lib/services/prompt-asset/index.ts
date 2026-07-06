@@ -80,3 +80,10 @@ export {
 
 export { promptToTemplate, templateIdForPrompt, PROMOTED_CATEGORY } from './refine'
 export { promoteToTemplate, archivePrompt } from './refine-service'
+
+export {
+  findDuplicateGroups,
+  duplicatePaths,
+  groupFor,
+  DEFAULT_DUP_THRESHOLD,
+} from './dedup'
