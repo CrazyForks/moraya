@@ -49,3 +49,16 @@ export {
   type KbPromptState,
   type PromptAssetPersistence,
 } from './store'
+
+export {
+  parsePromptMeta,
+  parsePromptDoc,
+  deriveTitle,
+  scoreDoc,
+  rankPrompts,
+  bumpUsage,
+  type PromptMeta,
+  type PromptAssetDoc,
+} from './prompt-index'
+
+export { loadPromptDocs, markPromptUsed } from './recall-service'

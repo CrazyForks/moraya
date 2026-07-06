@@ -22,6 +22,7 @@
     insertAudioAt,
     insertVideoAt,
     insertMathBlock as insertMathBlockCmd,
+    insertTextAtCursor,
   } from '$lib/editor/commands';
   import { undo, redo } from 'prosemirror-history';
   import Editor from '$lib/editor/Editor.svelte';
@@ -44,7 +45,8 @@
   import { initMCPStore, connectAllServers, mcpStore } from '$lib/services/mcp';
   import { reviewStore } from '$lib/services/review';
   import { initContainerManager } from '$lib/services/mcp/container-manager';
-  import { registerKbInterval, clearAllIntervals, runSync } from '$lib/services/kb-sync/sync-service';
+  import { registerKbInterval, clearAllIntervals, runSync, kbSyncStore } from '$lib/services/kb-sync/sync-service';
+  import type { KbSyncState } from '$lib/services/kb-sync/types';
   import { preloadEnhancementPlugins } from '$lib/editor/setup';
   import { openFile, saveFile, saveFileAs, loadFile, getFileNameFromPath, readImageAsBlobUrl, migrateTempImages, isImageFile } from '$lib/services/file-service';
   import { exportDocument, type ExportFormat } from '$lib/services/export-service';
@@ -281,6 +283,7 @@ ${tr('welcome.tip')}
   let showUpdateDialog = $state(false);
   let showKBManager = $state(false);
   let showCommandPalette = $state(false);
+  let showPromptPalette = $state(false);
   let commandPaletteMode: 'files' | 'commands' = $state('files');
 
   // KB indexing progress
@@ -294,6 +297,11 @@ ${tr('welcome.tip')}
     const activeKb = state.knowledgeBases.find(k => k.id === state.activeKnowledgeBaseId);
     gitBound = !!activeKb?.git;
   });
+
+  // KB sync conflict panel — opened from the StatusBar sync-warning click.
+  let conflictKbId = $state<string | null>(null);
+  let kbSyncStates = $state<Map<string, KbSyncState>>(new Map());
+  const unsubKbSyncStates = kbSyncStore.subscribe((m) => { kbSyncStates = m; });
 
   async function handleGitSync() {
     const state = filesStore.getState();
@@ -886,6 +894,7 @@ ${tr('welcome.tip')}
     unsubTabs();
     unsubMCP();
     unsubGitKB();
+    unsubKbSyncStates();
     if (autoSyncTimer) clearInterval(autoSyncTimer);
     clearAllIntervals();
 
@@ -1257,7 +1266,7 @@ ${tr('welcome.tip')}
   function handleKeydown(event: KeyboardEvent) {
     // When Command Palette is open, only allow Escape (handled by palette itself)
     // Skip all global shortcuts to prevent Cmd+O etc. from firing while typing
-    if (showCommandPalette) return;
+    if (showCommandPalette || showPromptPalette) return;
 
     // User-customized shortcut overrides take precedence over hardcoded
     // bindings. Only entries the user has explicitly remapped enter this
@@ -1422,6 +1431,13 @@ ${tr('welcome.tip')}
     if (!isTauri && mod && event.shiftKey && event.key === 'E') {
       event.preventDefault();
       exportDocument(getCurrentContent, 'html');
+      return;
+    }
+
+    // Prompt Palette (recall captured prompt assets): Cmd/Ctrl+Shift+A
+    if (mod && event.shiftKey && (event.key === 'a' || event.key === 'A')) {
+      event.preventDefault();
+      showPromptPalette = true;
       return;
     }
 
@@ -3763,6 +3779,7 @@ ${tr('welcome.tip')}
     onToggleAI={() => showAIPanel = !showAIPanel}
     onModeChange={(mode) => { editorMode = mode; editorStore.setEditorMode(mode); }}
     onGitSync={gitBound ? handleGitSync : undefined}
+    onShowConflicts={() => { conflictKbId = filesStore.getState().activeKnowledgeBaseId; }}
     currentMode={editorMode}
     hideModeSwitcher={!!activeImageTab}
     aiPanelOpen={showAIPanel}
@@ -3783,6 +3800,20 @@ ${tr('welcome.tip')}
   {#await import('$lib/components/SettingsPanel.svelte') then { default: SettingsPanel }}
     <SettingsPanel initialTab={settingsInitialTab} onClose={() => { showSettings = false; settingsInitialTab = 'general'; }} />
   {/await}
+{/if}
+
+{#if conflictKbId}
+  {@const conflictKb = filesStore.getState().knowledgeBases.find(k => k.id === conflictKbId)}
+  {#if conflictKb?.picoraBinding}
+    {#await import('$lib/components/KbSyncConflictPanel.svelte') then { default: KbSyncConflictPanel }}
+      <KbSyncConflictPanel
+        kb={conflictKb}
+        binding={conflictKb.picoraBinding}
+        conflicts={kbSyncStates.get(conflictKbId)?.pendingConflicts ?? []}
+        onClose={() => { conflictKbId = null; }}
+      />
+    {/await}
+  {/if}
 {/if}
 
 {#if showImageDialog}
@@ -3874,6 +3905,16 @@ ${tr('welcome.tip')}
       onFileSelect={handleFileSelect}
       onCommand={handlePaletteCommand}
       onClose={() => showCommandPalette = false}
+    />
+  {/await}
+{/if}
+
+{#if showPromptPalette}
+  {#await import('$lib/components/PromptPalette.svelte') then { default: PromptPalette }}
+    <PromptPalette
+      onClose={() => showPromptPalette = false}
+      onInsertToEditor={(text) => runCmd(insertTextAtCursor(text))}
+      onToast={(msg) => showToast(msg, 'success')}
     />
   {/await}
 {/if}

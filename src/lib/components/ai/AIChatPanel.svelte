@@ -38,6 +38,7 @@
   import { parseMemorizeCommand, memorizeFromInput } from '$lib/services/memory';
   import { compressImage, blobToBase64 } from '$lib/services/ai/image-utils';
   import TemplateGallery from './TemplateGallery.svelte';
+  import PromptPalette from '../PromptPalette.svelte';
   import TemplateParamPanel from './TemplateParamPanel.svelte';
   import TemplateManagePanel from './TemplateManagePanel.svelte';
   import { Select } from '$lib/components/ui';
@@ -74,6 +75,7 @@
   let isConfigured = $state(false);
   let inputText = $state('');
   let showCommands = $state(false);
+  let showPromptRecall = $state(false);
   let messagesEl = $state<HTMLDivElement | undefined>(undefined);
   let inputEl = $state<HTMLTextAreaElement | undefined>(undefined);
   let scrollRaf: number | undefined; // RAF throttle for auto-scroll
@@ -1185,6 +1187,10 @@
     if (event.key === '/' && inputText === '') {
       showCommands = true;
     }
+    // `@` on an empty input recalls a saved prompt asset into the message.
+    if (event.key === '@' && inputText === '') {
+      showPromptRecall = true;
+    }
     if (event.key === 'Escape') {
       if (isLoading) {
         abortAIRequest();
@@ -1996,6 +2002,13 @@
         <div class="commands-dropdown">
           <TemplateGallery onSelectTemplate={handleTemplateSelect} />
         </div>
+      {/if}
+
+      {#if showPromptRecall}
+        <PromptPalette
+          onClose={() => (showPromptRecall = false)}
+          onInsertToEditor={(text) => insertTranscriptAtCursor(text)}
+        />
       {/if}
 
       {#if showParamPanel && activeTemplate}

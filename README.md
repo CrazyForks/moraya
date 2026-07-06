@@ -373,6 +373,7 @@ Moraya ships as a coordinated multi-product suite — each lives in its own repo
 | v1.6.0 | KB sync Git-style merge — content-level merge base, first-sync "this machine is authoritative" (no false conflicts), honored `conflictPolicy`, 3-way line auto-merge for non-overlapping edits, and a line-level conflict resolver (per-hunk take local/remote/both, live preview, auto-upload) reachable from the status-bar sync badge | ✅ |
 | v0.42.0 | Long-term memory (desktop) — full parity with web/mobile: memory settings tab, `/memorize` capture, chat injection, plugin-store persistence, and Picora cloud sync via `@moraya/core/memory` (weight+substring ranking, no local embeddings) `[cross-product]` | ✅ |
 | v1.7.0 | Prompt assets (capture) — recover prompts you sent to Claude Code from local `~/.claude` session transcripts (read-only Rust scan + denoise) and save them as visible Markdown documents under a KB's `prompts/` directory, synced to Picora; first pillar of the "personal AI asset hub" (memory + prompts) | ✅ |
+| v1.8.0 | Prompt assets (recall) — Prompt Palette (Cmd/Ctrl+Shift+A) to search captured prompts ranked by usage + recency, copy to clipboard or insert into the editor, plus `@` recall in the AI chat input; each use bumps usage metadata so frequent prompts float up | ✅ |
 
 ### Web — [`moraya-web`](https://github.com/zouwei/moraya-web)
 
