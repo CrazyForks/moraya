@@ -36,10 +36,44 @@ const CONFIRMATIONS = new Set([
 const SYSTEM_TAG_PREFIXES = [
   '<task-notification>',
   '<system-reminder>',
+  '<ide_selection>',
+  '<ide_opened_file>',
+  '<ide_diagnostics>',
   '[request interrupted',
   '[image:',
   'caveat: the messages below',
+  'this session is being continued from a previous conversation',
 ]
+
+/**
+ * Wrapper tags the harness / IDE inject into a user turn. Their whole block
+ * (open→close) is stripped before classification so a pure-injection message
+ * becomes empty (and is dropped) while a real prompt that merely has an
+ * injected block appended is cleaned rather than discarded.
+ */
+const INJECTED_TAGS = [
+  'system-reminder',
+  'task-notification',
+  'ide_selection',
+  'ide_opened_file',
+  'ide_diagnostics',
+  'command-message',
+  'command-name',
+  'command-args',
+  'local-command-stdout',
+  'local-command-stderr',
+  'local-command-caveat',
+]
+
+const INJECTED_BLOCK_RE = new RegExp(
+  `<(${INJECTED_TAGS.join('|')})\\b[^>]*>[\\s\\S]*?</\\1>`,
+  'gi',
+)
+
+/** Remove injected wrapper blocks (with their content) and trim. */
+export function stripInjectedBlocks(text: string): string {
+  return text.replace(INJECTED_BLOCK_RE, '').trim()
+}
 
 const SLASH_COMMAND_MARKERS = [
   '<command-name>',
@@ -78,9 +112,9 @@ export function deriveProject(cwd: string | null | undefined, dirName: string): 
 /** Decide whether a user message is a keepable prompt, and if not, why. */
 export function classify(
   text: string,
-  flags: { isMeta?: boolean; isSidechain?: boolean },
+  flags: { isMeta?: boolean; isSidechain?: boolean; isCompactSummary?: boolean },
 ): DropReason | null {
-  if (flags.isMeta) return 'meta'
+  if (flags.isMeta || flags.isCompactSummary) return 'meta'
   if (flags.isSidechain) return 'sidechain'
   const trimmed = text.trim()
   if (!trimmed) return 'empty'
@@ -136,12 +170,16 @@ export function extractCandidates(
     if (obj.type !== 'user') continue
     const msg = obj.message
     if (!msg || typeof msg !== 'object') continue
-    const { text, toolResult } = extractText((msg as { content?: unknown }).content)
-    if (toolResult || !text) continue
+    const { text: rawText, toolResult } = extractText((msg as { content?: unknown }).content)
+    if (toolResult || !rawText) continue
+    // Strip harness/IDE-injected wrapper blocks so the stored prompt is clean
+    // and pure-injection turns collapse to empty (then dropped by classify).
+    const text = stripInjectedBlocks(rawText)
 
     const reason = classify(text, {
       isMeta: obj.isMeta === true,
       isSidechain: obj.isSidechain === true,
+      isCompactSummary: obj.isCompactSummary === true,
     })
     if (reason) continue
 

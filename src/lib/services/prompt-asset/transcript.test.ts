@@ -7,6 +7,7 @@ import {
   hashText,
   isLikelyPrompt,
   normalizeText,
+  stripInjectedBlocks,
 } from './transcript'
 
 /** Helper to build one JSONL line matching Claude Code's transcript shape. */
@@ -71,6 +72,10 @@ describe('classify', () => {
   it('drops interrupted-request markers', () => {
     expect(classify('[Request interrupted by user]', {})).toBe('system-tag')
   })
+  it('drops session-continuation (compact) summaries', () => {
+    expect(classify('This session is being continued from a previous conversation…', {})).toBe('system-tag')
+    expect(classify('anything', { isCompactSummary: true })).toBe('meta')
+  })
   it('drops slash-command echoes anywhere in the text', () => {
     expect(classify('<command-name>/model</command-name>', {})).toBe('slash-command')
     expect(classify('foo <local-command-stdout>bar</local-command-stdout>', {})).toBe('slash-command')
@@ -88,6 +93,23 @@ describe('isLikelyPrompt', () => {
   })
   it('rejects very short non-confirmations by length', () => {
     expect(isLikelyPrompt('hi there')).toBe(false)
+  })
+})
+
+describe('stripInjectedBlocks', () => {
+  it('removes an appended system-reminder, keeping the real prompt', () => {
+    const t = '实现提示词资产捕获功能\n<system-reminder>be careful</system-reminder>'
+    expect(stripInjectedBlocks(t)).toBe('实现提示词资产捕获功能')
+  })
+  it('collapses a pure IDE-selection turn to empty', () => {
+    expect(stripInjectedBlocks('<ide_selection>lines 1-20 of foo.ts</ide_selection>')).toBe('')
+  })
+  it('strips a slash-command echo block', () => {
+    const t = '<command-message>loop</command-message>\n<command-name>/loop</command-name>\n<command-args>check health</command-args>'
+    expect(stripInjectedBlocks(t)).toBe('')
+  })
+  it('leaves a clean prompt untouched', () => {
+    expect(stripInjectedBlocks('just a normal prompt')).toBe('just a normal prompt')
   })
 })
 
