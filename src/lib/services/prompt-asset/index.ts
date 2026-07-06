@@ -77,3 +77,6 @@ export {
   type CardInput,
   type CardLabels,
 } from './prompt-card'
+
+export { promptToTemplate, templateIdForPrompt, PROMOTED_CATEGORY } from './refine'
+export { promoteToTemplate, archivePrompt } from './refine-service'

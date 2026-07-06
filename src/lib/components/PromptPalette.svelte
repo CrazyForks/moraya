@@ -8,6 +8,8 @@
     rankPrompts,
     assembleCard,
     bindContextFile,
+    promoteToTemplate,
+    archivePrompt,
     type PromptAssetDoc,
   } from '$lib/services/prompt-asset';
 
@@ -120,6 +122,27 @@
     }
   }
 
+  async function promote(doc: PromptAssetDoc) {
+    try {
+      await promoteToTemplate(doc);
+      onToast?.($t('prompt_recall.promoted'));
+    } catch {
+      onToast?.($t('prompt_recall.promote_failed'));
+    }
+  }
+
+  async function archive(doc: PromptAssetDoc) {
+    const kb = filesStore.getActiveKnowledgeBase();
+    if (!kb) return;
+    const rel = await archivePrompt(kb.path, doc.relativePath);
+    if (rel) {
+      docs = docs.filter((d) => d.relativePath !== doc.relativePath);
+      onToast?.($t('prompt_recall.archived'));
+    } else {
+      onToast?.($t('prompt_recall.archive_failed'));
+    }
+  }
+
   function onKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -203,6 +226,8 @@
               {#if onInsertToEditor}
                 <button class="pp-btn" onclick={() => insertPrompt(selected!)}>{$t('prompt_recall.insert')}</button>
               {/if}
+              <button class="pp-btn subtle" onclick={() => promote(selected!)}>{$t('prompt_recall.promote')}</button>
+              <button class="pp-btn subtle" onclick={() => archive(selected!)}>{$t('prompt_recall.archive')}</button>
             </div>
           </div>
         {/if}
@@ -327,4 +352,5 @@
     cursor: pointer;
   }
   .pp-btn.primary { background: var(--accent-color, #4a7cff); color: #fff; border-color: transparent; }
+  .pp-btn.subtle { background: transparent; color: var(--text-secondary); }
 </style>
