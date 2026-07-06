@@ -1,4 +1,5 @@
 pub mod ai_proxy;
+pub mod claude_transcripts;
 pub mod dmg_cleanup;
 pub mod file;
 pub mod util;

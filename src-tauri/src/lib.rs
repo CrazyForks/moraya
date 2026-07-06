@@ -925,6 +925,8 @@ pub fn run() {
         .manage(DockDocumentTracker(Mutex::new(HashMap::new())))
         .invoke_handler(tauri::generate_handler![
             commands::file::read_file,
+            commands::claude_transcripts::list_claude_transcripts,
+            commands::claude_transcripts::read_claude_transcript,
             commands::file::read_file_binary,
             commands::file::read_resource_file,
             commands::file::write_file,

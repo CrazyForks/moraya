@@ -15,12 +15,13 @@
   import KBIndexSettings from './KBIndexSettings.svelte';
   import KbSyncSettings from './KbSyncSettings.svelte';
   import MemorySettings from './MemorySettings.svelte';
+  import PromptAssetSettings from './PromptAssetSettings.svelte';
   import PicoraSettingsTab from './picora-tab/PicoraSettingsTab.svelte';
   import ExportSettings from './ExportSettings.svelte';
   import ShortcutsPanel from './ShortcutsPanel.svelte';
   import { Select } from '$lib/components/ui';
 
-  type Tab = 'general' | 'ai' | 'image-ai' | 'mcp' | 'image' | 'publish' | 'shortcuts' | 'voice' | 'plugins' | 'knowledge-base' | 'kb-sync' | 'picora' | 'memory';
+  type Tab = 'general' | 'ai' | 'image-ai' | 'mcp' | 'image' | 'publish' | 'shortcuts' | 'voice' | 'plugins' | 'knowledge-base' | 'kb-sync' | 'picora' | 'memory' | 'prompt-asset';
 
   let {
     onClose,
@@ -180,6 +181,7 @@
         { key: 'voice', icon: '🎤', labelKey: 'settings.tabs.voice' },
         { key: 'mcp', icon: '⇌', labelKey: 'settings.tabs.mcp' },
         { key: 'memory', icon: '🧠', labelKey: 'memory.title' },
+        { key: 'prompt-asset', icon: '📝', labelKey: 'prompt_asset.title' },
       ],
     },
     {
@@ -288,6 +290,7 @@
         <div class="tab-pane" class:active={activeTab === 'knowledge-base'}>{#if visitedTabs['knowledge-base']}<KBIndexSettings onOpenKBManager={() => showKBManager = true} />{/if}</div>
         <div class="tab-pane" class:active={activeTab === 'kb-sync'}>{#if visitedTabs['kb-sync']}<KbSyncSettings />{/if}</div>
         <div class="tab-pane" class:active={activeTab === 'memory'}>{#if visitedTabs['memory']}<MemorySettings />{/if}</div>
+        <div class="tab-pane" class:active={activeTab === 'prompt-asset'}>{#if visitedTabs['prompt-asset']}<PromptAssetSettings />{/if}</div>
         <div class="tab-pane" class:active={activeTab === 'picora'}>
           {#if visitedTabs['picora']}
             <PicoraSettingsTab onJumpToKbSync={() => activeTab = 'kb-sync'} />
