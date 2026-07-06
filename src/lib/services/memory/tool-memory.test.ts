@@ -4,6 +4,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   ctx: { apiBase: 'https://api.test', apiKey: 'k', kbId: 'kb_mem' } as { apiBase: string; apiKey: string; kbId: string } | null,
   syncCalls: [] as Array<{ kbId: string; ops: unknown[] }>,
+  manifest: [] as Array<{ relativePath: string; sourceHash: string; sizeBytes: number; updatedAt: string }>,
+  raw: new Map<string, string>(),
 }))
 
 vi.mock('./cloud-sync', () => ({
@@ -14,6 +16,8 @@ vi.mock('$lib/services/kb-sync/picora-kb-client', () => ({
     h.syncCalls.push({ kbId, ops })
     return { applied: ops.map(() => 'ok'), conflicts: [] }
   },
+  fetchManifest: async () => h.manifest,
+  fetchRaw: async (_a: string, _b: string, _c: string, path: string) => h.raw.get(path) ?? '',
 }))
 
 import {
@@ -25,7 +29,20 @@ import {
 } from './tool-profiles'
 import * as store from './store'
 import { addToolBinding, removeBinding, listBindings, hasBinding } from './bindings'
-import { flattenFiles, syncBinding, syncAllBindings, _setBindingSyncIO } from './binding-sync'
+import { flattenFiles, syncBinding, syncAllBindings, restoreBinding, toolDirPresent, _setBindingSyncIO } from './binding-sync'
+import type { BindingSyncIO } from './binding-sync'
+
+// A no-op-ish IO the sync tests can spread over.
+function makeIO(over: Partial<BindingSyncIO>): BindingSyncIO {
+  return {
+    async resolveHome(p) { return p.replace('~', '/home/u') },
+    async readDir() { return [] },
+    async readFile() { return '' },
+    async writeFile() { /* noop */ },
+    async dirExists() { return true },
+    ...over,
+  }
+}
 
 // ── tool-profiles: glob + include/exclude ───────────────────────────────────
 
@@ -144,8 +161,7 @@ describe('syncBinding', () => {
   beforeEach(() => {
     h.ctx = { apiBase: 'https://api.test', apiKey: 'k', kbId: 'kb_mem' }
     h.syncCalls = []
-    _setBindingSyncIO({
-      async resolveHome(p) { return p.replace('~', '/home/u') },
+    _setBindingSyncIO(makeIO({
       async readDir() {
         return [
           { name: 'CLAUDE.md', path: '/home/u/.claude/CLAUDE.md', is_dir: false },
@@ -161,7 +177,7 @@ describe('syncBinding', () => {
         ]
       },
       async readFile(abs) { return `content of ${abs}` },
-    })
+    }))
   })
   afterEach(() => _setBindingSyncIO(null))
 
@@ -201,11 +217,10 @@ describe('syncAllBindings', () => {
     store._resetCache()
     h.ctx = { apiBase: 'https://api.test', apiKey: 'k', kbId: 'kb_mem' }
     h.syncCalls = []
-    _setBindingSyncIO({
-      async resolveHome(p) { return p.replace('~', '/home/u') },
+    _setBindingSyncIO(makeIO({
       async readDir() { return [{ name: 'CLAUDE.md', path: '/home/u/.claude/CLAUDE.md', is_dir: false }] },
       async readFile() { return 'x' },
-    })
+    }))
   })
   afterEach(() => { store.setMemoryPersistence(null); _setBindingSyncIO(null) })
 
@@ -213,5 +228,67 @@ describe('syncAllBindings', () => {
     await addToolBinding('claude')
     const r = await syncAllBindings()
     expect(r.pushed).toBe(1)
+  })
+})
+
+// ── restore (pull, only-missing) ─────────────────────────────────────────────
+
+describe('restoreBinding', () => {
+  beforeEach(() => {
+    h.ctx = { apiBase: 'https://api.test', apiKey: 'k', kbId: 'kb_mem' }
+    h.manifest = [
+      { relativePath: '.claude/CLAUDE.md', sourceHash: 'h1', sizeBytes: 1, updatedAt: '2026-07-06T00:00:00Z' },
+      { relativePath: '.claude/agents/r.md', sourceHash: 'h2', sizeBytes: 1, updatedAt: '2026-07-06T00:00:00Z' },
+      { relativePath: '.moraya/memories/x.md', sourceHash: 'h3', sizeBytes: 1, updatedAt: '2026-07-06T00:00:00Z' }, // other namespace
+    ]
+    h.raw = new Map([
+      ['.claude/CLAUDE.md', 'rules'],
+      ['.claude/agents/r.md', 'agent'],
+    ])
+  })
+  afterEach(() => _setBindingSyncIO(null))
+
+  it('writes only missing files under the binding namespace', async () => {
+    const writes: Array<{ path: string; content: string }> = []
+    _setBindingSyncIO(makeIO({
+      // local already has CLAUDE.md → should be skipped
+      async readDir() { return [{ name: 'CLAUDE.md', path: '/home/u/.claude/CLAUDE.md', is_dir: false }] },
+      async writeFile(path, content) { writes.push({ path, content }) },
+    }))
+    const r = await restoreBinding(bindingFromProfile(TOOL_PROFILES.claude, '~/.claude'))
+    expect(r.restored).toBe(1) // only agents/r.md (CLAUDE.md exists locally; .moraya not in ns)
+    expect(writes).toEqual([{ path: '/home/u/.claude/agents/r.md', content: 'agent' }])
+  })
+
+  it('restores all when local dir is empty (new machine)', async () => {
+    const writes: string[] = []
+    _setBindingSyncIO(makeIO({
+      async readDir() { throw new Error('no dir') }, // dir absent
+      async writeFile(path) { writes.push(path) },
+    }))
+    const r = await restoreBinding(bindingFromProfile(TOOL_PROFILES.claude, '~/.claude'))
+    expect(r.restored).toBe(2)
+    expect(writes.sort()).toEqual(['/home/u/.claude/CLAUDE.md', '/home/u/.claude/agents/r.md'])
+  })
+
+  it('no-op without cloud context', async () => {
+    h.ctx = null
+    _setBindingSyncIO(makeIO({}))
+    expect(await restoreBinding(bindingFromProfile(TOOL_PROFILES.claude, '~/.claude'))).toEqual({ restored: 0 })
+  })
+})
+
+describe('toolDirPresent', () => {
+  afterEach(() => _setBindingSyncIO(null))
+  it('true when the tool dir exists', async () => {
+    _setBindingSyncIO(makeIO({ async dirExists() { return true } }))
+    expect(await toolDirPresent('claude')).toBe(true)
+  })
+  it('false when absent', async () => {
+    _setBindingSyncIO(makeIO({ async dirExists() { return false } }))
+    expect(await toolDirPresent('claude')).toBe(false)
+  })
+  it('false for unknown tool', async () => {
+    expect(await toolDirPresent('nope')).toBe(false)
   })
 })

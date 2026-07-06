@@ -20,6 +20,8 @@
     addToolBinding,
     removeBinding,
     syncBinding,
+    restoreBinding,
+    toolDirPresent,
     hasBinding,
     type MemorySyncStatusKind,
     type MemoryDoc,
@@ -55,6 +57,7 @@
   // Tool-memory bindings (P2)
   let bindings = $state<MemoryBinding[]>([]);
   let claudeBound = $state(false);
+  let claudeDirPresent = $state(false);
 
   // Picora-connected image-host targets (memory syncs to one of these accounts).
   let picoraTargets = $derived(
@@ -91,6 +94,7 @@
     }
     bindings = await listBindings();
     claudeBound = await hasBinding('.claude');
+    claudeDirPresent = await toolDirPresent('claude');
     recomputeHealth();
   }
 
@@ -111,6 +115,12 @@
     if (cloudBusy) return;
     cloudBusy = true;
     try { await syncBinding(b); } finally { cloudBusy = false; }
+  }
+
+  async function handleRestoreBinding(b: MemoryBinding) {
+    if (cloudBusy) return;
+    cloudBusy = true;
+    try { await restoreBinding(b); } finally { cloudBusy = false; }
   }
 
   async function handleUnbind(mountAs: string) {
@@ -330,11 +340,12 @@
             <span class="binding-info"><strong>{b.tool}</strong> <code>{b.externalPath} → {b.mountAs}/</code></span>
             <div class="binding-actions">
               <button class="ghost-btn" onclick={() => handleSyncBinding(b)} disabled={cloudBusy}>{$t('memory.sync_now')}</button>
+              <button class="ghost-btn" onclick={() => handleRestoreBinding(b)} disabled={cloudBusy}>{$t('memory.restore')}</button>
               <button class="cancel-btn" onclick={() => handleUnbind(b.mountAs)} disabled={cloudBusy}>{$t('memory.unbind')}</button>
             </div>
           </div>
         {/each}
-        {#if !claudeBound}
+        {#if !claudeBound && claudeDirPresent}
           <button class="ghost-btn bind-btn" onclick={handleBindClaude} disabled={cloudBusy}>{$t('memory.bind_claude')}</button>
         {/if}
       </div>

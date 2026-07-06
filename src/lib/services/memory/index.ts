@@ -63,4 +63,4 @@ export {
   type MemoryBinding,
 } from './tool-profiles'
 export { listBindings, addToolBinding, removeBinding, hasBinding } from './bindings'
-export { syncBinding, syncAllBindings } from './binding-sync'
+export { syncBinding, syncAllBindings, restoreBinding, toolDirPresent } from './binding-sync'

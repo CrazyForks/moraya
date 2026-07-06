@@ -9,10 +9,10 @@
  * separate explicit action (P2b).
  */
 import { invoke } from '@tauri-apps/api/core'
-import { syncBatch } from '$lib/services/kb-sync/picora-kb-client'
+import { syncBatch, fetchManifest, fetchRaw } from '$lib/services/kb-sync/picora-kb-client'
 import type { SyncOp } from '$lib/services/kb-sync/types'
 import type { MemoryBinding } from './tool-profiles'
-import { includedByProfile } from './tool-profiles'
+import { includedByProfile, getToolProfile } from './tool-profiles'
 import { resolveMemoryContext } from './cloud-sync'
 import * as store from './store'
 
@@ -30,6 +30,8 @@ export interface BindingSyncIO {
   resolveHome(path: string): Promise<string>
   readDir(absPath: string): Promise<FileEntry[]>
   readFile(absPath: string): Promise<string>
+  writeFile(absPath: string, content: string): Promise<void>
+  dirExists(absPath: string): Promise<boolean>
 }
 
 const tauriIO: BindingSyncIO = {
@@ -46,6 +48,17 @@ const tauriIO: BindingSyncIO = {
   },
   readFile(absPath: string): Promise<string> {
     return invoke<string>('read_file', { path: absPath })
+  },
+  async writeFile(absPath: string, content: string): Promise<void> {
+    await invoke('write_file', { path: absPath, content })
+  },
+  async dirExists(absPath: string): Promise<boolean> {
+    try {
+      await invoke<FileEntry[]>('read_dir_recursive', { path: absPath, depth: 1, allFiles: true })
+      return true
+    } catch {
+      return false
+    }
   },
 }
 
@@ -120,4 +133,59 @@ export async function syncAllBindings(): Promise<{ pushed: number; skipped: numb
     skipped += r.skipped
   }
   return { pushed, skipped }
+}
+
+/**
+ * Explicit restore (三纪律 §5.2): pull a binding's cloud files into the local
+ * external dir, writing ONLY files that don't already exist locally — never
+ * overwriting. Used on a new machine to recover a tool's memory backup.
+ */
+export async function restoreBinding(binding: MemoryBinding): Promise<{ restored: number }> {
+  const ctx = await resolveMemoryContext()
+  if (!ctx) return { restored: 0 }
+
+  const rootAbs = (await io.resolveHome(binding.externalPath)).replace(/[/\\]$/, '')
+  const nsPrefix = `${binding.mountAs}/`
+
+  // Existing local files (to skip — never overwrite).
+  const localRels = new Set<string>()
+  try {
+    for (const f of flattenFiles(await io.readDir(rootAbs), rootAbs)) localRels.add(f.rel)
+  } catch {
+    /* dir may not exist yet — everything is "missing" */
+  }
+
+  let manifest: Array<{ relativePath: string }>
+  try {
+    manifest = await fetchManifest(ctx.apiBase, ctx.apiKey, ctx.kbId)
+  } catch {
+    return { restored: 0 }
+  }
+
+  let restored = 0
+  for (const entry of manifest) {
+    if (!entry.relativePath.startsWith(nsPrefix)) continue
+    const rel = entry.relativePath.slice(nsPrefix.length)
+    if (!rel || localRels.has(rel)) continue // only fill missing
+    try {
+      const content = await fetchRaw(ctx.apiBase, ctx.apiKey, ctx.kbId, entry.relativePath)
+      await io.writeFile(`${rootAbs}/${rel}`, content)
+      restored++
+    } catch {
+      /* skip this file, continue */
+    }
+  }
+  return { restored }
+}
+
+/** Recommend probe: does this tool's default memory dir exist locally? */
+export async function toolDirPresent(tool: string): Promise<boolean> {
+  const profile = getToolProfile(tool)
+  if (!profile) return false
+  try {
+    const abs = (await io.resolveHome(profile.defaultRoot)).replace(/[/\\]$/, '')
+    return await io.dirExists(abs)
+  } catch {
+    return false
+  }
 }
