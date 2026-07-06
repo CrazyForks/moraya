@@ -64,3 +64,4 @@ export {
 } from './tool-profiles'
 export { listBindings, addToolBinding, removeBinding, hasBinding } from './bindings'
 export { syncBinding, syncAllBindings, restoreBinding, toolDirPresent, moveBindingToDedicatedKb } from './binding-sync'
+export { createMemoryAutoSync, startMemoryAutoSync, stopMemoryAutoSync, type MemoryAutoSync } from './auto-sync'

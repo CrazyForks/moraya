@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
+  import { startMemoryAutoSync, stopMemoryAutoSync } from '$lib/services/memory';
   import type { MorayaEditor } from '$lib/editor/setup';
   import { AllSelection, TextSelection } from 'prosemirror-state';
   import {
@@ -888,6 +889,7 @@ ${tr('welcome.tip')}
   });
 
   onDestroy(() => {
+    stopMemoryAutoSync();
     unsubAI();
     unsubSettings();
     unsubEditor();
@@ -2796,6 +2798,9 @@ ${tr('welcome.tip')}
   });
 
   onMount(() => {
+    // Background memory auto-sync (focus + interval, debounced; no-op until
+    // cloud sync is configured).
+    startMemoryAutoSync();
     // Platform class is set above (before first render) for correct initial layout.
     // iPadOS + Tauri: track visual viewport height for virtual keyboard handling
     // (browser testing mode uses 100dvh fallback, no need for --app-height)
