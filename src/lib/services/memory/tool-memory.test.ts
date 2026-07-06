@@ -3,13 +3,17 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 // ── Mocks (hoisted) ─────────────────────────────────────────────────────────
 const h = vi.hoisted(() => ({
   ctx: { apiBase: 'https://api.test', apiKey: 'k', kbId: 'kb_mem' } as { apiBase: string; apiKey: string; kbId: string } | null,
+  account: { apiBase: 'https://api.test', apiKey: 'k', targetId: 't1' } as { apiBase: string; apiKey: string; targetId: string } | null,
   syncCalls: [] as Array<{ kbId: string; ops: unknown[] }>,
   manifest: [] as Array<{ relativePath: string; sourceHash: string; sizeBytes: number; updatedAt: string }>,
   raw: new Map<string, string>(),
+  createdKbId: 'kb_dedicated',
+  createKbCalls: [] as string[],
 }))
 
 vi.mock('./cloud-sync', () => ({
   resolveMemoryContext: async () => h.ctx,
+  resolveAccount: async () => h.account,
 }))
 vi.mock('$lib/services/kb-sync/picora-kb-client', () => ({
   syncBatch: async (_apiBase: string, _apiKey: string, kbId: string, ops: unknown[]) => {
@@ -18,6 +22,10 @@ vi.mock('$lib/services/kb-sync/picora-kb-client', () => ({
   },
   fetchManifest: async () => h.manifest,
   fetchRaw: async (_a: string, _b: string, _c: string, path: string) => h.raw.get(path) ?? '',
+  createKb: async (_a: string, _b: string, name: string) => {
+    h.createKbCalls.push(name)
+    return { id: h.createdKbId, name, slug: name, description: null, docCount: 0, sizeBytes: 0, createdAt: '', updatedAt: '' }
+  },
 }))
 
 import {
@@ -29,7 +37,7 @@ import {
 } from './tool-profiles'
 import * as store from './store'
 import { addToolBinding, removeBinding, listBindings, hasBinding } from './bindings'
-import { flattenFiles, syncBinding, syncAllBindings, restoreBinding, toolDirPresent, _setBindingSyncIO } from './binding-sync'
+import { flattenFiles, syncBinding, syncAllBindings, restoreBinding, toolDirPresent, moveBindingToDedicatedKb, _setBindingSyncIO } from './binding-sync'
 import type { BindingSyncIO } from './binding-sync'
 
 // A no-op-ish IO the sync tests can spread over.
@@ -290,5 +298,57 @@ describe('toolDirPresent', () => {
   })
   it('false for unknown tool', async () => {
     expect(await toolDirPresent('nope')).toBe(false)
+  })
+})
+
+// ── Tier 2: dedicated tool KB ────────────────────────────────────────────────
+
+describe('moveBindingToDedicatedKb', () => {
+  const disk = new Map<string, unknown>()
+  beforeEach(() => {
+    disk.clear()
+    store.setMemoryPersistence({
+      async read<T>(k: string) { return (disk.has(k) ? (disk.get(k) as T) : null) },
+      async write(k: string, v: unknown) { disk.set(k, v) },
+    })
+    store._resetCache()
+    h.ctx = { apiBase: 'https://api.test', apiKey: 'k', kbId: 'kb_mem' }
+    h.account = { apiBase: 'https://api.test', apiKey: 'k', targetId: 't1' }
+    h.syncCalls = []
+    h.createKbCalls = []
+    h.createdKbId = 'kb_dedicated'
+    h.manifest = [{ relativePath: '.claude/CLAUDE.md', sourceHash: 'h', sizeBytes: 1, updatedAt: '2026-07-06T00:00:00Z' }]
+    _setBindingSyncIO(makeIO({
+      async readDir() { return [{ name: 'CLAUDE.md', path: '/home/u/.claude/CLAUDE.md', is_dir: false }] },
+      async readFile() { return 'rules' },
+    }))
+  })
+  afterEach(() => { store.setMemoryPersistence(null); _setBindingSyncIO(null) })
+
+  it('creates a KB, routes the binding, syncs there, and clears the shared namespace', async () => {
+    await addToolBinding('claude')
+    const [binding] = await store.getBindings()
+    const updated = await moveBindingToDedicatedKb(binding, 'My Claude')
+
+    expect(updated?.kbId).toBe('kb_dedicated')
+    expect(h.createKbCalls).toEqual(['My Claude'])
+    // persisted routing
+    expect((await store.getBindings())[0].kbId).toBe('kb_dedicated')
+    // pushed to the dedicated KB
+    expect(h.syncCalls.some(c => c.kbId === 'kb_dedicated')).toBe(true)
+    // deleted the namespace from the shared KB
+    const sharedDeletes = h.syncCalls.filter(c => c.kbId === 'kb_mem')
+      .flatMap(c => c.ops as Array<{ op: string; relativePath: string }>)
+    expect(sharedDeletes).toEqual([{ op: 'delete', relativePath: '.claude/CLAUDE.md' }])
+  })
+
+  it('a routed binding syncs to its dedicated KB, not the shared one', async () => {
+    await addToolBinding('claude')
+    const all = await store.getBindings()
+    all[0].kbId = 'kb_dedicated'
+    await store.setBindings(all)
+    h.syncCalls = []
+    await syncBinding(all[0])
+    expect(h.syncCalls.every(c => c.kbId === 'kb_dedicated')).toBe(true)
   })
 })

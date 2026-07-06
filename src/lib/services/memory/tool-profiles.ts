@@ -57,6 +57,11 @@ export interface MemoryBinding {
   mountAs: string
   include: string[]
   exclude: string[]
+  /**
+   * Tier 2 (Picora 设计 §12): route this tool's memory to a dedicated KB. When
+   * unset, it syncs to the shared "AI Memory" KB (Tier 1).
+   */
+  kbId?: string
 }
 
 /** Build a binding from a profile. Hard-excludes are always taken from the profile. */

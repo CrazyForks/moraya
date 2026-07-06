@@ -9,14 +9,29 @@
  * separate explicit action (P2b).
  */
 import { invoke } from '@tauri-apps/api/core'
-import { syncBatch, fetchManifest, fetchRaw } from '$lib/services/kb-sync/picora-kb-client'
+import { syncBatch, fetchManifest, fetchRaw, createKb } from '$lib/services/kb-sync/picora-kb-client'
 import type { SyncOp } from '$lib/services/kb-sync/types'
 import type { MemoryBinding } from './tool-profiles'
 import { includedByProfile, getToolProfile } from './tool-profiles'
-import { resolveMemoryContext } from './cloud-sync'
+import { resolveMemoryContext, resolveAccount } from './cloud-sync'
 import * as store from './store'
 
 const MAX_SYNC_OPS = 100 // Picora per-request op cap
+
+interface CloudCtx { apiBase: string; apiKey: string; kbId: string }
+
+/**
+ * Resolve the target KB context for a binding: a dedicated KB (Tier 2) when the
+ * binding carries `kbId`, otherwise the shared "AI Memory" KB (Tier 1).
+ */
+async function resolveBindingCtx(binding: MemoryBinding): Promise<CloudCtx | null> {
+  if (binding.kbId) {
+    const acct = await resolveAccount()
+    if (!acct) return null
+    return { apiBase: acct.apiBase, apiKey: acct.apiKey, kbId: binding.kbId }
+  }
+  return resolveMemoryContext()
+}
 
 interface FileEntry {
   name: string
@@ -88,7 +103,7 @@ export function flattenFiles(entries: FileEntry[], rootAbs: string): Array<{ rel
 
 /** Best-effort push-only sync of one binding. */
 export async function syncBinding(binding: MemoryBinding): Promise<{ pushed: number; skipped: number }> {
-  const ctx = await resolveMemoryContext()
+  const ctx = await resolveBindingCtx(binding)
   if (!ctx) return { pushed: 0, skipped: 0 }
 
   let rootAbs: string
@@ -141,7 +156,7 @@ export async function syncAllBindings(): Promise<{ pushed: number; skipped: numb
  * overwriting. Used on a new machine to recover a tool's memory backup.
  */
 export async function restoreBinding(binding: MemoryBinding): Promise<{ restored: number }> {
-  const ctx = await resolveMemoryContext()
+  const ctx = await resolveBindingCtx(binding)
   if (!ctx) return { restored: 0 }
 
   const rootAbs = (await io.resolveHome(binding.externalPath)).replace(/[/\\]$/, '')
@@ -176,6 +191,54 @@ export async function restoreBinding(binding: MemoryBinding): Promise<{ restored
     }
   }
   return { restored }
+}
+
+/**
+ * Tier 2 (Picora 设计 §12): split a binding's memory out to a dedicated KB.
+ * Creates an ordinary KB, routes the binding there, re-syncs, and removes the
+ * namespace from the shared "AI Memory" KB. Returns the updated binding.
+ */
+export async function moveBindingToDedicatedKb(
+  binding: MemoryBinding,
+  kbName: string,
+): Promise<MemoryBinding | null> {
+  const acct = await resolveAccount()
+  if (!acct) return null
+
+  let kbId: string
+  try {
+    const kb = await createKb(acct.apiBase, acct.apiKey, kbName)
+    if (!kb?.id) return null
+    kbId = kb.id
+  } catch {
+    return null
+  }
+
+  // Route the binding to the dedicated KB and persist.
+  const updated: MemoryBinding = { ...binding, kbId }
+  const all = await store.getBindings()
+  await store.setBindings(all.map(b => (b.mountAs === binding.mountAs ? updated : b)))
+
+  // Push into the new KB.
+  await syncBinding(updated)
+
+  // Remove the namespace from the shared KB (best-effort cleanup).
+  const shared = await resolveMemoryContext()
+  if (shared) {
+    try {
+      const manifest = await fetchManifest(shared.apiBase, shared.apiKey, shared.kbId)
+      const nsPrefix = `${binding.mountAs}/`
+      const ops: SyncOp[] = manifest
+        .filter(e => e.relativePath.startsWith(nsPrefix))
+        .map(e => ({ op: 'delete', relativePath: e.relativePath }))
+      for (let i = 0; i < ops.length; i += MAX_SYNC_OPS) {
+        await syncBatch(shared.apiBase, shared.apiKey, shared.kbId, ops.slice(i, i + MAX_SYNC_OPS))
+      }
+    } catch {
+      /* cleanup is best-effort */
+    }
+  }
+  return updated
 }
 
 /** Recommend probe: does this tool's default memory dir exist locally? */

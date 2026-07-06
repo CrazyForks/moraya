@@ -22,6 +22,7 @@
     syncBinding,
     restoreBinding,
     toolDirPresent,
+    moveBindingToDedicatedKb,
     hasBinding,
     type MemorySyncStatusKind,
     type MemoryDoc,
@@ -121,6 +122,16 @@
     if (cloudBusy) return;
     cloudBusy = true;
     try { await restoreBinding(b); } finally { cloudBusy = false; }
+  }
+
+  async function handleSplitToKb(b: MemoryBinding) {
+    if (cloudBusy) return;
+    cloudBusy = true;
+    try {
+      const name = 'My ' + b.tool.charAt(0).toUpperCase() + b.tool.slice(1);
+      await moveBindingToDedicatedKb(b, name);
+      bindings = await listBindings();
+    } finally { cloudBusy = false; }
   }
 
   async function handleUnbind(mountAs: string) {
@@ -339,6 +350,11 @@
           <div class="row binding-row">
             <span class="binding-info"><strong>{b.tool}</strong> <code>{b.externalPath} → {b.mountAs}/</code></span>
             <div class="binding-actions">
+              {#if b.kbId}
+                <span class="pill muted">{$t('memory.on_dedicated_kb')}</span>
+              {:else}
+                <button class="ghost-btn" onclick={() => handleSplitToKb(b)} disabled={cloudBusy}>{$t('memory.split_to_kb')}</button>
+              {/if}
               <button class="ghost-btn" onclick={() => handleSyncBinding(b)} disabled={cloudBusy}>{$t('memory.sync_now')}</button>
               <button class="ghost-btn" onclick={() => handleRestoreBinding(b)} disabled={cloudBusy}>{$t('memory.restore')}</button>
               <button class="cancel-btn" onclick={() => handleUnbind(b.mountAs)} disabled={cloudBusy}>{$t('memory.unbind')}</button>

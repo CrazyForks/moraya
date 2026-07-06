@@ -50,6 +50,28 @@ interface CloudContext {
   kbId: string
 }
 
+/** Account-only context (no KB) — for bindings that route to a dedicated KB. */
+export interface AccountContext {
+  apiBase: string
+  apiKey: string
+  targetId: string
+}
+
+/** Resolve the selected Picora account's {apiBase, apiKey} (no KB discovery). */
+export async function resolveAccount(): Promise<AccountContext | null> {
+  const cfg = await store.getCloudConfig()
+  if (!cfg.enabled || !cfg.targetId) return null
+  const target = get(settingsStore).imageHostTargets.find(t => t.id === cfg.targetId)
+  if (!target || !target.picoraApiUrl) return null
+  try {
+    const apiKey = await getPicoraApiKey(target)
+    if (!apiKey) return null
+    return { apiBase: picoraApiBase(target.picoraApiUrl), apiKey, targetId: cfg.targetId }
+  } catch {
+    return null
+  }
+}
+
 /**
  * Discover the shared memory KB (slug='memory'). Picora auto-provisions it on
  * OAuth; if a stale/older account hasn't been re-authed yet and it's missing,
@@ -71,20 +93,11 @@ async function discoverMemoryKb(targetId: string, apiBase: string, apiKey: strin
 }
 
 async function resolveContext(): Promise<CloudContext | null> {
-  const cfg = await store.getCloudConfig()
-  if (!cfg.enabled || !cfg.targetId) return null
-  const target = get(settingsStore).imageHostTargets.find(t => t.id === cfg.targetId)
-  if (!target || !target.picoraApiUrl) return null
-  try {
-    const apiKey = await getPicoraApiKey(target)
-    if (!apiKey) return null
-    const apiBase = picoraApiBase(target.picoraApiUrl)
-    const kbId = await discoverMemoryKb(cfg.targetId, apiBase, apiKey)
-    if (!kbId) return null
-    return { apiBase, apiKey, kbId }
-  } catch {
-    return null
-  }
+  const acct = await resolveAccount()
+  if (!acct) return null
+  const kbId = await discoverMemoryKb(acct.targetId, acct.apiBase, acct.apiKey)
+  if (!kbId) return null
+  return { apiBase: acct.apiBase, apiKey: acct.apiKey, kbId }
 }
 
 /** Drop the discovered-KB cache (e.g. on logout / account change). */
