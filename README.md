@@ -377,6 +377,7 @@ Moraya ships as a coordinated multi-product suite — each lives in its own repo
 | v1.9.0 | Prompt card — bind environment context (related KB files + a background note) to a prompt via `context-files`/`context-notes` frontmatter, then one-click "assemble & copy" the full background + prompt for a fresh AI session; "bind current file" from the palette. Kills cross-session prompt rewriting | ✅ |
 | v1.10.0 | Prompt refine — promote a polished prompt into a reusable KB template (into the template gallery via the existing template system) and archive cold prompts to `prompts/archive/` (drop out of recall without deletion), completing the usage-heat loop | ✅ |
 | v1.11.0 | Prompt dedup — deterministic near-duplicate detection (token-overlap clustering, no LLM) flags redundant prompts with a ⚠ badge in the palette; "keep this, archive duplicates" merges a group by archiving all but the best-kept member | ✅ |
+| v1.12.0 | Prompt library management — Active/Archived toggle in the palette to view and restore archived prompts (move back from `prompts/archive/`), and unbind individual context files from a prompt card (✕ per file) | ✅ |
 
 ### Web — [`moraya-web`](https://github.com/zouwei/moraya-web)
 

@@ -4,12 +4,15 @@
   import { filesStore } from '$lib/stores/files-store';
   import {
     loadPromptDocs,
+    loadArchivedDocs,
     markPromptUsed,
     rankPrompts,
     assembleCard,
     bindContextFile,
+    unbindContextFile,
     promoteToTemplate,
     archivePrompt,
+    restorePrompt,
     findDuplicateGroups,
     duplicatePaths,
     groupFor,
@@ -32,14 +35,19 @@
   } = $props();
 
   let docs = $state<PromptAssetDoc[]>([]);
+  let archivedDocs = $state<PromptAssetDoc[]>([]);
+  let archivedLoaded = $state(false);
+  let showArchived = $state(false);
   let loading = $state(true);
   let hasKb = $state(true);
   let query = $state('');
   let activeIndex = $state(0);
   let inputEl = $state<HTMLInputElement | null>(null);
 
-  let ranked = $derived(rankPrompts(docs, query, nowMs()));
+  let sourceDocs = $derived(showArchived ? archivedDocs : docs);
+  let ranked = $derived(rankPrompts(sourceDocs, query, nowMs()));
   let selected = $derived(ranked[Math.min(activeIndex, ranked.length - 1)] ?? null);
+  // Duplicate detection only applies to the active library.
   let dupGroups = $derived(findDuplicateGroups(docs));
   let dupPaths = $derived(duplicatePaths(dupGroups));
 
@@ -148,6 +156,42 @@
     }
   }
 
+  async function toggleArchived() {
+    showArchived = !showArchived;
+    query = '';
+    activeIndex = 0;
+    if (showArchived && !archivedLoaded) {
+      const kb = filesStore.getActiveKnowledgeBase();
+      if (kb) {
+        archivedDocs = await loadArchivedDocs(kb.path);
+        archivedLoaded = true;
+      }
+    }
+  }
+
+  async function restore(doc: PromptAssetDoc) {
+    const kb = filesStore.getActiveKnowledgeBase();
+    if (!kb) return;
+    const rel = await restorePrompt(kb.path, doc.relativePath);
+    if (rel) {
+      archivedDocs = archivedDocs.filter((d) => d.relativePath !== doc.relativePath);
+      docs = [...docs, { ...doc, relativePath: rel }];
+      onToast?.($t('prompt_recall.restored'));
+    } else {
+      onToast?.($t('prompt_recall.restore_failed'));
+    }
+  }
+
+  async function unbindFile(doc: PromptAssetDoc, fileRel: string) {
+    const kb = filesStore.getActiveKnowledgeBase();
+    if (!kb) return;
+    const ok = await unbindContextFile(kb.path, doc.relativePath, fileRel);
+    if (ok) {
+      doc.meta.contextFiles = doc.meta.contextFiles.filter((f) => f !== fileRel);
+      docs = [...docs];
+    }
+  }
+
   /** Keep `doc`, archive every other member of its near-duplicate group. */
   async function dedupKeep(doc: PromptAssetDoc) {
     const kb = filesStore.getActiveKnowledgeBase();
@@ -196,12 +240,19 @@
       spellcheck="false"
     />
 
+    {#if hasKb && !loading}
+      <div class="pp-tabs">
+        <button class="pp-tab" class:on={!showArchived} onclick={() => { if (showArchived) toggleArchived(); }}>{$t('prompt_recall.show_active')}</button>
+        <button class="pp-tab" class:on={showArchived} onclick={() => { if (!showArchived) toggleArchived(); }}>{$t('prompt_recall.show_archived')}</button>
+      </div>
+    {/if}
+
     {#if loading}
       <p class="pp-hint">{$t('prompt_recall.loading')}</p>
     {:else if !hasKb}
       <p class="pp-hint">{$t('prompt_recall.no_kb')}</p>
-    {:else if docs.length === 0}
-      <p class="pp-hint">{$t('prompt_recall.empty')}</p>
+    {:else if sourceDocs.length === 0}
+      <p class="pp-hint">{showArchived ? $t('prompt_recall.empty_archived') : $t('prompt_recall.empty')}</p>
     {:else if ranked.length === 0}
       <p class="pp-hint">{$t('prompt_recall.no_match')}</p>
     {:else}
@@ -234,25 +285,37 @@
             {#if selected.meta.contextFiles.length > 0}
               <div class="pp-ctx-list">
                 <span class="pp-ctx-label">📎 {$t('prompt_recall.context_files')}</span>
-                {#each selected.meta.contextFiles as f}<code class="pp-ctx-file">{f}</code>{/each}
+                {#each selected.meta.contextFiles as f}
+                  <code class="pp-ctx-file">
+                    {f}
+                    {#if !showArchived}
+                      <button class="pp-unbind" title={$t('prompt_recall.unbind')} onclick={() => unbindFile(selected!, f)}>✕</button>
+                    {/if}
+                  </code>
+                {/each}
               </div>
             {/if}
             <div class="pp-actions">
-              <button class="pp-btn primary" onclick={() => copyPrompt(selected!)}>{$t('prompt_recall.copy')}</button>
-              {#if hasContext(selected)}
-                <button class="pp-btn" onclick={() => assembleAndCopy(selected!)}>{$t('prompt_recall.assemble')}</button>
+              {#if showArchived}
+                <button class="pp-btn primary" onclick={() => restore(selected!)}>{$t('prompt_recall.restore')}</button>
+                <button class="pp-btn" onclick={() => copyPrompt(selected!)}>{$t('prompt_recall.copy')}</button>
+              {:else}
+                <button class="pp-btn primary" onclick={() => copyPrompt(selected!)}>{$t('prompt_recall.copy')}</button>
+                {#if hasContext(selected)}
+                  <button class="pp-btn" onclick={() => assembleAndCopy(selected!)}>{$t('prompt_recall.assemble')}</button>
+                {/if}
+                {#if activeFilePath}
+                  <button class="pp-btn" onclick={() => bindActiveFile(selected!)}>{$t('prompt_recall.bind_file')}</button>
+                {/if}
+                {#if onInsertToEditor}
+                  <button class="pp-btn" onclick={() => insertPrompt(selected!)}>{$t('prompt_recall.insert')}</button>
+                {/if}
+                {#if dupPaths.has(selected.relativePath)}
+                  <button class="pp-btn subtle" onclick={() => dedupKeep(selected!)}>{$t('prompt_recall.dedup')}</button>
+                {/if}
+                <button class="pp-btn subtle" onclick={() => promote(selected!)}>{$t('prompt_recall.promote')}</button>
+                <button class="pp-btn subtle" onclick={() => archive(selected!)}>{$t('prompt_recall.archive')}</button>
               {/if}
-              {#if activeFilePath}
-                <button class="pp-btn" onclick={() => bindActiveFile(selected!)}>{$t('prompt_recall.bind_file')}</button>
-              {/if}
-              {#if onInsertToEditor}
-                <button class="pp-btn" onclick={() => insertPrompt(selected!)}>{$t('prompt_recall.insert')}</button>
-              {/if}
-              {#if dupPaths.has(selected.relativePath)}
-                <button class="pp-btn subtle" onclick={() => dedupKeep(selected!)}>{$t('prompt_recall.dedup')}</button>
-              {/if}
-              <button class="pp-btn subtle" onclick={() => promote(selected!)}>{$t('prompt_recall.promote')}</button>
-              <button class="pp-btn subtle" onclick={() => archive(selected!)}>{$t('prompt_recall.archive')}</button>
             </div>
           </div>
         {/if}
@@ -292,6 +355,30 @@
     font-size: var(--font-size-base);
     outline: none;
   }
+  .pp-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 8px 12px 0;
+  }
+  .pp-tab {
+    padding: 4px 12px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+  }
+  .pp-tab.on { background: var(--bg-secondary); color: var(--text-primary); }
+  .pp-unbind {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0 0 0 4px;
+    font-size: 10px;
+  }
+  .pp-unbind:hover { color: var(--text-primary); }
   .pp-hint {
     padding: 24px 16px;
     margin: 0;

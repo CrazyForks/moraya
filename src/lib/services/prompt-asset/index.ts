@@ -63,11 +63,13 @@ export {
 
 export {
   loadPromptDocs,
+  loadArchivedDocs,
   markPromptUsed,
   toKbRelative,
   resolveContextFiles,
   assembleCard,
   bindContextFile,
+  unbindContextFile,
 } from './recall-service'
 
 export {
@@ -78,8 +80,8 @@ export {
   type CardLabels,
 } from './prompt-card'
 
-export { promptToTemplate, templateIdForPrompt, PROMOTED_CATEGORY } from './refine'
-export { promoteToTemplate, archivePrompt } from './refine-service'
+export { promptToTemplate, templateIdForPrompt, restoreTargetPath, PROMOTED_CATEGORY } from './refine'
+export { promoteToTemplate, archivePrompt, restorePrompt } from './refine-service'
 
 export {
   findDuplicateGroups,

@@ -8,7 +8,12 @@
 import { invoke } from '@tauri-apps/api/core'
 import { PROMPTS_DIR } from './types'
 import { parsePromptDoc, bumpUsage, type PromptAssetDoc } from './prompt-index'
-import { assemblePromptCard, addContextFileToFrontmatter, type CardLabels } from './prompt-card'
+import {
+  assemblePromptCard,
+  addContextFileToFrontmatter,
+  removeContextFileFromFrontmatter,
+  type CardLabels,
+} from './prompt-card'
 
 interface RawEntry {
   name: string
@@ -16,12 +21,9 @@ interface RawEntry {
   is_dir: boolean
 }
 
-/**
- * Load and parse every prompt asset under `{kbRoot}/prompts/`. Returns an empty
- * array when the directory does not exist yet. Unreadable files are skipped.
- */
-export async function loadPromptDocs(kbRoot: string): Promise<PromptAssetDoc[]> {
-  const dir = `${kbRoot}/${PROMPTS_DIR}`
+/** Load + parse every `.md` directly under `dir`, labelling each with
+ *  `{relPrefix}/{name}`. Empty array when the dir is absent; skips bad files. */
+async function loadDocsFromDir(dir: string, relPrefix: string): Promise<PromptAssetDoc[]> {
   let entries: RawEntry[]
   try {
     entries = await invoke<RawEntry[]>('read_dir_recursive', { path: dir, depth: 1 })
@@ -33,12 +35,25 @@ export async function loadPromptDocs(kbRoot: string): Promise<PromptAssetDoc[]> 
   for (const f of files) {
     try {
       const content = await invoke<string>('read_file', { path: f.path })
-      docs.push(parsePromptDoc(`${PROMPTS_DIR}/${f.name}`, content))
+      docs.push(parsePromptDoc(`${relPrefix}/${f.name}`, content))
     } catch {
       // skip unreadable file
     }
   }
   return docs
+}
+
+/**
+ * Load and parse the active prompt assets under `{kbRoot}/prompts/` (the nested
+ * `archive/` subdir is not descended into, so archived prompts are excluded).
+ */
+export async function loadPromptDocs(kbRoot: string): Promise<PromptAssetDoc[]> {
+  return loadDocsFromDir(`${kbRoot}/${PROMPTS_DIR}`, PROMPTS_DIR)
+}
+
+/** Load the archived prompts under `{kbRoot}/prompts/archive/`. */
+export async function loadArchivedDocs(kbRoot: string): Promise<PromptAssetDoc[]> {
+  return loadDocsFromDir(`${kbRoot}/${PROMPTS_DIR}/archive`, `${PROMPTS_DIR}/archive`)
 }
 
 /**
@@ -123,5 +138,24 @@ export async function bindContextFile(
     return rel
   } catch {
     return null
+  }
+}
+
+/** Remove a bound context file (KB-relative) from a prompt. Returns true on a
+ *  successful write, false if it wasn't bound or the write failed. */
+export async function unbindContextFile(
+  kbRoot: string,
+  promptRelPath: string,
+  fileRel: string,
+): Promise<boolean> {
+  const abs = `${kbRoot}/${promptRelPath}`
+  try {
+    const content = await invoke<string>('read_file', { path: abs })
+    const next = removeContextFileFromFrontmatter(content, fileRel)
+    if (next === content) return false
+    await invoke('write_file', { path: abs, content: next })
+    return true
+  } catch {
+    return false
   }
 }

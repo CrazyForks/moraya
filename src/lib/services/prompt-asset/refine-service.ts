@@ -6,7 +6,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { saveTemplate } from '$lib/services/ai/templates/template-storage'
 import { PROMPTS_DIR } from './types'
-import { promptToTemplate } from './refine'
+import { promptToTemplate, restoreTargetPath } from './refine'
 import type { PromptAssetDoc } from './prompt-index'
 
 /**
@@ -39,6 +39,27 @@ export async function archivePrompt(
       newPath: `${archiveDir}/${base}`,
     })
     return `${PROMPTS_DIR}/archive/${base}`
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Restore an archived prompt (`prompts/archive/x.md`) back to `prompts/x.md`.
+ * Returns the new KB-relative path, or null on failure (e.g. an active prompt
+ * with the same name already exists).
+ */
+export async function restorePrompt(
+  kbRoot: string,
+  archiveRelPath: string,
+): Promise<string | null> {
+  const target = restoreTargetPath(archiveRelPath)
+  try {
+    await invoke('rename_file', {
+      oldPath: `${kbRoot}/${archiveRelPath}`,
+      newPath: `${kbRoot}/${target}`,
+    })
+    return target
   } catch {
     return null
   }

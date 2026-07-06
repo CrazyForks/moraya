@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { promptToTemplate, templateIdForPrompt, PROMOTED_CATEGORY } from './refine'
+import { promptToTemplate, templateIdForPrompt, restoreTargetPath, PROMOTED_CATEGORY } from './refine'
 import type { PromptAssetDoc } from './prompt-index'
 
 function doc(over: Partial<PromptAssetDoc> = {}): PromptAssetDoc {
@@ -30,6 +30,15 @@ describe('templateIdForPrompt', () => {
   })
   it('handles a bare filename', () => {
     expect(templateIdForPrompt('x.md')).toBe(`${PROMOTED_CATEGORY}.x`)
+  })
+})
+
+describe('restoreTargetPath', () => {
+  it('moves an archived path back to prompts/', () => {
+    expect(restoreTargetPath('prompts/archive/2026-07-04-x.md')).toBe('prompts/2026-07-04-x.md')
+  })
+  it('handles a bare filename', () => {
+    expect(restoreTargetPath('x.md')).toBe('prompts/x.md')
   })
 })
 

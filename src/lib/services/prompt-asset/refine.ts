@@ -4,9 +4,17 @@
  */
 import type { AITemplate } from '$lib/services/ai/templates/types'
 import type { PromptAssetDoc } from './prompt-index'
+import { PROMPTS_DIR } from './types'
 
 /** Category id for prompts promoted into the template gallery. */
 export const PROMOTED_CATEGORY = 'my_prompts'
+
+/** KB-relative target when restoring an archived prompt back to `prompts/`.
+ *  "prompts/archive/x.md" → "prompts/x.md". */
+export function restoreTargetPath(archiveRelPath: string): string {
+  const base = archiveRelPath.split('/').pop() ?? archiveRelPath
+  return `${PROMPTS_DIR}/${base}`
+}
 
 /** Stable template id derived from the prompt file (keeps the date-slug stem). */
 export function templateIdForPrompt(relativePath: string): string {
