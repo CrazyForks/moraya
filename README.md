@@ -370,6 +370,7 @@ Moraya ships as a coordinated multi-product suite — each lives in its own repo
 | v1.1.0 | MCP LAN bridge — expose a connected local MCP server over the LAN as a token-gated plain-JSON HTTP endpoint (tiny_http, per-server opt-in, 192-bit bearer token); MCPPanel expose toggle + connection card `[cross-product]` | ✅ |
 | v1.2.0 | MCP connection QR — render the LAN connection payload as a scannable QR code in the MCPPanel connection card (`qrcode`), so mobile pairs by scanning instead of pasting `[cross-product]` | ✅ |
 | v1.3.0 | Startup & KB responsiveness — move `git_check_installed` and `read_dir_recursive` off the main thread (spawn_blocking), memoize the git-presence probe per session, suppress the Windows git console flash (CREATE_NO_WINDOW), and add discoverable sidebar/outline toggle buttons to the status bar | ✅ |
+| v0.42.0 | Long-term memory (desktop) — full parity with web/mobile: memory settings tab, `/memorize` capture, chat injection, plugin-store persistence, and Picora cloud sync via `@moraya/core/memory` (weight+substring ranking, no local embeddings) `[cross-product]` | ✅ |
 
 ### Web — [`moraya-web`](https://github.com/zouwei/moraya-web)
 

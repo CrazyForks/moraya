@@ -1317,12 +1317,23 @@ export async function sendChatMessage(message: string, documentContext?: string,
         unanchored: r.anchorState === 'unanchored' || r.status === 'unanchored',
       }));
 
+    // Long-term memory: inject top-relevance memories as a broad system
+    // context (best-effort; empty string when memory is unavailable/empty).
+    let memoryFragment = '';
+    try {
+      const { buildChatMemoryContext } = await import('$lib/services/memory');
+      memoryFragment = await buildChatMemoryContext(message);
+    } catch { /* best-effort — never block the chat turn */ }
+
     const messages: ChatMessage[] = [
       {
         role: 'system',
         content: buildSystemPrompt(activeConfig, toolDefs.length, currentDir, currentFilePath, sidebarDir, fallbackDir, documentContext, rulesResult, openReviewsLite),
         timestamp: Date.now(),
       },
+      ...(memoryFragment
+        ? [{ role: 'system' as const, content: memoryFragment, timestamp: Date.now() }]
+        : []),
       // Include recent chat history for context (preserve tool call/result pairs)
       ...trimmedHistory,
       userMsg,

@@ -35,6 +35,7 @@
   import { open as openDialog } from '@tauri-apps/plugin-dialog';
   import { onMount, onDestroy } from 'svelte';
   import { t } from '$lib/i18n';
+  import { parseMemorizeCommand, memorizeFromInput } from '$lib/services/memory';
   import { compressImage, blobToBase64 } from '$lib/services/ai/image-utils';
   import TemplateGallery from './TemplateGallery.svelte';
   import TemplateParamPanel from './TemplateParamPanel.svelte';
@@ -587,6 +588,16 @@
     showCommands = false;
     userAtBottom = true;
     resetInputHeight();
+
+    // /memorize — capture a long-term memory locally (no LLM round-trip).
+    if (parseMemorizeCommand(message)) {
+      aiStore.addMessage({ role: 'user', content: message, timestamp: Date.now() });
+      try {
+        await memorizeFromInput(message);
+      } catch { /* store error — still acknowledge so the user isn't confused */ }
+      aiStore.addMessage({ role: 'assistant', content: $t('memory.memorize_ack'), timestamp: Date.now() });
+      return;
+    }
 
     if (activeTemplate && (activeTemplate.flow === 'input' || activeTemplate.flow === 'parameterized')) {
       // Template input flow: build messages from template
