@@ -61,4 +61,19 @@ export {
   type PromptAssetDoc,
 } from './prompt-index'
 
-export { loadPromptDocs, markPromptUsed } from './recall-service'
+export {
+  loadPromptDocs,
+  markPromptUsed,
+  toKbRelative,
+  resolveContextFiles,
+  assembleCard,
+  bindContextFile,
+} from './recall-service'
+
+export {
+  assemblePromptCard,
+  addContextFileToFrontmatter,
+  removeContextFileFromFrontmatter,
+  type CardInput,
+  type CardLabels,
+} from './prompt-card'

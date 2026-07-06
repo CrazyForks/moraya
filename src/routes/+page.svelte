@@ -3915,6 +3915,7 @@ ${tr('welcome.tip')}
       onClose={() => showPromptPalette = false}
       onInsertToEditor={(text) => runCmd(insertTextAtCursor(text))}
       onToast={(msg) => showToast(msg, 'success')}
+      activeFilePath={editorStore.getState().currentFilePath}
     />
   {/await}
 {/if}

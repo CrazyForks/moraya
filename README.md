@@ -374,6 +374,7 @@ Moraya ships as a coordinated multi-product suite — each lives in its own repo
 | v0.42.0 | Long-term memory (desktop) — full parity with web/mobile: memory settings tab, `/memorize` capture, chat injection, plugin-store persistence, and Picora cloud sync via `@moraya/core/memory` (weight+substring ranking, no local embeddings) `[cross-product]` | ✅ |
 | v1.7.0 | Prompt assets (capture) — recover prompts you sent to Claude Code from local `~/.claude` session transcripts (read-only Rust scan + denoise) and save them as visible Markdown documents under a KB's `prompts/` directory, synced to Picora; first pillar of the "personal AI asset hub" (memory + prompts) | ✅ |
 | v1.8.0 | Prompt assets (recall) — Prompt Palette (Cmd/Ctrl+Shift+A) to search captured prompts ranked by usage + recency, copy to clipboard or insert into the editor, plus `@` recall in the AI chat input; each use bumps usage metadata so frequent prompts float up | ✅ |
+| v1.9.0 | Prompt card — bind environment context (related KB files + a background note) to a prompt via `context-files`/`context-notes` frontmatter, then one-click "assemble & copy" the full background + prompt for a fresh AI session; "bind current file" from the palette. Kills cross-session prompt rewriting | ✅ |
 
 ### Web — [`moraya-web`](https://github.com/zouwei/moraya-web)
 

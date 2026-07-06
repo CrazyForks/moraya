@@ -18,6 +18,10 @@ export interface PromptMeta {
   usageCount: number
   /** ISO timestamp of last use (frontmatter `last-used`), or '' if never. */
   lastUsedAt: string
+  /** KB-relative paths bound as environment context (frontmatter `context-files`). */
+  contextFiles: string[]
+  /** Free-text background bundled with this prompt (frontmatter `context-notes`). */
+  contextNotes: string
 }
 
 /** An indexed prompt asset ready for search + recall. */
@@ -65,6 +69,8 @@ export function parsePromptMeta(frontmatterBlock: string): PromptMeta {
     tags: [],
     usageCount: 0,
     lastUsedAt: '',
+    contextFiles: [],
+    contextNotes: '',
   }
   for (const line of frontmatterBlock.split('\n')) {
     const m = line.match(/^([\w-]+):\s*(.*)$/)
@@ -79,6 +85,8 @@ export function parsePromptMeta(frontmatterBlock: string): PromptMeta {
       case 'tags': meta.tags = parseInlineArray(val); break
       case 'usage-count': meta.usageCount = Number.parseInt(unquote(val), 10) || 0; break
       case 'last-used': meta.lastUsedAt = unquote(val); break
+      case 'context-files': meta.contextFiles = parseInlineArray(val); break
+      case 'context-notes': meta.contextNotes = unquote(val); break
     }
   }
   return meta

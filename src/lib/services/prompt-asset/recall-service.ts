@@ -8,6 +8,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { PROMPTS_DIR } from './types'
 import { parsePromptDoc, bumpUsage, type PromptAssetDoc } from './prompt-index'
+import { assemblePromptCard, addContextFileToFrontmatter, type CardLabels } from './prompt-card'
 
 interface RawEntry {
   name: string
@@ -57,5 +58,70 @@ export async function markPromptUsed(
     if (next !== content) await invoke('write_file', { path: abs, content: next })
   } catch {
     // non-fatal
+  }
+}
+
+/** Convert an absolute path under `kbRoot` to a KB-relative path, or null if
+ *  the file lives outside the KB. */
+export function toKbRelative(kbRoot: string, absPath: string): string | null {
+  const root = kbRoot.endsWith('/') ? kbRoot : `${kbRoot}/`
+  if (!absPath.startsWith(root)) return null
+  return absPath.slice(root.length)
+}
+
+/** Read the bound context files (KB-relative), skipping any that are unreadable. */
+export async function resolveContextFiles(
+  kbRoot: string,
+  relPaths: string[],
+): Promise<Array<{ path: string; content: string }>> {
+  const out: Array<{ path: string; content: string }> = []
+  for (const rel of relPaths) {
+    try {
+      const content = await invoke<string>('read_file', { path: `${kbRoot}/${rel}` })
+      out.push({ path: rel, content })
+    } catch {
+      // missing/unreadable context file — skip it
+    }
+  }
+  return out
+}
+
+/**
+ * Assemble a prompt's full "card": its background note + bound context files +
+ * the prompt body, ready to paste into a fresh AI session.
+ */
+export async function assembleCard(
+  kbRoot: string,
+  doc: PromptAssetDoc,
+  labels: CardLabels,
+): Promise<string> {
+  const files = await resolveContextFiles(kbRoot, doc.meta.contextFiles)
+  return assemblePromptCard(
+    { body: doc.body, notes: doc.meta.contextNotes, files },
+    labels,
+  )
+}
+
+/**
+ * Bind a file (absolute path, must live under the KB) as environment context
+ * for a prompt. Returns the new KB-relative path on success, or null if the
+ * file is outside the KB / already bound / the write failed.
+ */
+export async function bindContextFile(
+  kbRoot: string,
+  promptRelPath: string,
+  absFilePath: string,
+): Promise<string | null> {
+  const rel = toKbRelative(kbRoot, absFilePath)
+  if (!rel) return null
+  const abs = `${kbRoot}/${promptRelPath}`
+  try {
+    const content = await invoke<string>('read_file', { path: abs })
+    const next = addContextFileToFrontmatter(content, rel)
+    if (next === content) return null // already bound
+    await invoke('write_file', { path: abs, content: next })
+    return rel
+  } catch {
+    return null
   }
 }

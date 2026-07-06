@@ -73,6 +73,8 @@ function mkDoc(over: Partial<PromptAssetDoc> & { title: string }): PromptAssetDo
       tags: over.meta?.tags ?? [],
       usageCount: over.meta?.usageCount ?? 0,
       lastUsedAt: over.meta?.lastUsedAt ?? '',
+      contextFiles: over.meta?.contextFiles ?? [],
+      contextNotes: over.meta?.contextNotes ?? '',
     },
   }
 }

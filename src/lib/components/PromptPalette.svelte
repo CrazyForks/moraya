@@ -6,6 +6,8 @@
     loadPromptDocs,
     markPromptUsed,
     rankPrompts,
+    assembleCard,
+    bindContextFile,
     type PromptAssetDoc,
   } from '$lib/services/prompt-asset';
 
@@ -13,12 +15,15 @@
     onClose,
     onInsertToEditor,
     onToast,
+    activeFilePath = null,
   }: {
     onClose: () => void;
     /** Insert the prompt body into the active editor (optional). */
     onInsertToEditor?: (text: string) => void;
     /** Surface a transient status message (copied / inserted). */
     onToast?: (text: string) => void;
+    /** Absolute path of the currently open file, for "bind as context". */
+    activeFilePath?: string | null;
   } = $props();
 
   let docs = $state<PromptAssetDoc[]>([]);
@@ -80,6 +85,41 @@
     onClose();
   }
 
+  function hasContext(doc: PromptAssetDoc): boolean {
+    return doc.meta.contextFiles.length > 0 || doc.meta.contextNotes.trim().length > 0;
+  }
+
+  async function assembleAndCopy(doc: PromptAssetDoc) {
+    const kb = filesStore.getActiveKnowledgeBase();
+    if (!kb) return;
+    const text = await assembleCard(kb.path, doc, {
+      background: $t('prompt_card.background'),
+      contextFile: $t('prompt_card.context_file'),
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      onToast?.($t('prompt_recall.card_copied'));
+    } catch {
+      onToast?.($t('prompt_recall.copy_failed'));
+      return;
+    }
+    void recordUse(doc);
+    onClose();
+  }
+
+  async function bindActiveFile(doc: PromptAssetDoc) {
+    const kb = filesStore.getActiveKnowledgeBase();
+    if (!kb || !activeFilePath) return;
+    const rel = await bindContextFile(kb.path, doc.relativePath, activeFilePath);
+    if (rel) {
+      doc.meta.contextFiles = [...doc.meta.contextFiles, rel];
+      docs = [...docs]; // nudge reactivity for the context badge
+      onToast?.($t('prompt_recall.bound'));
+    } else {
+      onToast?.($t('prompt_recall.bind_unavailable'));
+    }
+  }
+
   function onKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -131,7 +171,10 @@
                 onmouseenter={() => (activeIndex = i)}
                 onclick={() => copyPrompt(doc)}
               >
-                <span class="pp-item-title">{doc.title}</span>
+                <span class="pp-item-title">
+                  {doc.title}
+                  {#if hasContext(doc)}<span class="pp-ctx-badge" title={$t('prompt_recall.has_context')}>📎</span>{/if}
+                </span>
                 <span class="pp-item-meta">
                   {doc.meta.project}
                   {#if doc.meta.usageCount > 0}· {$t('prompt_recall.uses', { n: String(doc.meta.usageCount) })}{/if}
@@ -143,8 +186,20 @@
         {#if selected}
           <div class="pp-preview">
             <pre>{selected.body}</pre>
+            {#if selected.meta.contextFiles.length > 0}
+              <div class="pp-ctx-list">
+                <span class="pp-ctx-label">📎 {$t('prompt_recall.context_files')}</span>
+                {#each selected.meta.contextFiles as f}<code class="pp-ctx-file">{f}</code>{/each}
+              </div>
+            {/if}
             <div class="pp-actions">
               <button class="pp-btn primary" onclick={() => copyPrompt(selected!)}>{$t('prompt_recall.copy')}</button>
+              {#if hasContext(selected)}
+                <button class="pp-btn" onclick={() => assembleAndCopy(selected!)}>{$t('prompt_recall.assemble')}</button>
+              {/if}
+              {#if activeFilePath}
+                <button class="pp-btn" onclick={() => bindActiveFile(selected!)}>{$t('prompt_recall.bind_file')}</button>
+              {/if}
               {#if onInsertToEditor}
                 <button class="pp-btn" onclick={() => insertPrompt(selected!)}>{$t('prompt_recall.insert')}</button>
               {/if}
@@ -244,7 +299,24 @@
     font-size: var(--font-size-sm);
     color: var(--text-primary);
   }
-  .pp-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .pp-ctx-badge { font-size: var(--font-size-xs); }
+  .pp-ctx-list {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .pp-ctx-label { font-size: var(--font-size-xs); color: var(--text-secondary); }
+  .pp-ctx-file {
+    font-size: var(--font-size-xs);
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-family: var(--font-mono, monospace);
+  }
+  .pp-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
   .pp-btn {
     padding: 6px 14px;
     border: 1px solid var(--border-color);
