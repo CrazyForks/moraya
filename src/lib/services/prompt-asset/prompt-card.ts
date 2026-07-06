@@ -81,6 +81,49 @@ export function addContextFileToFrontmatter(content: string, fileRelPath: string
   return lines.join('\n') + body
 }
 
+/** Escape a string for a YAML double-quoted scalar (single physical line). */
+function encodeDoubleQuoted(s: string): string {
+  return s
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t')
+}
+
+/**
+ * Set (or, when `notes` is blank, remove) a prompt's `context-notes` frontmatter
+ * field. Multi-line notes are stored on one physical line with `\n` escapes.
+ * Only the `context-notes` line is touched. No-ops without frontmatter.
+ */
+export function setContextNotesInFrontmatter(content: string, notes: string): string {
+  const { frontmatter, body } = extractFrontmatter(content)
+  if (!frontmatter) return content
+
+  const lines = frontmatter.split('\n')
+  let closeIdx = -1
+  for (let i = lines.length - 1; i >= 1; i--) {
+    if (lines[i].trim() === '---') { closeIdx = i; break }
+  }
+  if (closeIdx < 0) return content
+
+  const trimmed = notes.trim()
+  let existingIdx = -1
+  for (let i = 1; i < closeIdx; i++) {
+    if (/^context-notes:/.test(lines[i].trim())) { existingIdx = i; break }
+  }
+
+  if (!trimmed) {
+    // Remove the line if present.
+    if (existingIdx >= 0) lines.splice(existingIdx, 1)
+    return lines.join('\n') + body
+  }
+
+  const serialized = `context-notes: "${encodeDoubleQuoted(notes)}"`
+  if (existingIdx >= 0) lines[existingIdx] = serialized
+  else lines.splice(closeIdx, 0, serialized)
+  return lines.join('\n') + body
+}
+
 /** Remove `fileRelPath` from a prompt's `context-files` list (unbind). */
 export function removeContextFileFromFrontmatter(content: string, fileRelPath: string): string {
   const path = fileRelPath.trim()

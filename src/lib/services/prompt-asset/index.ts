@@ -70,12 +70,14 @@ export {
   assembleCard,
   bindContextFile,
   unbindContextFile,
+  setContextNotes,
 } from './recall-service'
 
 export {
   assemblePromptCard,
   addContextFileToFrontmatter,
   removeContextFileFromFrontmatter,
+  setContextNotesInFrontmatter,
   type CardInput,
   type CardLabels,
 } from './prompt-card'

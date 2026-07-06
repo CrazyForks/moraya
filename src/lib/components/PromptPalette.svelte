@@ -10,6 +10,7 @@
     assembleCard,
     bindContextFile,
     unbindContextFile,
+    setContextNotes,
     promoteToTemplate,
     archivePrompt,
     restorePrompt,
@@ -43,6 +44,8 @@
   let query = $state('');
   let activeIndex = $state(0);
   let inputEl = $state<HTMLInputElement | null>(null);
+  let notesDraft = $state('');
+  let notesKey = $state('');
 
   let sourceDocs = $derived(showArchived ? archivedDocs : docs);
   let ranked = $derived(rankPrompts(sourceDocs, query, nowMs()));
@@ -71,6 +74,16 @@
     // Keep the highlight in range as the filtered list changes.
     void query;
     if (activeIndex >= ranked.length) activeIndex = Math.max(0, ranked.length - 1);
+  });
+
+  $effect(() => {
+    // Reset the note draft only when the selected prompt actually changes,
+    // so it isn't clobbered while the user is typing.
+    const key = selected?.relativePath ?? '';
+    if (key !== notesKey) {
+      notesKey = key;
+      notesDraft = selected?.meta.contextNotes ?? '';
+    }
   });
 
   async function recordUse(doc: PromptAssetDoc) {
@@ -179,6 +192,17 @@
       onToast?.($t('prompt_recall.restored'));
     } else {
       onToast?.($t('prompt_recall.restore_failed'));
+    }
+  }
+
+  async function saveNotes(doc: PromptAssetDoc) {
+    const kb = filesStore.getActiveKnowledgeBase();
+    if (!kb) return;
+    const ok = await setContextNotes(kb.path, doc.relativePath, notesDraft);
+    if (ok) {
+      doc.meta.contextNotes = notesDraft.trim();
+      docs = [...docs];
+      onToast?.($t('prompt_recall.note_saved'));
     }
   }
 
@@ -293,6 +317,21 @@
                     {/if}
                   </code>
                 {/each}
+              </div>
+            {/if}
+            {#if !showArchived}
+              <div class="pp-notes">
+                <label class="pp-notes-label" for="pp-notes-ta">{$t('prompt_recall.note_label')}</label>
+                <textarea
+                  id="pp-notes-ta"
+                  class="pp-notes-ta"
+                  bind:value={notesDraft}
+                  placeholder={$t('prompt_recall.note_placeholder')}
+                  rows="2"
+                ></textarea>
+                {#if notesDraft.trim() !== (selected.meta.contextNotes ?? '').trim()}
+                  <button class="pp-btn subtle pp-notes-save" onclick={() => saveNotes(selected!)}>{$t('prompt_recall.save_note')}</button>
+                {/if}
               </div>
             {/if}
             <div class="pp-actions">
@@ -453,6 +492,20 @@
     color: var(--text-secondary);
     font-family: var(--font-mono, monospace);
   }
+  .pp-notes { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+  .pp-notes-label { font-size: var(--font-size-xs); color: var(--text-secondary); }
+  .pp-notes-ta {
+    width: 100%;
+    resize: vertical;
+    padding: 6px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-family: inherit;
+  }
+  .pp-notes-save { align-self: flex-end; }
   .pp-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
   .pp-btn {
     padding: 6px 14px;

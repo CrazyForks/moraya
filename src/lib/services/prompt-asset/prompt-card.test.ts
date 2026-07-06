@@ -3,6 +3,7 @@ import {
   addContextFileToFrontmatter,
   assemblePromptCard,
   removeContextFileFromFrontmatter,
+  setContextNotesInFrontmatter,
 } from './prompt-card'
 import { parsePromptDoc } from './prompt-index'
 
@@ -108,6 +109,39 @@ describe('addContextFileToFrontmatter', () => {
   it('quotes paths with spaces/special chars', () => {
     const out = addContextFileToFrontmatter(DOC, 'my docs/a b.md')
     expect(out).toContain('context-files: ["my docs/a b.md"]')
+  })
+})
+
+describe('setContextNotesInFrontmatter', () => {
+  it('adds a context-notes line when absent', () => {
+    const out = setContextNotesInFrontmatter(DOC, '这是 Tauri v2 项目')
+    expect(parsePromptDoc('p.md', out).meta.contextNotes).toBe('这是 Tauri v2 项目')
+    expect(out).toContain('修复问题') // body preserved
+  })
+  it('roundtrips multi-line notes via escaped newlines', () => {
+    const notes = '第一行\n第二行\t制表'
+    const out = setContextNotesInFrontmatter(DOC, notes)
+    expect(out).toContain('context-notes: "第一行\\n第二行\\t制表"')
+    expect(parsePromptDoc('p.md', out).meta.contextNotes).toBe(notes)
+  })
+  it('escapes quotes and backslashes', () => {
+    const notes = 'path C:\\x and "quoted"'
+    const out = setContextNotesInFrontmatter(DOC, notes)
+    expect(parsePromptDoc('p.md', out).meta.contextNotes).toBe(notes)
+  })
+  it('replaces an existing note', () => {
+    const once = setContextNotesInFrontmatter(DOC, 'first')
+    const twice = setContextNotesInFrontmatter(once, 'second')
+    expect(parsePromptDoc('p.md', twice).meta.contextNotes).toBe('second')
+  })
+  it('removes the line when set to blank', () => {
+    const withNote = setContextNotesInFrontmatter(DOC, 'x')
+    const cleared = setContextNotesInFrontmatter(withNote, '  ')
+    expect(parsePromptDoc('p.md', cleared).meta.contextNotes).toBe('')
+    expect(cleared).not.toContain('context-notes:')
+  })
+  it('no-ops without frontmatter', () => {
+    expect(setContextNotesInFrontmatter('plain', 'x')).toBe('plain')
   })
 })
 

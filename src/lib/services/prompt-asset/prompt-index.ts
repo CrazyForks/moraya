@@ -35,11 +35,28 @@ export interface PromptAssetDoc {
   body: string
 }
 
-/** Strip surrounding quotes from a YAML scalar. */
+/** Decode a YAML double-quoted body's escape sequences (\n \t \" \\). */
+function decodeDoubleQuoted(s: string): string {
+  let out = ''
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '\\' && i + 1 < s.length) {
+      const n = s[++i]
+      out += n === 'n' ? '\n' : n === 't' ? '\t' : n
+    } else {
+      out += s[i]
+    }
+  }
+  return out
+}
+
+/** Strip surrounding quotes from a YAML scalar, decoding double-quote escapes. */
 function unquote(v: string): string {
   const t = v.trim()
-  if (t.length >= 2 && ((t[0] === '"' && t.endsWith('"')) || (t[0] === "'" && t.endsWith("'")))) {
-    return t.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+  if (t.length >= 2 && t[0] === '"' && t.endsWith('"')) {
+    return decodeDoubleQuoted(t.slice(1, -1))
+  }
+  if (t.length >= 2 && t[0] === "'" && t.endsWith("'")) {
+    return t.slice(1, -1).replace(/''/g, "'")
   }
   return t
 }

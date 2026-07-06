@@ -12,6 +12,7 @@ import {
   assemblePromptCard,
   addContextFileToFrontmatter,
   removeContextFileFromFrontmatter,
+  setContextNotesInFrontmatter,
   type CardLabels,
 } from './prompt-card'
 
@@ -138,6 +139,25 @@ export async function bindContextFile(
     return rel
   } catch {
     return null
+  }
+}
+
+/** Set (or clear, when blank) a prompt's `context-notes` background field.
+ *  Returns true on a successful write, false if unchanged or the write failed. */
+export async function setContextNotes(
+  kbRoot: string,
+  promptRelPath: string,
+  notes: string,
+): Promise<boolean> {
+  const abs = `${kbRoot}/${promptRelPath}`
+  try {
+    const content = await invoke<string>('read_file', { path: abs })
+    const next = setContextNotesInFrontmatter(content, notes)
+    if (next === content) return false
+    await invoke('write_file', { path: abs, content: next })
+    return true
+  } catch {
+    return false
   }
 }
 
