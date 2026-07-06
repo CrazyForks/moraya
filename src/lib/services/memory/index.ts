@@ -43,9 +43,11 @@ export type { WriteMemoryInput } from './runtime'
 export {
   memorySyncStatus,
   type MemorySyncStatusKind,
+  MEMORY_KB_SLUG,
   pushMemory,
   deleteRemoteMemory,
   clearRemoteMemories,
   syncNow,
   isConfigured,
+  resetMemoryKbCache,
 } from './cloud-sync'

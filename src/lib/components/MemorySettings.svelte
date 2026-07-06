@@ -24,8 +24,6 @@
     type MemoryCloudConfig,
   } from '$lib/services/memory';
   import { HALF_LIFE_OPTIONS } from '$lib/services/memory/decay';
-  import { listKbs, picoraApiBase } from '$lib/services/kb-sync/picora-kb-client';
-  import { getPicoraApiKey } from '$lib/services/picora/credentials';
 
   // ── Local memory list ──────────────────────────────────────────────────
   let memories = $state<MemoryDoc[]>([]);
@@ -43,9 +41,8 @@
   const unsubSync = memorySyncStatus.subscribe((s) => { syncState = s; });
   onDestroy(() => unsubSync());
 
-  let cloud = $state<MemoryCloudConfig>({ enabled: false, targetId: null, kbId: null });
+  let cloud = $state<MemoryCloudConfig>({ enabled: false, targetId: null });
   let cloudBusy = $state(false);
-  let kbOptions = $state<SelectOption[]>([]);
   let confirmClearCloudOpen = $state(false);
   let clearCloudText = $state('');
 
@@ -76,8 +73,13 @@
     memories = await memoryStore.getAll(true);
     halfLife = await getHalfLife();
     cloud = await memoryStore.getCloudConfig();
+    // Single Picora account → auto-select it (no picker needed). The target KB
+    // is always the account's shared "AI Memory" KB, discovered by the sync layer.
+    if (!cloud.targetId && picoraTargets.length === 1) {
+      cloud = { ...cloud, targetId: picoraTargets[0].id };
+      await persistCloud();
+    }
     recomputeHealth();
-    if (cloud.enabled && cloud.targetId) void loadKbs(cloud.targetId);
   }
 
   function recomputeHealth() {
@@ -136,31 +138,13 @@
   async function handleToggleSync() {
     cloud = { ...cloud, enabled: !cloud.enabled };
     await persistCloud();
-    if (cloud.enabled && cloud.targetId && cloud.kbId) void handleSyncNow();
+    if (cloud.enabled && cloud.targetId) void handleSyncNow();
   }
 
   async function handleTargetChange(v: unknown) {
-    cloud = { ...cloud, targetId: (v as string) ?? null, kbId: null };
-    kbOptions = [];
+    cloud = { ...cloud, targetId: (v as string) ?? null };
     await persistCloud();
-    if (cloud.targetId) await loadKbs(cloud.targetId);
-  }
-
-  async function handleKbChange(v: unknown) {
-    cloud = { ...cloud, kbId: (v as string) ?? null };
-    await persistCloud();
-  }
-
-  async function loadKbs(targetId: string) {
-    const target = picoraTargets.find((tg) => tg.id === targetId);
-    if (!target || !target.picoraApiUrl) { kbOptions = []; return; }
-    try {
-      const apiKey = await getPicoraApiKey(target);
-      const kbs = await listKbs(picoraApiBase(target.picoraApiUrl), apiKey);
-      kbOptions = kbs.map((kb) => ({ value: kb.id, label: kb.name }));
-    } catch {
-      kbOptions = [];
-    }
+    if (cloud.enabled && cloud.targetId) void handleSyncNow();
   }
 
   async function handleSyncNow() {
@@ -267,24 +251,20 @@
           ><span class="thumb"></span></button>
         </div>
         {#if cloud.enabled}
-          <div class="row">
-            <span class="row-label">{$t('kb_sync.bind_dialog.step1_title')}</span>
-            <Select value={cloud.targetId} options={targetOptions} onchange={handleTargetChange} placeholder={$t('kb_sync.bind_dialog.step1_title')} ariaLabel={$t('kb_sync.bind_dialog.step1_title')} />
-          </div>
-          {#if cloud.targetId}
+          {#if picoraTargets.length > 1}
             <div class="row">
-              <span class="row-label">{$t('settings.tabs.knowledge_base')}</span>
-              <Select value={cloud.kbId} options={kbOptions} onchange={handleKbChange} placeholder={$t('kb_sync.bind_dialog.select_kb')} ariaLabel={$t('kb_sync.bind_dialog.select_kb')} />
+              <span class="row-label">{$t('kb_sync.bind_dialog.step1_title')}</span>
+              <Select value={cloud.targetId} options={targetOptions} onchange={handleTargetChange} placeholder={$t('kb_sync.bind_dialog.step1_title')} ariaLabel={$t('kb_sync.bind_dialog.step1_title')} />
             </div>
           {/if}
           <div class="row">
             <span class="row-label">{$t(syncStateLabelKey[syncState])}</span>
-            <button class="ghost-btn" onclick={handleSyncNow} disabled={cloudBusy || !cloud.kbId}>{$t('memory.sync_now')}</button>
+            <button class="ghost-btn" onclick={handleSyncNow} disabled={cloudBusy || !cloud.targetId}>{$t('memory.sync_now')}</button>
           </div>
         {/if}
       {/if}
     </div>
-    {#if cloud.enabled && cloud.kbId}
+    {#if cloud.enabled && cloud.targetId}
       <div class="card danger-card">
         {#if !confirmClearCloudOpen}
           <button class="danger-btn" onclick={() => (confirmClearCloudOpen = true)} disabled={cloudBusy}>{$t('memory.clear_cloud')}</button>

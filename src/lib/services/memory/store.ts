@@ -113,13 +113,15 @@ export async function setHalfLife(value: MemoryHalfLife): Promise<void> {
 
 export interface MemoryCloudConfig {
   enabled: boolean
-  /** id of an `imageHostTargets` entry that is Picora-connected. */
+  /**
+   * id of an `imageHostTargets` entry that is Picora-connected. The KB itself
+   * is not stored here — memories always go to the account's shared "AI Memory"
+   * KB (slug='memory'), auto-discovered by the sync layer.
+   */
   targetId: string | null
-  /** Picora KB id memories are stored under. */
-  kbId: string | null
 }
 
-const DEFAULT_CLOUD_CONFIG: MemoryCloudConfig = { enabled: false, targetId: null, kbId: null }
+const DEFAULT_CLOUD_CONFIG: MemoryCloudConfig = { enabled: false, targetId: null }
 
 export async function getCloudConfig(): Promise<MemoryCloudConfig> {
   const v = await persistence.read<MemoryCloudConfig>(KEY_CLOUD)
