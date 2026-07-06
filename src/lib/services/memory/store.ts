@@ -8,11 +8,13 @@
  */
 import type { MemoryDoc, MemoryHalfLife } from './types'
 import { DEFAULT_HALF_LIFE } from './types'
+import type { MemoryBinding } from './tool-profiles'
 
 const MEMORY_STORE_FILE = 'memory.json'
 const KEY_MEMORIES = 'memories'
 const KEY_HALF_LIFE = 'halfLife'
 const KEY_CLOUD = 'cloud'
+const KEY_BINDINGS = 'bindings'
 
 export interface MemoryPersistence {
   read<T>(key: string): Promise<T | null>
@@ -130,6 +132,17 @@ export async function getCloudConfig(): Promise<MemoryCloudConfig> {
 
 export async function setCloudConfig(config: MemoryCloudConfig): Promise<void> {
   await persistence.write(KEY_CLOUD, config)
+}
+
+// ── Tool-memory binding table (client-local, contains machine paths) ────────
+
+export async function getBindings(): Promise<MemoryBinding[]> {
+  const v = await persistence.read<MemoryBinding[]>(KEY_BINDINGS)
+  return Array.isArray(v) ? v : []
+}
+
+export async function setBindings(bindings: MemoryBinding[]): Promise<void> {
+  await persistence.write(KEY_BINDINGS, bindings)
 }
 
 /** Test helper: drop the in-memory cache. */

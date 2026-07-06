@@ -51,3 +51,16 @@ export {
   isConfigured,
   resetMemoryKbCache,
 } from './cloud-sync'
+
+// Tool-memory bindings (P2)
+export {
+  TOOL_PROFILES,
+  getToolProfile,
+  bindingFromProfile,
+  includedByProfile,
+  globToRegExp,
+  type ToolProfile,
+  type MemoryBinding,
+} from './tool-profiles'
+export { listBindings, addToolBinding, removeBinding, hasBinding } from './bindings'
+export { syncBinding, syncAllBindings } from './binding-sync'

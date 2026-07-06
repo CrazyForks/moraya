@@ -16,12 +16,18 @@
     syncNow,
     clearRemoteMemories,
     memorySyncStatus,
+    listBindings,
+    addToolBinding,
+    removeBinding,
+    syncBinding,
+    hasBinding,
     type MemorySyncStatusKind,
     type MemoryDoc,
     type MemoryHalfLife,
     type HealthReport,
     type HealthIssue,
     type MemoryCloudConfig,
+    type MemoryBinding,
   } from '$lib/services/memory';
   import { HALF_LIFE_OPTIONS } from '$lib/services/memory/decay';
 
@@ -45,6 +51,10 @@
   let cloudBusy = $state(false);
   let confirmClearCloudOpen = $state(false);
   let clearCloudText = $state('');
+
+  // Tool-memory bindings (P2)
+  let bindings = $state<MemoryBinding[]>([]);
+  let claudeBound = $state(false);
 
   // Picora-connected image-host targets (memory syncs to one of these accounts).
   let picoraTargets = $derived(
@@ -79,7 +89,34 @@
       cloud = { ...cloud, targetId: picoraTargets[0].id };
       await persistCloud();
     }
+    bindings = await listBindings();
+    claudeBound = await hasBinding('.claude');
     recomputeHealth();
+  }
+
+  // ── Tool-memory binding handlers ────────────────────────────────────────
+
+  async function handleBindClaude() {
+    if (cloudBusy) return;
+    cloudBusy = true;
+    try {
+      const b = await addToolBinding('claude');
+      if (b) await syncBinding(b);
+      bindings = await listBindings();
+      claudeBound = await hasBinding('.claude');
+    } finally { cloudBusy = false; }
+  }
+
+  async function handleSyncBinding(b: MemoryBinding) {
+    if (cloudBusy) return;
+    cloudBusy = true;
+    try { await syncBinding(b); } finally { cloudBusy = false; }
+  }
+
+  async function handleUnbind(mountAs: string) {
+    await removeBinding(mountAs);
+    bindings = await listBindings();
+    claudeBound = await hasBinding('.claude');
   }
 
   function recomputeHealth() {
@@ -280,6 +317,30 @@
     {/if}
   </section>
 
+  <!-- Tool memory bindings (P2) -->
+  {#if cloud.enabled && cloud.targetId}
+    <section class="settings-section">
+      <div class="section-header">
+        <h3 class="section-title">{$t('memory.bindings_title')}</h3>
+        <p class="section-subtitle">{$t('memory.bindings_desc')}</p>
+      </div>
+      <div class="card">
+        {#each bindings as b (b.mountAs)}
+          <div class="row binding-row">
+            <span class="binding-info"><strong>{b.tool}</strong> <code>{b.externalPath} → {b.mountAs}/</code></span>
+            <div class="binding-actions">
+              <button class="ghost-btn" onclick={() => handleSyncBinding(b)} disabled={cloudBusy}>{$t('memory.sync_now')}</button>
+              <button class="cancel-btn" onclick={() => handleUnbind(b.mountAs)} disabled={cloudBusy}>{$t('memory.unbind')}</button>
+            </div>
+          </div>
+        {/each}
+        {#if !claudeBound}
+          <button class="ghost-btn bind-btn" onclick={handleBindClaude} disabled={cloudBusy}>{$t('memory.bind_claude')}</button>
+        {/if}
+      </div>
+    </section>
+  {/if}
+
   <!-- Memory list -->
   <section class="settings-section">
     <div class="section-header list-header">
@@ -411,4 +472,9 @@
     background: #fff; transition: transform 0.15s;
   }
   .toggle.on .thumb { transform: translateX(18px); }
+  .binding-row { align-items: center; }
+  .binding-info { font-size: 0.82rem; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; }
+  .binding-info code { font-size: 0.72rem; color: var(--text-secondary); }
+  .binding-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
+  .bind-btn { align-self: flex-start; }
 </style>

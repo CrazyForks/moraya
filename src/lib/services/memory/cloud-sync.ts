@@ -92,6 +92,9 @@ export function resetMemoryKbCache(): void {
   memoryKbCache.clear()
 }
 
+/** Resolve {apiBase, apiKey, kbId} for the shared memory KB — used by binding sync. */
+export { resolveContext as resolveMemoryContext }
+
 /** Best-effort push of one memory to Picora. */
 export async function pushMemory(doc: MemoryDoc): Promise<void> {
   const ctx = await resolveContext()
