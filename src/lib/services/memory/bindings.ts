@@ -16,11 +16,19 @@ export async function listBindings(): Promise<MemoryBinding[]> {
 /**
  * Add (or refresh) a binding for a known tool profile. Returns the binding, or
  * null if the tool has no profile. Idempotent by `mountAs`.
+ *
+ * `kbId` routes the binding to a specific KB (Tier 2, e.g. a domain KB the user
+ * created); omit it to use the shared "AI Memory" KB (Tier 1).
  */
-export async function addToolBinding(tool: string, externalPath?: string): Promise<MemoryBinding | null> {
+export async function addToolBinding(
+  tool: string,
+  externalPath?: string,
+  kbId?: string | null,
+): Promise<MemoryBinding | null> {
   const profile = getToolProfile(tool)
   if (!profile) return null
   const binding = bindingFromProfile(profile, externalPath)
+  if (kbId) binding.kbId = kbId
   const existing = await store.getBindings()
   const next = existing.filter(b => b.mountAs !== binding.mountAs)
   next.push(binding)

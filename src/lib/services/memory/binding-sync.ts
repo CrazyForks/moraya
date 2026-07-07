@@ -9,7 +9,7 @@
  * separate explicit action (P2b).
  */
 import { invoke } from '@tauri-apps/api/core'
-import { syncBatch, fetchManifest, fetchRaw, createKb } from '$lib/services/kb-sync/picora-kb-client'
+import { syncBatch, fetchManifest, fetchRaw, createKb, listKbs } from '$lib/services/kb-sync/picora-kb-client'
 import type { SyncOp } from '$lib/services/kb-sync/types'
 import type { MemoryBinding } from './tool-profiles'
 import { includedByProfile, getToolProfile } from './tool-profiles'
@@ -217,10 +217,65 @@ export async function restoreBinding(
   return { restored, merged, conflicts }
 }
 
+/** List the account's KBs for a target picker ({id, name, slug}). */
+export async function listAvailableKbs(): Promise<Array<{ id: string; name: string; slug?: string }>> {
+  const acct = await resolveAccount()
+  if (!acct) return []
+  try {
+    const kbs = await listKbs(acct.apiBase, acct.apiKey)
+    return kbs.map(k => ({ id: k.id, name: k.name, slug: k.slug }))
+  } catch {
+    return []
+  }
+}
+
+async function cleanNamespace(ctx: CloudCtx, mountAs: string): Promise<void> {
+  try {
+    const manifest = await fetchManifest(ctx.apiBase, ctx.apiKey, ctx.kbId)
+    const nsPrefix = `${mountAs}/`
+    const ops: SyncOp[] = manifest
+      .filter(e => e.relativePath.startsWith(nsPrefix))
+      .map(e => ({ op: 'delete', relativePath: e.relativePath }))
+    for (let i = 0; i < ops.length; i += MAX_SYNC_OPS) {
+      await syncBatch(ctx.apiBase, ctx.apiKey, ctx.kbId, ops.slice(i, i + MAX_SYNC_OPS))
+    }
+  } catch {
+    /* cleanup is best-effort */
+  }
+}
+
 /**
- * Tier 2 (Picora 设计 §12): split a binding's memory out to a dedicated KB.
- * Creates an ordinary KB, routes the binding there, re-syncs, and removes the
- * namespace from the shared "AI Memory" KB. Returns the updated binding.
+ * Route a binding to a target KB (Tier 2): an existing KB (`kbId`) or the shared
+ * "AI Memory" KB (`null`). Persists the routing, syncs to the new target, and
+ * clears the namespace from the previous target. Returns the updated binding.
+ */
+export async function routeBindingToKb(
+  binding: MemoryBinding,
+  newKbId: string | null,
+): Promise<MemoryBinding | null> {
+  const acct = await resolveAccount()
+  if (!acct) return null
+  const oldKbId = binding.kbId ?? null
+  if (oldKbId === newKbId) return binding // no change
+
+  const updated: MemoryBinding = { ...binding }
+  if (newKbId) updated.kbId = newKbId
+  else delete updated.kbId
+  const all = await store.getBindings()
+  await store.setBindings(all.map(b => (b.mountAs === binding.mountAs ? updated : b)))
+
+  await syncBinding(updated) // push into the new target
+
+  // Clear the namespace from the previous target.
+  const oldCtx = oldKbId
+    ? { apiBase: acct.apiBase, apiKey: acct.apiKey, kbId: oldKbId }
+    : await resolveMemoryContext()
+  if (oldCtx) await cleanNamespace(oldCtx, binding.mountAs)
+  return updated
+}
+
+/**
+ * Tier 2 convenience: create a NEW dedicated KB and route the binding into it.
  */
 export async function moveBindingToDedicatedKb(
   binding: MemoryBinding,
@@ -228,7 +283,6 @@ export async function moveBindingToDedicatedKb(
 ): Promise<MemoryBinding | null> {
   const acct = await resolveAccount()
   if (!acct) return null
-
   let kbId: string
   try {
     const kb = await createKb(acct.apiBase, acct.apiKey, kbName)
@@ -237,32 +291,7 @@ export async function moveBindingToDedicatedKb(
   } catch {
     return null
   }
-
-  // Route the binding to the dedicated KB and persist.
-  const updated: MemoryBinding = { ...binding, kbId }
-  const all = await store.getBindings()
-  await store.setBindings(all.map(b => (b.mountAs === binding.mountAs ? updated : b)))
-
-  // Push into the new KB.
-  await syncBinding(updated)
-
-  // Remove the namespace from the shared KB (best-effort cleanup).
-  const shared = await resolveMemoryContext()
-  if (shared) {
-    try {
-      const manifest = await fetchManifest(shared.apiBase, shared.apiKey, shared.kbId)
-      const nsPrefix = `${binding.mountAs}/`
-      const ops: SyncOp[] = manifest
-        .filter(e => e.relativePath.startsWith(nsPrefix))
-        .map(e => ({ op: 'delete', relativePath: e.relativePath }))
-      for (let i = 0; i < ops.length; i += MAX_SYNC_OPS) {
-        await syncBatch(shared.apiBase, shared.apiKey, shared.kbId, ops.slice(i, i + MAX_SYNC_OPS))
-      }
-    } catch {
-      /* cleanup is best-effort */
-    }
-  }
-  return updated
+  return routeBindingToKb(binding, kbId)
 }
 
 /** Recommend probe: does this tool's default memory dir exist locally? */

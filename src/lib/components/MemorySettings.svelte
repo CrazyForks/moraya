@@ -22,8 +22,9 @@
     syncBinding,
     restoreBinding,
     toolDirPresent,
-    moveBindingToDedicatedKb,
-    hasBinding,
+    routeBindingToKb,
+    listAvailableKbs,
+    EXTERNAL_TOOLS,
     type MemorySyncStatusKind,
     type MemoryDoc,
     type MemoryHalfLife,
@@ -55,10 +56,26 @@
   let confirmClearCloudOpen = $state(false);
   let clearCloudText = $state('');
 
-  // Tool-memory bindings (P2)
+  // Tool-memory bindings (P2/P3)
   let bindings = $state<MemoryBinding[]>([]);
-  let claudeBound = $state(false);
-  let claudeDirPresent = $state(false);
+  let availableKbs = $state<Array<{ id: string; name: string; slug?: string }>>([]);
+  let presentTools = $state<string[]>([]); // external tools whose local dir exists
+  let addKbSel = $state<Record<string, string>>({}); // tool → target kbId ('' = shared)
+
+  // KB options for the target picker: shared "AI Memory" first, then the user's
+  // other KBs (the shared memory KB itself is represented by the '' option).
+  let kbOptions = $derived<SelectOption[]>([
+    { value: '', label: $t('memory.shared_memory_kb') },
+    ...availableKbs.filter((k) => k.slug !== 'memory').map((k) => ({ value: k.id, label: k.name })),
+  ]);
+  // Tools present locally but not yet bound.
+  let bindableTools = $derived(
+    EXTERNAL_TOOLS.filter((t) => presentTools.includes(t) && !bindings.some((b) => b.tool === t)),
+  );
+  function kbLabel(kbId?: string): string {
+    if (!kbId) return $t('memory.shared_memory_kb');
+    return availableKbs.find((k) => k.id === kbId)?.name ?? kbId;
+  }
 
   // Picora-connected image-host targets (memory syncs to one of these accounts).
   let picoraTargets = $derived(
@@ -94,21 +111,22 @@
       await persistCloud();
     }
     bindings = await listBindings();
-    claudeBound = await hasBinding('.claude');
-    claudeDirPresent = await toolDirPresent('claude');
+    availableKbs = await listAvailableKbs();
+    const present: string[] = [];
+    for (const t of EXTERNAL_TOOLS) if (await toolDirPresent(t)) present.push(t);
+    presentTools = present;
     recomputeHealth();
   }
 
   // ── Tool-memory binding handlers ────────────────────────────────────────
 
-  async function handleBindClaude() {
+  async function handleBindTool(tool: string) {
     if (cloudBusy) return;
     cloudBusy = true;
     try {
-      const b = await addToolBinding('claude');
+      const b = await addToolBinding(tool, undefined, addKbSel[tool] || null);
       if (b) await syncBinding(b);
-      bindings = await listBindings();
-      claudeBound = await hasBinding('.claude');
+      await refresh();
     } finally { cloudBusy = false; }
   }
 
@@ -124,20 +142,15 @@
     try { await restoreBinding(b); } finally { cloudBusy = false; }
   }
 
-  async function handleSplitToKb(b: MemoryBinding) {
-    if (cloudBusy) return;
+  async function handleRerouteBinding(b: MemoryBinding, kbId: string) {
+    if (cloudBusy || (b.kbId ?? '') === kbId) return;
     cloudBusy = true;
-    try {
-      const name = 'My ' + b.tool.charAt(0).toUpperCase() + b.tool.slice(1);
-      await moveBindingToDedicatedKb(b, name);
-      bindings = await listBindings();
-    } finally { cloudBusy = false; }
+    try { await routeBindingToKb(b, kbId || null); await refresh(); } finally { cloudBusy = false; }
   }
 
   async function handleUnbind(mountAs: string) {
     await removeBinding(mountAs);
-    bindings = await listBindings();
-    claudeBound = await hasBinding('.claude');
+    await refresh();
   }
 
   function recomputeHealth() {
@@ -348,24 +361,29 @@
       {#if picoraTargets.length === 0}
         <p class="empty-hint">{$t('memory.cloud_sync_signin_hint')}</p>
       {:else}
+        <!-- Existing bindings: show target KB, allow re-routing -->
         {#each bindings as b (b.mountAs)}
           <div class="row binding-row">
-            <span class="binding-info"><strong>{b.tool}</strong> <code>{b.externalPath} → {b.mountAs}/</code></span>
+            <span class="binding-info"><strong>{b.tool}</strong> <code>{b.externalPath} → {b.mountAs}/</code> · {kbLabel(b.kbId)}</span>
             <div class="binding-actions">
-              {#if b.kbId}
-                <span class="pill muted">{$t('memory.on_dedicated_kb')}</span>
-              {:else}
-                <button class="ghost-btn" onclick={() => handleSplitToKb(b)} disabled={cloudBusy}>{$t('memory.split_to_kb')}</button>
-              {/if}
+              <Select value={b.kbId ?? ''} options={kbOptions} onchange={(v) => handleRerouteBinding(b, v as string)} ariaLabel={$t('memory.bind_to_kb')} />
               <button class="ghost-btn" onclick={() => handleSyncBinding(b)} disabled={cloudBusy}>{$t('memory.sync_now')}</button>
               <button class="ghost-btn" onclick={() => handleRestoreBinding(b)} disabled={cloudBusy}>{$t('memory.restore')}</button>
               <button class="cancel-btn" onclick={() => handleUnbind(b.mountAs)} disabled={cloudBusy}>{$t('memory.unbind')}</button>
             </div>
           </div>
         {/each}
-        {#if !claudeBound && claudeDirPresent}
-          <button class="ghost-btn bind-btn" onclick={handleBindClaude} disabled={cloudBusy}>{$t('memory.bind_claude')}</button>
-        {:else if !claudeBound}
+        <!-- Bindable tools detected locally: pick a target KB, then bind -->
+        {#each bindableTools as tool (tool)}
+          <div class="row binding-row">
+            <span class="binding-info"><strong>{tool}</strong> <span class="row-label">{$t('memory.bind_to_kb')}</span></span>
+            <div class="binding-actions">
+              <Select value={addKbSel[tool] ?? ''} options={kbOptions} onchange={(v) => (addKbSel = { ...addKbSel, [tool]: v as string })} ariaLabel={$t('memory.bind_to_kb')} />
+              <button class="ghost-btn" onclick={() => handleBindTool(tool)} disabled={cloudBusy}>{$t('memory.bind')}</button>
+            </div>
+          </div>
+        {/each}
+        {#if bindings.length === 0 && bindableTools.length === 0}
           <p class="empty-hint">{$t('memory.bindings_none_detected')}</p>
         {/if}
       {/if}
@@ -507,5 +525,4 @@
   .binding-info { font-size: 0.82rem; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; }
   .binding-info code { font-size: 0.72rem; color: var(--text-secondary); }
   .binding-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
-  .bind-btn { align-self: flex-start; }
 </style>

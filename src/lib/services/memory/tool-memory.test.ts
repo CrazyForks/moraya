@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   raw: new Map<string, string>(),
   createdKbId: 'kb_dedicated',
   createKbCalls: [] as string[],
+  kbs: [] as Array<{ id: string; name: string; slug: string }>,
 }))
 
 vi.mock('./cloud-sync', () => ({
@@ -26,6 +27,7 @@ vi.mock('$lib/services/kb-sync/picora-kb-client', () => ({
     h.createKbCalls.push(name)
     return { id: h.createdKbId, name, slug: name, description: null, docCount: 0, sizeBytes: 0, createdAt: '', updatedAt: '' }
   },
+  listKbs: async () => h.kbs,
 }))
 
 import {
@@ -37,7 +39,7 @@ import {
 } from './tool-profiles'
 import * as store from './store'
 import { addToolBinding, removeBinding, listBindings, hasBinding } from './bindings'
-import { flattenFiles, syncBinding, syncAllBindings, restoreBinding, toolDirPresent, moveBindingToDedicatedKb, _setBindingSyncIO } from './binding-sync'
+import { flattenFiles, syncBinding, syncAllBindings, restoreBinding, toolDirPresent, moveBindingToDedicatedKb, routeBindingToKb, listAvailableKbs, _setBindingSyncIO } from './binding-sync'
 import type { BindingSyncIO } from './binding-sync'
 import { isIndexFile, unionMergeLines, mergeMemoryFile } from './memory-merge'
 
@@ -400,5 +402,31 @@ describe('moveBindingToDedicatedKb', () => {
     h.syncCalls = []
     await syncBinding(all[0])
     expect(h.syncCalls.every(c => c.kbId === 'kb_dedicated')).toBe(true)
+  })
+
+  it('routeBindingToKb routes to an EXISTING KB and clears the old namespace', async () => {
+    await addToolBinding('claude') // Tier 1 (shared, no kbId)
+    const [binding] = await store.getBindings()
+    h.manifest = [{ relativePath: '.claude/CLAUDE.md', sourceHash: 'h', sizeBytes: 1, updatedAt: '2026-07-06T00:00:00Z' }]
+    h.syncCalls = []
+    const updated = await routeBindingToKb(binding, 'kb-existing')
+    expect(updated?.kbId).toBe('kb-existing')
+    expect((await store.getBindings())[0].kbId).toBe('kb-existing')
+    expect(h.syncCalls.some(c => c.kbId === 'kb-existing')).toBe(true) // pushed to chosen KB
+    const oldDeletes = h.syncCalls.filter(c => c.kbId === 'kb_mem').flatMap(c => c.ops)
+    expect(oldDeletes).toContainEqual({ op: 'delete', relativePath: '.claude/CLAUDE.md' }) // cleared shared
+  })
+
+  it('addToolBinding accepts a target kbId (Tier 2 at bind time)', async () => {
+    await addToolBinding('codex', undefined, 'kb-domain')
+    const b = (await store.getBindings()).find(x => x.tool === 'codex')
+    expect(b?.kbId).toBe('kb-domain')
+    expect(b?.mountAs).toBe('.codex')
+  })
+
+  it('listAvailableKbs returns the account KBs', async () => {
+    h.kbs = [{ id: 'kb1', name: 'Dev', slug: 'dev' }, { id: 'kb_mem', name: 'AI Memory', slug: 'memory' }]
+    const kbs = await listAvailableKbs()
+    expect(kbs.map(k => k.id)).toEqual(['kb1', 'kb_mem'])
   })
 })

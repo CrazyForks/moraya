@@ -41,7 +41,20 @@ export const TOOL_PROFILES: Record<string, ToolProfile> = {
     include: ['**'],
     exclude: [],
   },
+  // Conservative starting template for Codex CLI (~/.codex). Include the
+  // memory/instruction assets; hard-exclude transcripts, config, and anything
+  // that could carry credentials. Refine as the layout is audited.
+  codex: {
+    tool: 'codex',
+    defaultRoot: '~/.codex',
+    mountAs: '.codex',
+    include: ['AGENTS.md', 'memory/**', 'instructions*.md', 'prompts/**'],
+    exclude: ['**/*.jsonl', '**/*.json', 'auth*', 'sessions/**', 'logs/**', 'history*', '.git/**'],
+  },
 }
+
+/** First-party external tool profiles that can be bound (excludes built-in moraya). */
+export const EXTERNAL_TOOLS: readonly string[] = ['claude', 'codex']
 
 export function getToolProfile(tool: string): ToolProfile | null {
   return TOOL_PROFILES[tool] ?? null

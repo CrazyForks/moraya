@@ -55,6 +55,7 @@ export {
 // Tool-memory bindings (P2)
 export {
   TOOL_PROFILES,
+  EXTERNAL_TOOLS,
   getToolProfile,
   bindingFromProfile,
   includedByProfile,
@@ -63,6 +64,14 @@ export {
   type MemoryBinding,
 } from './tool-profiles'
 export { listBindings, addToolBinding, removeBinding, hasBinding } from './bindings'
-export { syncBinding, syncAllBindings, restoreBinding, toolDirPresent, moveBindingToDedicatedKb } from './binding-sync'
+export {
+  syncBinding,
+  syncAllBindings,
+  restoreBinding,
+  toolDirPresent,
+  moveBindingToDedicatedKb,
+  routeBindingToKb,
+  listAvailableKbs,
+} from './binding-sync'
 export { createMemoryAutoSync, startMemoryAutoSync, stopMemoryAutoSync, type MemoryAutoSync } from './auto-sync'
 export { mergeMemoryFile, unionMergeLines, isIndexFile, type MemoryMergeOutcome } from './memory-merge'
