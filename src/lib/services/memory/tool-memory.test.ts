@@ -39,6 +39,7 @@ import * as store from './store'
 import { addToolBinding, removeBinding, listBindings, hasBinding } from './bindings'
 import { flattenFiles, syncBinding, syncAllBindings, restoreBinding, toolDirPresent, moveBindingToDedicatedKb, _setBindingSyncIO } from './binding-sync'
 import type { BindingSyncIO } from './binding-sync'
+import { isIndexFile, unionMergeLines, mergeMemoryFile } from './memory-merge'
 
 // A no-op-ish IO the sync tests can spread over.
 function makeIO(over: Partial<BindingSyncIO>): BindingSyncIO {
@@ -256,33 +257,82 @@ describe('restoreBinding', () => {
   })
   afterEach(() => _setBindingSyncIO(null))
 
-  it('writes only missing files under the binding namespace', async () => {
-    const writes: Array<{ path: string; content: string }> = []
-    _setBindingSyncIO(makeIO({
-      // local already has CLAUDE.md → should be skipped
-      async readDir() { return [{ name: 'CLAUDE.md', path: '/home/u/.claude/CLAUDE.md', is_dir: false }] },
-      async writeFile(path, content) { writes.push({ path, content }) },
-    }))
-    const r = await restoreBinding(bindingFromProfile(TOOL_PROFILES.claude, '~/.claude'))
-    expect(r.restored).toBe(1) // only agents/r.md (CLAUDE.md exists locally; .moraya not in ns)
-    expect(writes).toEqual([{ path: '/home/u/.claude/agents/r.md', content: 'agent' }])
-  })
-
-  it('restores all when local dir is empty (new machine)', async () => {
+  it('fills missing files on a new machine', async () => {
     const writes: string[] = []
     _setBindingSyncIO(makeIO({
-      async readDir() { throw new Error('no dir') }, // dir absent
+      async readDir() { throw new Error('no dir') }, // dir absent → everything missing
       async writeFile(path) { writes.push(path) },
     }))
     const r = await restoreBinding(bindingFromProfile(TOOL_PROFILES.claude, '~/.claude'))
-    expect(r.restored).toBe(2)
+    expect(r).toEqual({ restored: 2, merged: 0, conflicts: 0 })
     expect(writes.sort()).toEqual(['/home/u/.claude/CLAUDE.md', '/home/u/.claude/agents/r.md'])
+  })
+
+  it('union-merges an index file (MEMORY.md) appended on both machines', async () => {
+    h.manifest = [{ relativePath: '.claude/MEMORY.md', sourceHash: 'h', sizeBytes: 1, updatedAt: '2026-07-06T00:00:00Z' }]
+    h.raw = new Map([['.claude/MEMORY.md', '- a\n- b\n']]) // remote: a,b
+    const writes: Array<{ path: string; content: string }> = []
+    _setBindingSyncIO(makeIO({
+      async readDir() { return [{ name: 'MEMORY.md', path: '/home/u/.claude/MEMORY.md', is_dir: false }] },
+      async readFile() { return '- a\n- c\n' }, // local: a,c
+      async writeFile(path, content) { writes.push({ path, content }) },
+    }))
+    const r = await restoreBinding(bindingFromProfile(TOOL_PROFILES.claude, '~/.claude'))
+    expect(r.merged).toBe(1)
+    expect(writes[0].path).toBe('/home/u/.claude/MEMORY.md')
+    expect(writes[0].content).toContain('- c') // local preserved
+    expect(writes[0].content).toContain('- b') // remote-only appended
+  })
+
+  it('keeps both on a non-index conflict (writes .remote, non-destructive)', async () => {
+    h.manifest = [{ relativePath: '.claude/CLAUDE.md', sourceHash: 'h', sizeBytes: 1, updatedAt: '2026-07-06T00:00:00Z' }]
+    h.raw = new Map([['.claude/CLAUDE.md', 'rule X\n']])
+    const writes: Array<{ path: string; content: string }> = []
+    _setBindingSyncIO(makeIO({
+      async readDir() { return [{ name: 'CLAUDE.md', path: '/home/u/.claude/CLAUDE.md', is_dir: false }] },
+      async readFile() { return 'rule Y\n' }, // differs (overlapping)
+      async writeFile(path, content) { writes.push({ path, content }) },
+    }))
+    const r = await restoreBinding(bindingFromProfile(TOOL_PROFILES.claude, '~/.claude'))
+    expect(r.conflicts).toBe(1)
+    expect(r.merged).toBe(0)
+    expect(writes[0].path).toBe('/home/u/.claude/CLAUDE.md.remote') // remote saved as sidecar
+    expect(writes[0].content).toBe('rule X\n')
   })
 
   it('no-op without cloud context', async () => {
     h.ctx = null
     _setBindingSyncIO(makeIO({}))
-    expect(await restoreBinding(bindingFromProfile(TOOL_PROFILES.claude, '~/.claude'))).toEqual({ restored: 0 })
+    expect(await restoreBinding(bindingFromProfile(TOOL_PROFILES.claude, '~/.claude'))).toEqual({ restored: 0, merged: 0, conflicts: 0 })
+  })
+})
+
+// ── cross-machine memory merge (§6) ──────────────────────────────────────────
+
+describe('memory-merge', () => {
+  it('isIndexFile detects append/index files', () => {
+    expect(isIndexFile('.moraya/memories/../MEMORY.md')).toBe(true)
+    expect(isIndexFile('MEMORY.md')).toBe(true)
+    expect(isIndexFile('foo/index.json')).toBe(true)
+    expect(isIndexFile('CLAUDE.md')).toBe(false)
+    expect(isIndexFile('agents/r.md')).toBe(false)
+  })
+  it('unionMergeLines dedups and appends remote-only lines', () => {
+    expect(unionMergeLines('a\nb\n', 'a\nc\n')).toBe('a\nb\nc\n')
+    expect(unionMergeLines('a\nb\n', 'a\nb\n')).toBe('a\nb\n') // no change
+  })
+  it('mergeMemoryFile: identical → no change', () => {
+    expect(mergeMemoryFile('x.md', 'a', 'a')).toEqual({ merged: 'a', conflict: false })
+  })
+  it('mergeMemoryFile: index → union (auto-merge)', () => {
+    const o = mergeMemoryFile('MEMORY.md', '- a\n', '- a\n- b\n')
+    expect(o.conflict).toBe(false)
+    expect(o.merged).toContain('- b')
+  })
+  it('mergeMemoryFile: non-index overlapping change → conflict', () => {
+    const o = mergeMemoryFile('CLAUDE.md', 'x', 'y')
+    expect(o.conflict).toBe(true)
+    expect(o.merged).toBeNull()
   })
 })
 

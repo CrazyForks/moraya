@@ -14,6 +14,7 @@ import type { SyncOp } from '$lib/services/kb-sync/types'
 import type { MemoryBinding } from './tool-profiles'
 import { includedByProfile, getToolProfile } from './tool-profiles'
 import { resolveMemoryContext, resolveAccount } from './cloud-sync'
+import { mergeMemoryFile } from './memory-merge'
 import * as store from './store'
 
 const MAX_SYNC_OPS = 100 // Picora per-request op cap
@@ -151,21 +152,28 @@ export async function syncAllBindings(): Promise<{ pushed: number; skipped: numb
 }
 
 /**
- * Explicit restore (三纪律 §5.2): pull a binding's cloud files into the local
- * external dir, writing ONLY files that don't already exist locally — never
- * overwriting. Used on a new machine to recover a tool's memory backup.
+ * Explicit restore (三纪律 §5.2) with cross-machine merge (§6): pull a binding's
+ * cloud files into the local external dir.
+ *   - local missing  → write remote (restored)
+ *   - local differs  → auto-merge (union for index files, line-merge otherwise;
+ *                      merged written in place = merged)
+ *   - overlapping conflict → keep local, write remote to `<file>.remote`
+ *                      (non-destructive; conflicts)
  */
-export async function restoreBinding(binding: MemoryBinding): Promise<{ restored: number }> {
+export async function restoreBinding(
+  binding: MemoryBinding,
+): Promise<{ restored: number; merged: number; conflicts: number }> {
+  const zero = { restored: 0, merged: 0, conflicts: 0 }
   const ctx = await resolveBindingCtx(binding)
-  if (!ctx) return { restored: 0 }
+  if (!ctx) return zero
 
   const rootAbs = (await io.resolveHome(binding.externalPath)).replace(/[/\\]$/, '')
   const nsPrefix = `${binding.mountAs}/`
 
-  // Existing local files (to skip — never overwrite).
-  const localRels = new Set<string>()
+  // Existing local files: rel → abs (for merge).
+  const localMap = new Map<string, string>()
   try {
-    for (const f of flattenFiles(await io.readDir(rootAbs), rootAbs)) localRels.add(f.rel)
+    for (const f of flattenFiles(await io.readDir(rootAbs), rootAbs)) localMap.set(f.rel, f.abs)
   } catch {
     /* dir may not exist yet — everything is "missing" */
   }
@@ -174,23 +182,39 @@ export async function restoreBinding(binding: MemoryBinding): Promise<{ restored
   try {
     manifest = await fetchManifest(ctx.apiBase, ctx.apiKey, ctx.kbId)
   } catch {
-    return { restored: 0 }
+    return zero
   }
 
   let restored = 0
+  let merged = 0
+  let conflicts = 0
   for (const entry of manifest) {
     if (!entry.relativePath.startsWith(nsPrefix)) continue
     const rel = entry.relativePath.slice(nsPrefix.length)
-    if (!rel || localRels.has(rel)) continue // only fill missing
+    if (!rel) continue
     try {
-      const content = await fetchRaw(ctx.apiBase, ctx.apiKey, ctx.kbId, entry.relativePath)
-      await io.writeFile(`${rootAbs}/${rel}`, content)
-      restored++
+      const remote = await fetchRaw(ctx.apiBase, ctx.apiKey, ctx.kbId, entry.relativePath)
+      const localAbs = localMap.get(rel)
+      if (!localAbs) {
+        await io.writeFile(`${rootAbs}/${rel}`, remote)
+        restored++
+        continue
+      }
+      const local = await io.readFile(localAbs)
+      const outcome = mergeMemoryFile(rel, local, remote)
+      if (outcome.conflict) {
+        await io.writeFile(`${localAbs}.remote`, remote) // keep both, non-destructive
+        conflicts++
+      } else if (outcome.merged != null && outcome.merged !== local) {
+        await io.writeFile(localAbs, outcome.merged)
+        merged++
+      }
+      // identical → skip
     } catch {
       /* skip this file, continue */
     }
   }
-  return { restored }
+  return { restored, merged, conflicts }
 }
 
 /**
