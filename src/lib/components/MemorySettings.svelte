@@ -338,14 +338,16 @@
     {/if}
   </section>
 
-  <!-- Tool memory bindings (P2) -->
-  {#if cloud.enabled && cloud.targetId}
-    <section class="settings-section">
-      <div class="section-header">
-        <h3 class="section-title">{$t('memory.bindings_title')}</h3>
-        <p class="section-subtitle">{$t('memory.bindings_desc')}</p>
-      </div>
-      <div class="card">
+  <!-- Tool memory bindings (P2) — always visible so the entry is discoverable -->
+  <section class="settings-section">
+    <div class="section-header">
+      <h3 class="section-title">{$t('memory.bindings_title')}</h3>
+      <p class="section-subtitle">{$t('memory.bindings_desc')}</p>
+    </div>
+    <div class="card">
+      {#if picoraTargets.length === 0}
+        <p class="empty-hint">{$t('memory.cloud_sync_signin_hint')}</p>
+      {:else}
         {#each bindings as b (b.mountAs)}
           <div class="row binding-row">
             <span class="binding-info"><strong>{b.tool}</strong> <code>{b.externalPath} → {b.mountAs}/</code></span>
@@ -363,10 +365,12 @@
         {/each}
         {#if !claudeBound && claudeDirPresent}
           <button class="ghost-btn bind-btn" onclick={handleBindClaude} disabled={cloudBusy}>{$t('memory.bind_claude')}</button>
+        {:else if !claudeBound}
+          <p class="empty-hint">{$t('memory.bindings_none_detected')}</p>
         {/if}
-      </div>
-    </section>
-  {/if}
+      {/if}
+    </div>
+  </section>
 
   <!-- Memory list -->
   <section class="settings-section">
