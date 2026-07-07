@@ -27,6 +27,7 @@ import { settingsStore } from '$lib/stores/settings-store'
 import { picoraApiBase, syncBatch, fetchManifest, fetchRaw, listKbs, createKb } from '$lib/services/kb-sync/picora-kb-client'
 import type { SyncOp } from '$lib/services/kb-sync/types'
 import { getPicoraApiKey } from '$lib/services/picora/credentials'
+import { PICORA_DEFAULT_API_URL } from '$lib/services/image-hosting'
 
 const PREFIX = `${MEMORY_DIR}/` // ".moraya/memories/"
 
@@ -61,12 +62,14 @@ export interface AccountContext {
 export async function resolveAccount(): Promise<AccountContext | null> {
   const cfg = await store.getCloudConfig()
   if (!cfg.enabled || !cfg.targetId) return null
-  const target = get(settingsStore).imageHostTargets.find(t => t.id === cfg.targetId)
-  if (!target || !target.picoraApiUrl) return null
+  const target = get(settingsStore).imageHostTargets.find(t => t.id === cfg.targetId && t.provider === 'picora')
+  if (!target) return null
   try {
     const apiKey = await getPicoraApiKey(target)
     if (!apiKey) return null
-    return { apiBase: picoraApiBase(target.picoraApiUrl), apiKey, targetId: cfg.targetId }
+    // picoraApiUrl may be empty when the account uses the default endpoint.
+    const apiBase = picoraApiBase(target.picoraApiUrl || PICORA_DEFAULT_API_URL)
+    return { apiBase, apiKey, targetId: cfg.targetId }
   } catch {
     return null
   }

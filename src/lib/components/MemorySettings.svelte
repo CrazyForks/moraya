@@ -77,9 +77,10 @@
     return availableKbs.find((k) => k.id === kbId)?.name ?? kbId;
   }
 
-  // Picora-connected image-host targets (memory syncs to one of these accounts).
+  // Connected Picora accounts. Canonical filter = provider === 'picora'
+  // (matches PicoraSettingsTab); picoraApiUrl may be the default endpoint.
   let picoraTargets = $derived(
-    ($settingsStore.imageHostTargets ?? []).filter((tg) => !!tg.picoraApiUrl),
+    ($settingsStore.imageHostTargets ?? []).filter((tg) => tg.provider === 'picora'),
   );
   let targetOptions = $derived<SelectOption[]>(
     picoraTargets.map((tg) => ({ value: tg.id, label: tg.name || tg.id })),
