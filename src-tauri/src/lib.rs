@@ -935,6 +935,7 @@ pub fn run() {
             commands::pdf_export::export_pdf_native,
             commands::pdf_export::export_print_ready,
             commands::file::read_dir_recursive,
+            commands::file::list_hidden_dirs,
             commands::file::migrate_voice_profiles_dir,
             commands::file::create_markdown_file,
             commands::file::create_dir,

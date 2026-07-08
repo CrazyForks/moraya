@@ -12,7 +12,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { syncBatch, fetchManifest, fetchRaw, createKb, listKbs } from '$lib/services/kb-sync/picora-kb-client'
 import type { SyncOp } from '$lib/services/kb-sync/types'
 import type { MemoryBinding } from './tool-profiles'
-import { includedByProfile, getToolProfile } from './tool-profiles'
+import { includedByProfile, getToolProfile, isSuggestableHiddenDir } from './tool-profiles'
 import { resolveMemoryContext, resolveAccount } from './cloud-sync'
 import { mergeMemoryFile } from './memory-merge'
 import * as store from './store'
@@ -48,6 +48,13 @@ export interface BindingSyncIO {
   readFile(absPath: string): Promise<string>
   writeFile(absPath: string, content: string): Promise<void>
   dirExists(absPath: string): Promise<boolean>
+  /**
+   * List immediate hidden (dot-prefixed) directory children of `absPath`, one
+   * level deep. `read_dir_recursive` (used by `readDir`) intentionally hides
+   * dotfiles for KB file-tree browsing, so the home-dir memory-dir scan needs
+   * a separate command that doesn't.
+   */
+  listHiddenDirs(absPath: string): Promise<FileEntry[]>
 }
 
 const tauriIO: BindingSyncIO = {
@@ -75,6 +82,9 @@ const tauriIO: BindingSyncIO = {
     } catch {
       return false
     }
+  },
+  listHiddenDirs(absPath: string): Promise<FileEntry[]> {
+    return invoke<FileEntry[]>('list_hidden_dirs', { path: absPath })
   },
 }
 
@@ -292,6 +302,28 @@ export async function moveBindingToDedicatedKb(
     return null
   }
   return routeBindingToKb(binding, kbId)
+}
+
+/**
+ * Scan the top level of the home directory for hidden dirs worth suggesting as
+ * AI memory dirs (dot-prefixed, minus system/secret/toolchain noise). Only
+ * looks at the direct listing of `~/` — never recurses into the suggested
+ * dirs themselves. Returns `{ name, path }` sorted by name. Best-effort:
+ * returns [] on any I/O error.
+ */
+export async function scanHomeMemoryDirs(): Promise<Array<{ name: string; path: string }>> {
+  let homeAbs: string
+  let entries: FileEntry[]
+  try {
+    homeAbs = (await io.resolveHome('~')).replace(/[/\\]$/, '')
+    entries = await io.listHiddenDirs(homeAbs)
+  } catch {
+    return []
+  }
+  return entries
+    .filter((e) => e.is_dir && isSuggestableHiddenDir(e.name))
+    .map((e) => ({ name: e.name, path: e.path }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 }
 
 /** Recommend probe: does this tool's default memory dir exist locally? */

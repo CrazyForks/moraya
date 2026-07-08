@@ -35,11 +35,15 @@ import {
   includedByProfile,
   getToolProfile,
   bindingFromProfile,
+  customBinding,
+  mountAsFromDirName,
+  isSuggestableHiddenDir,
+  CUSTOM_BINDING_EXCLUDES,
   TOOL_PROFILES,
 } from './tool-profiles'
 import * as store from './store'
-import { addToolBinding, removeBinding, listBindings, hasBinding } from './bindings'
-import { flattenFiles, syncBinding, syncAllBindings, restoreBinding, toolDirPresent, moveBindingToDedicatedKb, routeBindingToKb, listAvailableKbs, _setBindingSyncIO } from './binding-sync'
+import { addToolBinding, addCustomBinding, removeBinding, listBindings, hasBinding } from './bindings'
+import { flattenFiles, syncBinding, syncAllBindings, restoreBinding, toolDirPresent, scanHomeMemoryDirs, moveBindingToDedicatedKb, routeBindingToKb, listAvailableKbs, _setBindingSyncIO } from './binding-sync'
 import type { BindingSyncIO } from './binding-sync'
 import { isIndexFile, unionMergeLines, mergeMemoryFile } from './memory-merge'
 
@@ -51,6 +55,7 @@ function makeIO(over: Partial<BindingSyncIO>): BindingSyncIO {
     async readFile() { return '' },
     async writeFile() { /* noop */ },
     async dirExists() { return true },
+    async listHiddenDirs() { return [] },
     ...over,
   }
 }
@@ -148,6 +153,36 @@ describe('bindings CRUD', () => {
     await addToolBinding('claude')
     await removeBinding('.claude')
     expect(await listBindings()).toHaveLength(0)
+  })
+
+  it('adds a custom directory binding with a derived unique namespace', async () => {
+    const b1 = await addCustomBinding('/Users/x/Notes', 'kb-cloud-1')
+    expect(b1.mountAs).toBe('.Notes')
+    expect(b1.kbId).toBe('kb-cloud-1')
+    expect(b1.tool).toBe('custom')
+    // Same basename → namespace made unique.
+    const b2 = await addCustomBinding('/other/Notes', 'kb-cloud-1')
+    expect(b2.mountAs).toBe('.Notes-2')
+    expect(await listBindings()).toHaveLength(2)
+  })
+})
+
+describe('customBinding / mountAsFromDirName', () => {
+  it('derives a valid dot-namespace from a dir name', () => {
+    expect(mountAsFromDirName('Notes')).toBe('.Notes')
+    expect(mountAsFromDirName('.claude')).toBe('.claude')
+    expect(mountAsFromDirName('my memory!')).toBe('.my-memory')
+    expect(mountAsFromDirName('')).toBe('.memory')
+  })
+  it('builds a full-sync binding with safe hard-excludes', () => {
+    const b = customBinding('/p/dir', '.dir', 'kb1')
+    expect(b.include).toEqual(['**'])
+    expect(b.exclude).toEqual([...CUSTOM_BINDING_EXCLUDES])
+    expect(b.kbId).toBe('kb1')
+    // Excludes block secrets/transcripts.
+    expect(includedByProfile('config.jsonl', b)).toBe(false)
+    expect(includedByProfile('.env', b)).toBe(false)
+    expect(includedByProfile('notes/todo.md', b)).toBe(true)
   })
 })
 
@@ -335,6 +370,82 @@ describe('memory-merge', () => {
     const o = mergeMemoryFile('CLAUDE.md', 'x', 'y')
     expect(o.conflict).toBe(true)
     expect(o.merged).toBeNull()
+  })
+})
+
+describe('isSuggestableHiddenDir', () => {
+  it('accepts AI-tool-looking hidden dirs', () => {
+    expect(isSuggestableHiddenDir('.claude')).toBe(true)
+    expect(isSuggestableHiddenDir('.cursor')).toBe(true)
+    expect(isSuggestableHiddenDir('.codex')).toBe(true)
+    expect(isSuggestableHiddenDir('.aider')).toBe(true)
+    expect(isSuggestableHiddenDir('.my-notes')).toBe(true)
+  })
+  it('rejects non-hidden names and . / ..', () => {
+    expect(isSuggestableHiddenDir('Documents')).toBe(false)
+    expect(isSuggestableHiddenDir('.')).toBe(false)
+    expect(isSuggestableHiddenDir('..')).toBe(false)
+  })
+  it('rejects .moraya (synced with the KB folder itself, not a separate binding)', () => {
+    expect(isSuggestableHiddenDir('.moraya')).toBe(false)
+  })
+  it('rejects common OS/cache/desktop junk', () => {
+    expect(isSuggestableHiddenDir('.Trash')).toBe(false)
+    expect(isSuggestableHiddenDir('.cache')).toBe(false)
+    expect(isSuggestableHiddenDir('.config')).toBe(false)
+    expect(isSuggestableHiddenDir('.local')).toBe(false)
+  })
+  it('rejects secret/credential stores', () => {
+    expect(isSuggestableHiddenDir('.ssh')).toBe(false)
+    expect(isSuggestableHiddenDir('.gnupg')).toBe(false)
+    expect(isSuggestableHiddenDir('.aws')).toBe(false)
+    expect(isSuggestableHiddenDir('.kube')).toBe(false)
+  })
+  it('rejects language/build toolchains', () => {
+    expect(isSuggestableHiddenDir('.npm')).toBe(false)
+    expect(isSuggestableHiddenDir('.cargo')).toBe(false)
+    expect(isSuggestableHiddenDir('.gradle')).toBe(false)
+    expect(isSuggestableHiddenDir('.git')).toBe(false)
+  })
+})
+
+describe('scanHomeMemoryDirs', () => {
+  afterEach(() => _setBindingSyncIO(null))
+
+  it('returns only suggestable hidden dirs, sorted, excluding system noise', async () => {
+    _setBindingSyncIO(makeIO({
+      async listHiddenDirs() {
+        return [
+          { name: '.claude', path: '/home/u/.claude', is_dir: true },
+          { name: '.ssh', path: '/home/u/.ssh', is_dir: true },
+          { name: '.cache', path: '/home/u/.cache', is_dir: true },
+          { name: '.moraya', path: '/home/u/.moraya', is_dir: true },
+          { name: '.aider', path: '/home/u/.aider', is_dir: true },
+        ]
+      },
+    }))
+    const dirs = await scanHomeMemoryDirs()
+    expect(dirs).toEqual([
+      { name: '.aider', path: '/home/u/.aider' },
+      { name: '.claude', path: '/home/u/.claude' },
+    ])
+  })
+
+  it('does not recurse — only inspects the top-level ~/ listing', async () => {
+    let calls = 0
+    _setBindingSyncIO(makeIO({
+      async listHiddenDirs() {
+        calls++
+        return [{ name: '.claude', path: '/home/u/.claude', is_dir: true }]
+      },
+    }))
+    await scanHomeMemoryDirs()
+    expect(calls).toBe(1) // one shallow listing of ~/, never descends into .claude/
+  })
+
+  it('best-effort: returns [] on I/O error', async () => {
+    _setBindingSyncIO(makeIO({ async listHiddenDirs() { throw new Error('boom') } }))
+    expect(await scanHomeMemoryDirs()).toEqual([])
   })
 })
 

@@ -1036,7 +1036,7 @@
     {/if}
     {#if showKBDropdown}
       <div class="kb-dropdown">
-        {#each [...knowledgeBases].sort((a, b) => b.lastAccessedAt - a.lastAccessedAt) as kb}
+        {#each knowledgeBases as kb (kb.id)}
           {@const status = kbSyncStatus(kb.id)}
           <button
             class="kb-dropdown-item"
@@ -1095,11 +1095,6 @@
           {/if}
         </button>
       {/if}
-      <button class="sidebar-btn" onclick={() => onOpenKBManager?.()} title={$t('sidebar.kb_settings')}>
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 0a1 1 0 011 1v1.07a5.97 5.97 0 011.828.75l.757-.756a1 1 0 011.414 1.414l-.756.757c.357.567.62 1.187.75 1.828H14a1 1 0 110 2h-1.07a5.97 5.97 0 01-.75 1.828l.756.757a1 1 0 01-1.414 1.414l-.757-.756a5.97 5.97 0 01-1.828.75V14a1 1 0 11-2 0v-1.07a5.97 5.97 0 01-1.828-.75l-.757.756a1 1 0 01-1.414-1.414l.756-.757a5.97 5.97 0 01-.75-1.828H2a1 1 0 110-2h1.07a5.97 5.97 0 01.75-1.828l-.756-.757A1 1 0 014.478 2.93l.757.756A5.97 5.97 0 017 2.936V1a1 1 0 011-1zm0 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z"/>
-        </svg>
-      </button>
     </div>
   </div>
 
@@ -1890,7 +1885,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    flex: 1;
+    flex: 0 1 auto;
+    min-width: 0;
   }
 
   /* Sync badge in dropdown — shows ☁ icon next to KBs with Picora binding */

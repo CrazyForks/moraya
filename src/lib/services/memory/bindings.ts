@@ -6,7 +6,7 @@
  * Hard-excludes always come from the tool profile, so re-adding refreshes them.
  */
 import type { MemoryBinding } from './tool-profiles'
-import { getToolProfile, bindingFromProfile } from './tool-profiles'
+import { getToolProfile, bindingFromProfile, customBinding, mountAsFromDirName } from './tool-profiles'
 import * as store from './store'
 
 export async function listBindings(): Promise<MemoryBinding[]> {
@@ -33,6 +33,29 @@ export async function addToolBinding(
   const next = existing.filter(b => b.mountAs !== binding.mountAs)
   next.push(binding)
   await store.setBindings(next)
+  return binding
+}
+
+/**
+ * Add a binding for a user-picked custom directory (no tool profile). The
+ * namespace is derived from the directory basename and made unique against the
+ * existing table. Uses the generic safe-exclude profile. `kbId` routes to a KB.
+ */
+export async function addCustomBinding(
+  externalPath: string,
+  kbId?: string | null,
+): Promise<MemoryBinding> {
+  const existing = await store.getBindings()
+  const base = externalPath.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || 'memory'
+  let mountAs = mountAsFromDirName(base)
+  const taken = new Set(existing.map(b => b.mountAs))
+  if (taken.has(mountAs)) {
+    let n = 2
+    while (taken.has(`${mountAs}-${n}`)) n++
+    mountAs = `${mountAs}-${n}`
+  }
+  const binding = customBinding(externalPath, mountAs, kbId ?? undefined)
+  await store.setBindings([...existing, binding])
   return binding
 }
 

@@ -12,9 +12,9 @@ export interface SyncStrategy {
 }
 
 export const DEFAULT_SYNC_STRATEGY: SyncStrategy = {
-  mode: 'interval',
+  mode: 'on-save',
   intervalSecs: 300,
-  scope: 'markdown-plus-rules',
+  scope: 'all-including-hidden',
   excludePatterns: ['node_modules/**', '.git/**', '.DS_Store', '*.tmp', '.env*', '*.key', '*.pem'],
   conflictPolicy: 'prompt',
   maxFileSizeBytes: 2 * 1024 * 1024,
@@ -85,9 +85,42 @@ export interface ConflictEntry {
   remotePreview: string;
   localHash: string;
   remoteHash: string;
+  /** Full local file content (for line-level merge in the resolution UI). */
+  localContent: string;
+  /** Full remote file content. */
+  remoteContent: string;
+  /** Last-synced common ancestor content, or null if no merge base is known
+   *  (e.g. first sync, or file predates base-content caching). */
+  baseContent: string | null;
 }
 
 export type ConflictResolution = 'prefer-local' | 'prefer-remote' | 'keep-both';
+
+// ── Line-level merge (git-style) ─────────────────────────────────────
+
+/** One region of a line-level merge. `stable` regions are agreed-upon lines;
+ *  `conflict` regions carry the diverging local/remote (and base) line arrays. */
+export interface MergeChunk {
+  type: 'stable' | 'conflict';
+  /** For stable chunks: the agreed lines. */
+  lines?: string[];
+  /** For conflict chunks: local side ("mine"). */
+  local?: string[];
+  /** For conflict chunks: remote side ("theirs"). */
+  remote?: string[];
+  /** For conflict chunks: base side (common ancestor); absent when no base. */
+  base?: string[];
+}
+
+export interface MergeResult {
+  chunks: MergeChunk[];
+  hasConflict: boolean;
+  /** Fully auto-merged text when `hasConflict` is false; otherwise null. */
+  mergedText: string | null;
+}
+
+/** Per-conflict-chunk pick in the resolution UI. */
+export type ChunkPick = 'local' | 'remote' | 'both-local-first' | 'both-remote-first';
 
 // Local manifest for three-way diff
 

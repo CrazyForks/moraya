@@ -16,6 +16,7 @@
     onToggleAI,
     onModeChange,
     onGitSync,
+    onShowConflicts,
     currentMode = 'visual' as EditorMode,
     aiPanelOpen = false,
     aiConfigured = false,
@@ -34,6 +35,7 @@
     onToggleAI?: () => void;
     onModeChange?: (mode: EditorMode) => void;
     onGitSync?: () => void;
+    onShowConflicts?: () => void;
     currentMode?: EditorMode;
     aiPanelOpen?: boolean;
     aiConfigured?: boolean;
@@ -289,7 +291,13 @@
         class:sync-syncing={activeKbSyncState.status === 'syncing'}
         class:sync-conflict={activeKbSyncState.status === 'conflict'}
         class:sync-error={activeKbSyncState.status === 'error'}
-        onclick={() => { showSyncPopover = !showSyncPopover; }}
+        onclick={() => {
+          if (activeKbSyncState?.status === 'conflict' && onShowConflicts) {
+            onShowConflicts();
+          } else {
+            showSyncPopover = !showSyncPopover;
+          }
+        }}
         title={activeKbSyncState.status === 'error' && activeKbSyncState.lastError
           ? activeKbSyncState.lastError
           : $t('kb_sync.statusbar.tooltip')}

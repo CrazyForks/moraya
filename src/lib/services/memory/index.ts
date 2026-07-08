@@ -60,15 +60,17 @@ export {
   bindingFromProfile,
   includedByProfile,
   globToRegExp,
+  isSuggestableHiddenDir,
   type ToolProfile,
   type MemoryBinding,
 } from './tool-profiles'
-export { listBindings, addToolBinding, removeBinding, hasBinding } from './bindings'
+export { listBindings, addToolBinding, addCustomBinding, removeBinding, hasBinding } from './bindings'
 export {
   syncBinding,
   syncAllBindings,
   restoreBinding,
   toolDirPresent,
+  scanHomeMemoryDirs,
   moveBindingToDedicatedKb,
   routeBindingToKb,
   listAvailableKbs,

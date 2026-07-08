@@ -24,7 +24,7 @@ import {
 import type { MemoryDoc } from './types'
 import * as store from './store'
 import { settingsStore } from '$lib/stores/settings-store'
-import { picoraApiBase, syncBatch, fetchManifest, fetchRaw, listKbs, createKb } from '$lib/services/kb-sync/picora-kb-client'
+import { picoraApiBase, syncBatch, fetchManifest, fetchRaw, listKbs } from '$lib/services/kb-sync/picora-kb-client'
 import type { SyncOp } from '$lib/services/kb-sync/types'
 import { getPicoraApiKey } from '$lib/services/picora/credentials'
 import { PICORA_DEFAULT_API_URL } from '$lib/services/image-hosting'
@@ -76,17 +76,20 @@ export async function resolveAccount(): Promise<AccountContext | null> {
 }
 
 /**
- * Discover the shared memory KB (slug='memory'). Picora auto-provisions it on
- * OAuth; if a stale/older account hasn't been re-authed yet and it's missing,
- * self-heal by creating it once (idempotent by reserved slug on the server).
+ * Discover the shared memory KB (slug='memory'), if one still exists.
+ *
+ * No longer self-heals by creating it: Moraya doesn't stand up any cloud
+ * service of its own — the cloud side is Picora's. Auto-creating a hidden,
+ * client-invented KB kept resurrecting it in the KB list after users deleted
+ * it. If it's gone, memory sync is simply dormant until a real hosted-memory
+ * mechanism ships from Picora.
  */
 async function discoverMemoryKb(targetId: string, apiBase: string, apiKey: string): Promise<string | null> {
   const cached = memoryKbCache.get(targetId)
   if (cached) return cached
   try {
     const kbs = await listKbs(apiBase, apiKey)
-    let kb = kbs.find(k => k.slug === MEMORY_KB_SLUG)
-    if (!kb) kb = await createKb(apiBase, apiKey, 'AI Memory', MEMORY_KB_SLUG)
+    const kb = kbs.find(k => k.slug === MEMORY_KB_SLUG)
     if (!kb?.id) return null
     memoryKbCache.set(targetId, kb.id)
     return kb.id

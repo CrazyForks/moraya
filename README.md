@@ -379,6 +379,10 @@ Moraya ships as a coordinated multi-product suite — each lives in its own repo
 | v1.11.0 | Prompt dedup — deterministic near-duplicate detection (token-overlap clustering, no LLM) flags redundant prompts with a ⚠ badge in the palette; "keep this, archive duplicates" merges a group by archiving all but the best-kept member | ✅ |
 | v1.12.0 | Prompt library management — Active/Archived toggle in the palette to view and restore archived prompts (move back from `prompts/archive/`), and unbind individual context files from a prompt card (✕ per file) | ✅ |
 | v1.13.0 | Prompt card background note — edit a prompt's `context-notes` (multi-line, escaped in frontmatter) directly in the palette; bundled as a `## Background` section when assembling the card. Completes visual management of the prompt card | ✅ |
+| v1.14.0 | KB bind flow polish — auto-open the "Bind Picora sync" dialog after adding a knowledge base when a Picora account is configured; make "link to existing cloud KB" the first and default option in bind step 2 | ✅ |
+| v1.15.0 | KB sync defaults & branding — default new bindings to "sync on save" + "all text files (incl. hidden)"; replace the cloud glyph with the Picora "P" brand mark on the KB-sync page and nav; move the Trash button to the section-heading row | ✅ |
+| v1.16.0 | Settings "Knowledge Base" merge — fold the Prompt Assets, Knowledge Base, and KB Sync pages into a single "Knowledge Base" tab placed under the Picora group | ✅ |
+| v1.17.0 | Per-KB AI memory asset — a per-Picora-KB "AI memory asset" panel to bind external AI tool memory dirs (~/.claude or any custom dir) to the KB and back them up to Picora (sync/restore/unbind); "add directory" scans `~/` for suggestable hidden dirs (filtered against a cross-platform OS/secret/toolchain denylist) instead of a native folder picker, with a freely-editable path input; KB folder sync now isolates non-.moraya AI-memory dot-namespaces (unbound hidden dirs are ignored, not pulled into the KB folder). The standalone Prompt Assets settings UI was removed | ✅ |
 
 ### Web — [`moraya-web`](https://github.com/zouwei/moraya-web)
 

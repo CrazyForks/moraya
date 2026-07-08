@@ -204,4 +204,44 @@ describe('threeWayDiff', () => {
     expect(result.conflictPaths).toContain('conflict.md');
     expect(result.uploadPaths).not.toContain('keep.md');
   });
+
+  describe('first-sync initialAuthority (no base manifest)', () => {
+    const emptyBase: RemoteManifest = new Map();
+    const local = makeLocal([['both.md', localEntry('bbb')]]);
+    const remote = makeRemote([['both.md', remoteEntry('ccc')]]);
+
+    it("defaults to 'local' — divergent both-exist file uploads, not conflicts", () => {
+      const result = threeWayDiff(emptyBase, local, remote, MAX);
+      expect(result.uploadPaths).toContain('both.md');
+      expect(result.conflictPaths).toHaveLength(0);
+    });
+
+    it("'remote' downloads instead", () => {
+      const result = threeWayDiff(emptyBase, local, remote, MAX, 'remote');
+      expect(result.downloadPaths).toContain('both.md');
+      expect(result.conflictPaths).toHaveLength(0);
+    });
+
+    it("'prompt' preserves the conflict", () => {
+      const result = threeWayDiff(emptyBase, local, remote, MAX, 'prompt');
+      expect(result.conflictPaths).toContain('both.md');
+      expect(result.uploadPaths).toHaveLength(0);
+    });
+
+    it('identical both-exist file aligns regardless of authority', () => {
+      const sameLocal = makeLocal([['both.md', localEntry('aaa')]]);
+      const sameRemote = makeRemote([['both.md', remoteEntry('aaa')]]);
+      const result = threeWayDiff(new Map(), sameLocal, sameRemote, MAX, 'local');
+      expect(result.uploadPaths).toHaveLength(0);
+      expect(result.conflictPaths).toHaveLength(0);
+      expect(result.actions.some(a => a.kind === 'aligned')).toBe(true);
+    });
+
+    it('with a base present, genuine divergence still conflicts', () => {
+      const base = makeRemote([['both.md', remoteEntry('aaa')]]);
+      const result = threeWayDiff(base, local, remote, MAX, 'local');
+      expect(result.conflictPaths).toContain('both.md');
+      expect(result.uploadPaths).not.toContain('both.md');
+    });
+  });
 });

@@ -528,6 +528,58 @@ fn read_dir_inner(
     Ok(result)
 }
 
+/// List immediate hidden (dot-prefixed) directory children of `path`, one level deep,
+/// no recursion into them. Unlike `read_dir_recursive`, this does NOT skip dotfiles —
+/// it exists specifically to surface hidden dirs (e.g. AI tool memory dirs under the
+/// home directory) that `read_dir_recursive` intentionally hides from KB file browsing.
+#[tauri::command]
+pub async fn list_hidden_dirs(path: String) -> Result<Vec<FileEntry>, String> {
+    let safe_path = validate_path(&path)?;
+    let path_str = safe_path.to_str().unwrap_or("").to_string();
+    tokio::task::spawn_blocking(move || list_hidden_dirs_inner(&path_str))
+        .await
+        .map_err(|_| "Failed to read directory".to_string())?
+}
+
+fn list_hidden_dirs_inner(path: &str) -> Result<Vec<FileEntry>, String> {
+    let entries = fs::read_dir(path).map_err(sanitize_io_error)?;
+    let mut result: Vec<FileEntry> = Vec::new();
+
+    for entry in entries {
+        let entry = entry.map_err(sanitize_io_error)?;
+        let file_name = entry.file_name().to_string_lossy().to_string();
+
+        if !file_name.starts_with('.') {
+            continue;
+        }
+
+        let file_path = entry.path();
+
+        // Skip symlinks (avoid following links outside allowed directories).
+        if file_path
+            .symlink_metadata()
+            .map(|m| m.is_symlink())
+            .unwrap_or(false)
+        {
+            continue;
+        }
+
+        if !file_path.is_dir() {
+            continue;
+        }
+
+        result.push(FileEntry {
+            name: file_name,
+            path: file_path.to_string_lossy().to_string(),
+            is_dir: true,
+            children: None,
+        });
+    }
+
+    result.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(result)
+}
+
 /// Recursively copy directory contents from `src` into `dst`, skipping symlinks.
 fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
     fs::create_dir_all(dst).map_err(sanitize_io_error)?;

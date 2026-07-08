@@ -22,7 +22,8 @@
   let remoteKbs = $state<PicoraKb[]>([]);
   let loadingKbs = $state(false);
   let kbsError = $state('');
-  let createMode = $state(true);
+  // Default to linking an existing cloud KB (shown first in step 2).
+  let createMode = $state(false);
   let newKbName = $state(kb.name);
   let newKbSlug = $state(slugify(kb.name));
   let selectedRemoteKbId = $state('');
@@ -61,7 +62,10 @@
       const base = picoraApiBase(target.picoraApiUrl);
       const { getPicoraApiKey } = await import('$lib/services/picora/credentials');
       const apiKey = await getPicoraApiKey(target);
-      remoteKbs = await listKbs(base, apiKey);
+      // Hide the legacy client-invented "AI Memory" KB (see
+      // src/lib/services/memory/cloud-sync.ts) — an internal memory-sync
+      // target, not a KB the user would want to bind a local folder to.
+      remoteKbs = (await listKbs(base, apiKey)).filter(kb => kb.slug !== 'memory');
     } catch (e) {
       kbsError = typeof e === 'string' ? e : 'Failed to load Knowledge Bases';
     } finally {
@@ -262,6 +266,18 @@
           <div class="radio-group">
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <label class="radio-item">
+              <input type="radio" bind:group={createMode} value={false} />
+              <span>{$t('kb_sync.bind_dialog.link_existing')}</span>
+            </label>
+            {#if !createMode}
+              <div class="radio-sub">
+                <Select class="select-input" block bind:value={selectedRemoteKbId} options={remoteKbOptions} />
+              </div>
+            {/if}
+          </div>
+          <div class="radio-group">
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <label class="radio-item">
               <input type="radio" bind:group={createMode} value={true} />
               <span>{$t('kb_sync.bind_dialog.create_new')}</span>
             </label>
@@ -273,18 +289,6 @@
                 <label class="field-label">{$t('kb_sync.bind_dialog.kb_slug')}
                   <input class="text-input" bind:value={newKbSlug} />
                 </label>
-              </div>
-            {/if}
-          </div>
-          <div class="radio-group">
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <label class="radio-item">
-              <input type="radio" bind:group={createMode} value={false} />
-              <span>{$t('kb_sync.bind_dialog.link_existing')}</span>
-            </label>
-            {#if !createMode}
-              <div class="radio-sub">
-                <Select class="select-input" block bind:value={selectedRemoteKbId} options={remoteKbOptions} />
               </div>
             {/if}
           </div>

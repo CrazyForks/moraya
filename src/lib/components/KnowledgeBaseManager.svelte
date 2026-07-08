@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { filesStore, type KnowledgeBase } from '../stores/files-store';
+  import { settingsStore } from '$lib/stores/settings-store';
   import { open, ask } from '@tauri-apps/plugin-dialog';
   import { t } from '$lib/i18n';
   import { checkGitInstalled, deleteGitToken } from '$lib/services/git';
@@ -49,6 +50,14 @@
         lastAccessedAt: Date.now(),
       };
       filesStore.addKnowledgeBase(kb);
+
+      // If a Picora account is already configured, immediately open the sync
+      // bind dialog for the new KB so the user can wire it to the cloud in one flow.
+      const hasPicoraAccount = settingsStore.getState().imageHostTargets
+        .some(t => t.provider === 'picora');
+      if (hasPicoraAccount) {
+        picoraBindingKb = kb;
+      }
     }
   }
 

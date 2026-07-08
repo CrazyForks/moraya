@@ -15,13 +15,12 @@
   import KBIndexSettings from './KBIndexSettings.svelte';
   import KbSyncSettings from './KbSyncSettings.svelte';
   import MemorySettings from './MemorySettings.svelte';
-  import PromptAssetSettings from './PromptAssetSettings.svelte';
   import PicoraSettingsTab from './picora-tab/PicoraSettingsTab.svelte';
   import ExportSettings from './ExportSettings.svelte';
   import ShortcutsPanel from './ShortcutsPanel.svelte';
   import { Select } from '$lib/components/ui';
 
-  type Tab = 'general' | 'ai' | 'image-ai' | 'mcp' | 'image' | 'publish' | 'shortcuts' | 'voice' | 'plugins' | 'knowledge-base' | 'kb-sync' | 'picora' | 'memory' | 'prompt-asset';
+  type Tab = 'general' | 'ai' | 'image-ai' | 'mcp' | 'image' | 'publish' | 'shortcuts' | 'voice' | 'plugins' | 'knowledge-base' | 'picora' | 'memory';
 
   let {
     onClose,
@@ -167,6 +166,13 @@
 
   const tabGroups: { groupKey: string; items: { key: Tab; icon: string; labelKey: string }[] }[] = [
     {
+      groupKey: 'settings.groups.picora',
+      items: [
+        { key: 'picora', icon: '☁', labelKey: 'settings.tabs.picora' },
+        { key: 'knowledge-base', icon: '📚', labelKey: 'settings.tabs.knowledge_base' },
+      ],
+    },
+    {
       groupKey: 'settings.groups.general',
       items: [
         { key: 'general', icon: '⚙', labelKey: 'settings.tabs.general' },
@@ -181,20 +187,6 @@
         { key: 'voice', icon: '🎤', labelKey: 'settings.tabs.voice' },
         { key: 'mcp', icon: '⇌', labelKey: 'settings.tabs.mcp' },
         { key: 'memory', icon: '🧠', labelKey: 'memory.title' },
-        { key: 'prompt-asset', icon: '📝', labelKey: 'prompt_asset.title' },
-      ],
-    },
-    {
-      groupKey: 'settings.groups.knowledge_base',
-      items: [
-        { key: 'knowledge-base', icon: '📚', labelKey: 'settings.tabs.knowledge_base' },
-        { key: 'kb-sync', icon: '☁', labelKey: 'settings.tabs.kb_sync' },
-      ],
-    },
-    {
-      groupKey: 'settings.groups.picora',
-      items: [
-        { key: 'picora', icon: '☁', labelKey: 'settings.tabs.picora' },
       ],
     },
     {
@@ -287,13 +279,18 @@
         </div>
         <div class="tab-pane" class:active={activeTab === 'publish'}>{#if visitedTabs['publish']}<PublishSettings />{/if}</div>
         <div class="tab-pane" class:active={activeTab === 'voice'}>{#if visitedTabs['voice']}<VoiceSettings />{/if}</div>
-        <div class="tab-pane" class:active={activeTab === 'knowledge-base'}>{#if visitedTabs['knowledge-base']}<KBIndexSettings onOpenKBManager={() => showKBManager = true} />{/if}</div>
-        <div class="tab-pane" class:active={activeTab === 'kb-sync'}>{#if visitedTabs['kb-sync']}<KbSyncSettings />{/if}</div>
+        <!-- Merged "知识库" tab: KB index/manage + KB sync (prompt assets & memory
+             bindings now live per-KB inside KbSyncSettings' "AI memory asset" panel). -->
+        <div class="tab-pane merged-kb" class:active={activeTab === 'knowledge-base'}>
+          {#if visitedTabs['knowledge-base']}
+            <KBIndexSettings onOpenKBManager={() => showKBManager = true} />
+            <KbSyncSettings />
+          {/if}
+        </div>
         <div class="tab-pane" class:active={activeTab === 'memory'}>{#if visitedTabs['memory']}<MemorySettings />{/if}</div>
-        <div class="tab-pane" class:active={activeTab === 'prompt-asset'}>{#if visitedTabs['prompt-asset']}<PromptAssetSettings />{/if}</div>
         <div class="tab-pane" class:active={activeTab === 'picora'}>
           {#if visitedTabs['picora']}
-            <PicoraSettingsTab onJumpToKbSync={() => activeTab = 'kb-sync'} />
+            <PicoraSettingsTab onJumpToKbSync={() => activeTab = 'knowledge-base'} />
           {/if}
         </div>
         <div class="tab-pane" class:active={activeTab === 'plugins'}>{#if visitedTabs['plugins']}<PluginsPanel />{/if}</div>
@@ -781,6 +778,13 @@
   }
   .tab-pane.active {
     display: contents; /* transparent wrapper — children flow directly into flex container */
+  }
+
+  /* Merged 知识库 tab stacks three feature components — add a divider between them. */
+  .merged-kb :global(.gx-tab + .gx-tab) {
+    margin-top: 0.25rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-light);
   }
 
   /* The .gx-* design system lives in src/lib/styles/settings.css (global)

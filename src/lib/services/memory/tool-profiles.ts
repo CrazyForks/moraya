@@ -88,6 +88,71 @@ export function bindingFromProfile(profile: ToolProfile, externalPath?: string):
   }
 }
 
+/**
+ * Safe hard-excludes applied to user-added custom memory directories (no tool
+ * profile). Blocks transcripts, credentials, VCS/build noise so a hand-picked
+ * dir can't leak secrets on backup.
+ */
+export const CUSTOM_BINDING_EXCLUDES: readonly string[] = [
+  '**/*.jsonl', '**/*.key', '**/*.pem', '**/*.p12', '**/*.pfx',
+  '**/.env', '**/.env.*', '**/id_rsa*', '**/*.log',
+  '**/node_modules/**', '**/.git/**', '**/.DS_Store',
+]
+
+/**
+ * Common `~/`-level hidden directories that are NOT AI memory: OS caches/junk,
+ * secret stores, and language/build toolchains. Excluded from the memory-dir
+ * scan so the picker surfaces AI tool dirs (`.claude`, `.cursor`, `.aider`…),
+ * not system noise — and never suggests a secret store like `.ssh`/`.gnupg`.
+ * Cross-platform (macOS / Linux / Windows home).
+ */
+export const SYSTEM_HIDDEN_DIRS: ReadonlySet<string> = new Set([
+  // OS / desktop / shell junk
+  '.Trash', '.trash', '.cache', '.config', '.local', '.CFUserTextEncoding',
+  '.cups', '.zsh_sessions', '.bash_sessions', '.fontconfig', '.thumbnails',
+  '.dbus', '.gnome', '.gnome2', '.kde', '.mono', '.pki', '.recently-used',
+  // secret / credential stores — never suggest (avoid accidental backup)
+  '.ssh', '.gnupg', '.gpg', '.aws', '.azure', '.gcloud', '.kube', '.docker',
+  '.password-store', '.netrc',
+  // language / build / package toolchains
+  '.npm', '.node-gyp', '.nvm', '.yarn', '.pnpm-store', '.cargo', '.rustup',
+  '.gradle', '.m2', '.gem', '.bundle', '.pyenv', '.rbenv', '.rvm', '.conda',
+  '.android', '.dotnet', '.nuget', '.deno', '.bun', '.go', '.cabal', '.stack',
+  // editors / vcs / browser noise
+  '.oh-my-zsh', '.vim', '.viminfo', '.emacs.d', '.vscode', '.vscode-server',
+  '.idea', '.git', '.subversion', '.hg', '.mozilla', '.thunderbird',
+])
+
+/**
+ * True iff `name` is a hidden directory worth suggesting as an AI memory dir:
+ * dot-prefixed, not `.`/`..`, not `.moraya` (the KB's own namespace, synced
+ * with the folder), and not a known system/secret/toolchain dir.
+ */
+export function isSuggestableHiddenDir(name: string): boolean {
+  if (!name.startsWith('.') || name === '.' || name === '..') return false
+  if (name === '.moraya') return false
+  return !SYSTEM_HIDDEN_DIRS.has(name)
+}
+
+/** Turn a directory basename into a valid dot-namespace (`.name`). */
+export function mountAsFromDirName(name: string): string {
+  const clean = name.replace(/^\.+/, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '')
+  return '.' + (clean || 'memory')
+}
+
+/** Build a binding for a user-picked custom directory (generic full-sync profile). */
+export function customBinding(externalPath: string, mountAs: string, kbId?: string): MemoryBinding {
+  const b: MemoryBinding = {
+    tool: 'custom',
+    externalPath,
+    mountAs: mountAs.startsWith('.') ? mountAs : '.' + mountAs,
+    include: ['**'],
+    exclude: [...CUSTOM_BINDING_EXCLUDES],
+  }
+  if (kbId) b.kbId = kbId
+  return b
+}
+
 // ── Glob matching ────────────────────────────────────────────────────────────
 
 const REGEX_SPECIAL = new Set(['.', '+', '?', '^', '$', '{', '}', '(', ')', '|', '[', ']', '\\'])
