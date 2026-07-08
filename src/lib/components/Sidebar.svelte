@@ -72,9 +72,16 @@
 
   // Inline input dialog state (replaces window.prompt which doesn't work in WKWebView)
   let inputDialog = $state<{
-    mode: 'new-file' | 'new-folder' | 'rename';
+    mode: 'new-folder' | 'rename';
     value: string;
     targetPath: string; // new-file/new-folder: parent dir; rename: original file/dir path
+    /**
+     * True only for the rename step right after `handleNewFile()` creates a
+     * file — opening it in the main editor is deferred until the rename step
+     * concludes (submit/skip/escape), so it never races the editor's own load
+     * for DOM focus and yanks focus off the rename input mid-type.
+     */
+    openOnFinish?: boolean;
   } | null>(null);
   let inputDialogEl = $state<HTMLInputElement | null>(null);
 
@@ -596,7 +603,18 @@
     contextMenu = { ...contextMenu, show: false };
   }
 
-  function handleNewFile() {
+  /**
+   * Create a new file immediately with an auto-numbered default name
+   * ("Untitled", "Untitled 2", ...), then drop straight into rename mode so
+   * the user can type a real name. Renaming is optional — blur/Escape just
+   * closes the inline input and keeps the auto-generated name, since the
+   * file already exists on disk by that point (unlike the old flow, which
+   * only created the file once a name was submitted). Opening the file in
+   * the main editor is deferred until the rename step concludes (see
+   * `openOnFinish`) — doing it immediately would race the editor's own load
+   * for DOM focus and could yank focus off the rename input mid-type.
+   */
+  async function handleNewFile() {
     const dirPath = contextMenu.targetType === 'folder'
       ? contextMenu.targetPath
       : contextMenu.targetType === 'file'
@@ -605,12 +623,35 @@
 
     if (!dirPath) return;
 
-    // Auto-expand the target directory so the inline input is visible
+    // Auto-expand the target directory so the new file is visible
     if (dirPath !== folderPath && !expandedDirs.has(dirPath)) {
       expandedDirs = new Set([...expandedDirs, dirPath]);
     }
-    inputDialog = { mode: 'new-file', value: '', targetPath: dirPath };
-    setTimeout(() => inputDialogEl?.focus(), 50);
+
+    const base = $t('sidebar.untitled_file_name');
+    let newPath: string | null = null;
+    for (let i = 0; i < 1000; i++) {
+      const candidateName = i === 0 ? base : `${base} ${i + 1}`;
+      try {
+        newPath = await invoke<string>('create_markdown_file', { dirPath, fileName: candidateName });
+        break;
+      } catch (e) {
+        if (typeof e === 'string' && e.includes('already exists')) continue;
+        console.warn('Failed to create file:', e);
+        return;
+      }
+    }
+    if (!newPath) return;
+
+    if (folderPath) await refreshFileTree(folderPath);
+
+    const name = getFileName(newPath);
+    const displayName = viewMode === 'tree' ? name : (name.endsWith('.md') ? name.slice(0, -3) : name);
+    inputDialog = { mode: 'rename', value: displayName, targetPath: newPath, openOnFinish: true };
+    setTimeout(() => {
+      inputDialogEl?.focus();
+      inputDialogEl?.select();
+    }, 50);
   }
 
   function handleNewFolder() {
@@ -690,35 +731,31 @@
     }, 50);
   }
 
+  /**
+   * Close the inline input without applying an edit. If it was the rename
+   * step right after `handleNewFile()` created a file (`openOnFinish`), open
+   * that file now — the user is done either way (typed a name or skipped),
+   * so this is the right moment to bring it into the editor.
+   */
+  function cancelInputDialog() {
+    if (inputDialog?.openOnFinish) onFileSelect(inputDialog.targetPath);
+    inputDialog = null;
+  }
+
   async function submitInputDialog() {
     if (!inputDialog) return;
     const value = inputDialog.value.trim();
     if (!value) {
-      inputDialog = null;
+      cancelInputDialog();
       return;
     }
 
-    if (inputDialog.mode === 'new-file') {
-      try {
-        let newPath: string;
-        if (viewMode === 'tree') {
-          // Tree mode: user types the full filename — create as-is, no .md auto-append
-          const fullPath = `${inputDialog.targetPath}/${value}`;
-          await invoke('write_file', { path: fullPath, content: '' });
-          newPath = fullPath;
-        } else {
-          // List mode: auto-append .md via dedicated command
-          newPath = await invoke<string>('create_markdown_file', {
-            dirPath: inputDialog.targetPath,
-            fileName: value,
-          });
-        }
-        if (folderPath) await refreshFileTree(folderPath);
-        onFileSelect(newPath);
-      } catch (e) {
-        console.warn('Failed to create file:', e);
-      }
-    } else if (inputDialog.mode === 'new-folder') {
+    // Path to open in the editor once the dialog closes — only set for the
+    // create-then-rename flow (`openOnFinish`); stays null for a plain
+    // rename or a new-folder, which shouldn't force-open anything.
+    let openPath: string | null = null;
+
+    if (inputDialog.mode === 'new-folder') {
       // Reject reserved directory name "images"
       if (value.toLowerCase() === 'images') {
         await message($t('sidebar.reserved_dir_name'), { title: $t('sidebar.reserved_dir_title'), kind: 'warning' });
@@ -747,6 +784,7 @@
         return;
       }
       const oldName = getFileName(oldPath);
+      openPath = oldPath; // default: name unchanged (or rename failed) — open at the original path
       if (finalValue !== oldName) {
         const parentDir = oldPath.substring(0, oldPath.lastIndexOf('/'));
         const newPath = `${parentDir}/${finalValue}`;
@@ -754,13 +792,16 @@
           await invoke('rename_file', { oldPath, newPath });
           if (folderPath) await refreshFileTree(folderPath);
           onRename?.(oldPath, newPath);
+          openPath = newPath;
         } catch (e) {
           console.warn('Failed to rename:', e);
         }
       }
+      if (!inputDialog.openOnFinish) openPath = null;
     }
 
     inputDialog = null;
+    if (openPath) onFileSelect(openPath);
   }
 
   function handleInputDialogKeydown(event: KeyboardEvent) {
@@ -768,7 +809,7 @@
       event.preventDefault();
       submitInputDialog();
     } else if (event.key === 'Escape') {
-      inputDialog = null;
+      cancelInputDialog();
     }
   }
 
@@ -1152,6 +1193,22 @@
       <div class="sidebar-empty">
         <p>{$t('sidebar.empty_dir')}</p>
       </div>
+      {#if inputDialog && inputDialog.mode !== 'rename' && inputDialog.targetPath === folderPath}
+        <div class="inline-rename" style="padding-inline-start: {viewMode === 'list' ? '1.75rem' : '0.75rem'}">
+          <span class="tree-icon file-icon">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" opacity="0.5"><path d="M2 1h5l3 3v7H2V1zm5 0v3h3"/></svg>
+          </span>
+          <input
+            bind:this={inputDialogEl}
+            type="text"
+            class="inline-rename-input"
+            placeholder={$t('sidebar.new_folder_prompt')}
+            bind:value={inputDialog.value}
+            onkeydown={handleInputDialogKeydown}
+            onblur={cancelInputDialog}
+          />
+        </div>
+      {/if}
     {:else if viewMode === 'list'}
       <!-- List View: hierarchical tree with folders and file previews -->
       <div class="list-view">
@@ -1167,10 +1224,10 @@
               bind:this={inputDialogEl}
               type="text"
               class="inline-rename-input"
-              placeholder={inputDialog.mode === 'new-file' ? $t('sidebar.new_file_prompt') : $t('sidebar.new_folder_prompt')}
+              placeholder={$t('sidebar.new_folder_prompt')}
               bind:value={inputDialog.value}
               onkeydown={handleInputDialogKeydown}
-              onblur={() => { inputDialog = null; }}
+              onblur={cancelInputDialog}
             />
           </div>
         {/if}
@@ -1189,10 +1246,10 @@
             bind:this={inputDialogEl}
             type="text"
             class="inline-rename-input"
-            placeholder={inputDialog.mode === 'new-file' ? $t('sidebar.new_file_prompt') : $t('sidebar.new_folder_prompt')}
+            placeholder={$t('sidebar.new_folder_prompt')}
             bind:value={inputDialog.value}
             onkeydown={handleInputDialogKeydown}
-            onblur={() => { inputDialog = null; }}
+            onblur={cancelInputDialog}
           />
         </div>
       {/if}
@@ -1218,7 +1275,7 @@
         class="inline-rename-input"
         bind:value={inputDialog.value}
         onkeydown={handleInputDialogKeydown}
-        onblur={() => { inputDialog = null; }}
+        onblur={cancelInputDialog}
       />
     </div>
   {:else}
@@ -1284,10 +1341,10 @@
           bind:this={inputDialogEl}
           type="text"
           class="inline-rename-input"
-          placeholder={inputDialog.mode === 'new-file' ? $t('sidebar.new_file_prompt') : $t('sidebar.new_folder_prompt')}
+          placeholder={$t('sidebar.new_folder_prompt')}
           bind:value={inputDialog.value}
           onkeydown={handleInputDialogKeydown}
-          onblur={() => { inputDialog = null; }}
+          onblur={cancelInputDialog}
         />
       </div>
     {/if}
@@ -1307,7 +1364,7 @@
           class="inline-rename-input"
           bind:value={inputDialog.value}
           onkeydown={handleInputDialogKeydown}
-          onblur={() => { inputDialog = null; }}
+          onblur={cancelInputDialog}
         />
       </div>
     {:else}
@@ -1341,10 +1398,10 @@
             bind:this={inputDialogEl}
             type="text"
             class="inline-rename-input"
-            placeholder={inputDialog.mode === 'new-file' ? $t('sidebar.new_file_prompt') : $t('sidebar.new_folder_prompt')}
+            placeholder={$t('sidebar.new_folder_prompt')}
             bind:value={inputDialog.value}
             onkeydown={handleInputDialogKeydown}
-            onblur={() => { inputDialog = null; }}
+            onblur={cancelInputDialog}
           />
         </div>
       {/if}
@@ -1361,7 +1418,7 @@
           class="inline-rename-input"
           bind:value={inputDialog.value}
           onkeydown={handleInputDialogKeydown}
-          onblur={() => { inputDialog = null; }}
+          onblur={cancelInputDialog}
         />
       </div>
     {:else}
