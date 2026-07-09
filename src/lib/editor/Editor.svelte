@@ -48,6 +48,7 @@
   import type { InstalledPlugin } from '$lib/services/plugin/types';
   import PluginContextMenu from './PluginContextMenu.svelte';
   import EditorContextMenu from './EditorContextMenu.svelte';
+  import { resolveDragUnit, siblingRangeInContainer, topLevelBlockRange, firstContentPos, moveBlockTransaction } from '@moraya/core/plugins/block-drag';
 
   /** Stored frontmatter block (including `---` fences and trailing newline) */
   let storedFrontmatter = '';
@@ -440,6 +441,68 @@
   let imageToolbarPosition = $state({ top: 0, left: 0 });
   let imageToolbarCurrentWidth = $state('');
   let imageToolbarTargetPos = $state<number | null>(null);
+
+  // Block drag handle (visual-mode whole-block reorder). Deliberately a
+  // custom mousedown→mousemove→mouseup loop, NOT native HTML5 drag-and-drop:
+  // this editor already disables dragover/drop at editorEl for file drops
+  // (see handleDragover/handleDrop below — Tauri's own onDragDropEvent bridge
+  // handles those instead, because WKWebView's native DnD is unreliable), and
+  // hooking a second, competing drag mechanism onto the same DOM would be
+  // fragile. A plain mouse loop sidesteps native DnD entirely and gives full
+  // control over the insertion-line indicator.
+  const DRAG_HANDLE_GUTTER = 22; // px from the block's left edge to the icon
+  const DRAG_HANDLE_HEIGHT = 22; // keep in sync with .block-drag-handle's CSS height
+  // Grace window before hiding the handle on mouseleave (from either the
+  // content or the handle itself) — NOT a relatedTarget check: the handle
+  // sits outside .ProseMirror's own box, and .ProseMirror is inside
+  // .editor-wrapper (the listened element), so crossing onto the icon is a
+  // cross-element transition. relatedTarget-based "did we land on the
+  // handle?" checks are unreliable in WKWebView; a short delay that gets
+  // cancelled by the handle's own mouseenter (or a fresh valid hover) works
+  // regardless of relatedTarget support.
+  const DRAG_HANDLE_HIDE_DELAY_MS = 150;
+  let dragHandleHideTimer: ReturnType<typeof setTimeout> | undefined;
+  let showDragHandle = $state(false);
+  let dragHandleTop = $state(0);
+  let dragHandleLeft = $state(0);
+  let isDraggingBlock = $state(false);
+  let dragInsertLineTop = $state(0);
+  let dragInsertLineLeft = $state(0);
+  let dragInsertLineWidth = $state(0);
+  // Not reactive — read/written only inside the hover/drag handlers themselves.
+  let dragUnitFrom = 0;
+  let dragUnitTo = 0;
+  // The drag unit's valid sibling range: the whole doc for a top-level block,
+  // or the specific enclosing list's content span for a list item (see
+  // resolveDragUnit). Captured once when the drag starts and held fixed for
+  // its whole duration, so dragging a list item only ever reorders within
+  // that same list, never jumps out to some other block in the document.
+  let dragContainerFrom = 0;
+  let dragContainerTo = 0;
+  // Latest mousemove coordinates during hover, updated on EVERY event
+  // regardless of whether a RAF is currently pending — the RAF callback reads
+  // these at FIRE time, not whatever was current when it got scheduled. Using
+  // `if (dragHoverRaf) return` to gate scheduling is fine for THROTTLING, but
+  // capturing clientX/Y before that gate (the previous implementation) meant
+  // a burst of mousemove events collapses to whichever coordinates triggered
+  // the FIRST one — if the mouse then stops moving before the next event,
+  // the handle is left positioned at that stale, earlier spot instead of
+  // wherever the cursor actually ended up.
+  let lastHoverX = 0;
+  let lastHoverY = 0;
+  // Bounding box (viewport coords) spanning from the currently-shown handle
+  // icon to the hovered unit's own rendered content. While the mouse stays
+  // anywhere inside this box, handleBlockHover skips re-resolving entirely —
+  // this is what makes crossing the gutter between text and the icon
+  // reliable regardless of how slowly the cursor moves, instead of racing a
+  // hide-delay timer against however long that crossing takes.
+  let dragHandleZoneLeft = 0;
+  let dragHandleZoneRight = 0;
+  let dragHandleZoneTop = 0;
+  let dragHandleZoneBottom = 0;
+  let dragInsertPos = 0;
+  let dragHoverRaf: number | undefined;
+  let dragMoveRaf: number | undefined;
 
 
   // Cache for isInsideTable check — avoids redundant depth traversal when
@@ -1764,6 +1827,245 @@
     });
   }
 
+  function cancelHandleHide() {
+    if (dragHandleHideTimer) { clearTimeout(dragHandleHideTimer); dragHandleHideTimer = undefined; }
+  }
+
+  function scheduleHandleHide() {
+    cancelHandleHide();
+    dragHandleHideTimer = setTimeout(() => {
+      dragHandleHideTimer = undefined;
+      if (!isDraggingBlock) showDragHandle = false;
+    }, DRAG_HANDLE_HIDE_DELAY_MS);
+  }
+
+  /** Vertical center for the handle icon: aligned with the unit's FIRST LINE
+   *  (via coordsAtPos at its first actual text position), not the vertical
+   *  center of the whole unit — a wrapped paragraph, multi-row table, or
+   *  multi-line code block would otherwise put the icon floating in the
+   *  middle of the block instead of next to its first line. Uses
+   *  firstContentPos rather than a fixed `unitFrom + 1`: a list item wraps
+   *  its first line in a paragraph (one MORE nesting level than a plain
+   *  top-level paragraph), so `unitFrom + 1` there sits at the boundary
+   *  between the item and that paragraph — not inside actual text yet — and
+   *  coordsAtPos there doesn't reliably reflect the first line's real
+   *  position. Falls back to centering against the whole DOM rect for
+   *  leaf nodes (image, hr) or if coordsAtPos misbehaves. */
+  function handleTopFor(view: NonNullable<typeof editor>['view'], unitFrom: number, unitTo: number, rect: DOMRect): number {
+    const probePos = firstContentPos(view.state.doc, unitFrom, unitTo);
+    if (probePos < unitTo) {
+      try {
+        const coords = view.coordsAtPos(probePos);
+        if (coords && coords.top >= rect.top - 1 && coords.top <= rect.bottom + 1) {
+          const lineHeight = Math.max(coords.bottom - coords.top, 1);
+          return coords.top + (lineHeight - DRAG_HANDLE_HEIGHT) / 2;
+        }
+      } catch { /* fall through to whole-rect centering */ }
+    }
+    return rect.top + (rect.height - DRAG_HANDLE_HEIGHT) / 2;
+  }
+
+  /** True if (x, y) is still within the current handle's "safe zone" —
+   *  spanning from the icon itself to the hovered unit's own content. While
+   *  the mouse stays inside it, handleBlockHover skips re-resolving entirely
+   *  (no posAtCoords, no hide scheduling) — this is what makes crossing the
+   *  gutter between text and the icon reliable no matter how slowly the
+   *  cursor moves, rather than depending on a hide-delay timer outrunning
+   *  however long that crossing takes. */
+  function inDragHandleZone(x: number, y: number): boolean {
+    return (
+      showDragHandle &&
+      x >= dragHandleZoneLeft && x <= dragHandleZoneRight &&
+      y >= dragHandleZoneTop && y <= dragHandleZoneBottom
+    );
+  }
+
+  /** Position the drag handle over whichever unit the mouse is hovering: a
+   *  single list item when nested inside a list (see resolveDragUnit), else
+   *  the whole top-level block (always the whole table/code block/math
+   *  block/blockquote, never a fragment nested inside one). RAF-throttled
+   *  like handleCheckboxHover, for the same reason — but unlike that simpler
+   *  cursor-style toggle, this reads the LATEST mouse position at the moment
+   *  the RAF actually fires (lastHoverX/Y), not whatever position happened to
+   *  trigger scheduling it: a burst of mousemove events all collapsing onto
+   *  one throttled tick must still reflect where the cursor ended up, or a
+   *  fast movement that stops moving right as it arrives would leave the
+   *  handle stuck showing an earlier, stale position instead of following it. */
+  function handleBlockHover(event: MouseEvent) {
+    if (isDraggingBlock) return; // the drag loop owns positioning while active
+    // Listening on .editor-wrapper (not just the ProseMirror content, so the
+    // handle's own left-gutter position is covered too — see the note by the
+    // template's onmousemove) also picks up the outline panel when it's open;
+    // that's not editor content, so bail out rather than showing a misplaced
+    // handle over the outline's own entries.
+    if ((event.target as HTMLElement | null)?.closest('.outline-wrapper')) {
+      showDragHandle = false;
+      return;
+    }
+    if (inDragHandleZone(event.clientX, event.clientY)) {
+      cancelHandleHide();
+      return;
+    }
+    lastHoverX = event.clientX;
+    lastHoverY = event.clientY;
+    if (dragHoverRaf) return;
+    dragHoverRaf = requestAnimationFrame(() => {
+      dragHoverRaf = undefined;
+      if (isDraggingBlock || !editor) return;
+      const clientX = lastHoverX;
+      const clientY = lastHoverY;
+      try {
+        const view = editor.view;
+        const found = view.posAtCoords({ left: clientX, top: clientY });
+        const unit = found && resolveDragUnit(view.state.doc, found.pos);
+        const dom = unit && (view.nodeDOM(unit.from) as HTMLElement | null);
+        if (!unit || !dom || typeof dom.getBoundingClientRect !== 'function') {
+          scheduleHandleHide();
+          return;
+        }
+        const rect = dom.getBoundingClientRect();
+        // Horizontal position always comes from the OUTERMOST top-level
+        // block, never the hovered unit's own rect: a list item's <li> is
+        // indented by the list's own padding (and its bullet/number marker
+        // sits right there too), so anchoring the gutter to the item itself
+        // crowds the icon into the marker. Using the outer block's left edge
+        // keeps the icon at the same gutter distance regardless of list
+        // nesting depth, clear of any marker at any level.
+        const outer = topLevelBlockRange(view.state.doc, found!.pos);
+        const outerDom = outer && (view.nodeDOM(outer.from) as HTMLElement | null);
+        const outerRect = outerDom?.getBoundingClientRect() ?? rect;
+        cancelHandleHide();
+        dragUnitFrom = unit.from;
+        dragUnitTo = unit.to;
+        dragContainerFrom = unit.containerFrom;
+        dragContainerTo = unit.containerTo;
+        dragHandleTop = handleTopFor(view, unit.from, unit.to, rect);
+        dragHandleLeft = outerRect.left - DRAG_HANDLE_GUTTER;
+        showDragHandle = true;
+        // Recompute the safe zone for THIS newly-shown handle position.
+        dragHandleZoneLeft = dragHandleLeft - 4;
+        dragHandleZoneRight = outerRect.right;
+        dragHandleZoneTop = Math.min(dragHandleTop, rect.top) - 4;
+        dragHandleZoneBottom = Math.max(dragHandleTop + DRAG_HANDLE_HEIGHT, rect.bottom) + 4;
+      } catch {
+        scheduleHandleHide();
+      }
+    });
+  }
+
+  function handleBlockHoverLeave() {
+    if (dragHoverRaf) { cancelAnimationFrame(dragHoverRaf); dragHoverRaf = undefined; }
+    if (isDraggingBlock) return;
+    // Don't hide immediately: the handle sits outside .editor-wrapper's own
+    // subtree (a Svelte template sibling), so moving the mouse onto it is a
+    // cross-element transition that always fires this leave first. Give the
+    // cursor a short grace window to actually reach the icon — its own
+    // mouseenter (or a fresh valid hover elsewhere) cancels this.
+    scheduleHandleHide();
+  }
+
+  /** The handle's own mouseenter/mouseleave: keep it visible while the mouse
+   *  is on the icon itself, and start the same grace-window hide once it
+   *  departs (moving back onto content re-triggers handleBlockHover, which
+   *  cancels the pending hide and repositions for whatever's under it now). */
+  function handleDragHandleEnter() {
+    cancelHandleHide();
+  }
+  function handleDragHandleLeave() {
+    if (!isDraggingBlock) scheduleHandleHide();
+  }
+
+  /** Compute the nearest valid drop gap for (clientX, clientY) — constrained
+   *  to [dragContainerFrom, dragContainerTo), the SAME container the drag
+   *  started in (the whole doc for a top-level block, or one specific list's
+   *  content for a list item) — and update the insertion-line indicator.
+   *  Shared by drag-start (to seed the line) and every subsequent drag-move
+   *  tick. */
+  function updateDragInsertLine(clientX: number, clientY: number) {
+    if (!editor) return;
+    try {
+      const view = editor.view;
+      const found = view.posAtCoords({ left: clientX, top: clientY });
+      // No result under the cursor (e.g. below/above all content) — treat as
+      // "at the container's own end"; siblingRangeInContainer clamps it to
+      // the last sibling inside the CURRENT container (list or whole doc),
+      // never spilling into some other block/list elsewhere in the document.
+      const rawPos = found ? found.pos : dragContainerTo;
+      const range = siblingRangeInContainer(view.state.doc, rawPos, dragContainerFrom, dragContainerTo);
+      const dom = range && (view.nodeDOM(range.from) as HTMLElement | null);
+      if (!range || !dom || typeof dom.getBoundingClientRect !== 'function') return;
+      const rect = dom.getBoundingClientRect();
+      const insertBefore = clientY < rect.top + rect.height / 2;
+      dragInsertPos = insertBefore ? range.from : range.to;
+      dragInsertLineTop = insertBefore ? rect.top : rect.bottom;
+      dragInsertLineLeft = rect.left;
+      dragInsertLineWidth = rect.width;
+    } catch {
+      // Position resolution can fail on transient DOM/state mismatches
+      // (e.g. mid-transaction); just skip this tick, the next one recovers.
+    }
+  }
+
+  // Latest mouse position during an active drag — same trailing-edge RAF
+  // rationale as lastHoverX/Y: the callback must react to wherever the
+  // cursor ended UP, not wherever it was when a throttled tick got scheduled.
+  let lastDragX = 0;
+  let lastDragY = 0;
+
+  function handleDragMove(event: MouseEvent) {
+    lastDragX = event.clientX;
+    lastDragY = event.clientY;
+    if (dragMoveRaf) return;
+    dragMoveRaf = requestAnimationFrame(() => {
+      dragMoveRaf = undefined;
+      updateDragInsertLine(lastDragX, lastDragY);
+    });
+  }
+
+  function handleDragEnd() {
+    document.removeEventListener('mousemove', handleDragMove);
+    document.removeEventListener('mouseup', handleDragEnd);
+    if (dragMoveRaf) { cancelAnimationFrame(dragMoveRaf); dragMoveRaf = undefined; }
+    isDraggingBlock = false;
+    if (editor) {
+      const view = editor.view;
+      const tr = moveBlockTransaction(view.state, dragUnitFrom, dragUnitTo, dragInsertPos);
+      if (tr) view.dispatch(tr);
+      view.focus();
+    }
+  }
+
+  /** Seed the insert-line indicator at the dragged unit's OWN position — a
+   *  safe, always-correct starting state (a no-op "insert before itself").
+   *  Deliberately NOT computed via posAtCoords(event.clientX/Y): the handle
+   *  icon sits in the left gutter, outside the actual rendered text column,
+   *  so resolving a position from ITS coordinates at drag-start can miss or
+   *  land somewhere unexpected. handleDragMove takes over with the real
+   *  (on-content) cursor position as soon as the mouse actually moves. */
+  function seedDragInsertLineAtUnit() {
+    if (!editor) return;
+    try {
+      const dom = editor.view.nodeDOM(dragUnitFrom) as HTMLElement | null;
+      if (!dom || typeof dom.getBoundingClientRect !== 'function') return;
+      const rect = dom.getBoundingClientRect();
+      dragInsertPos = dragUnitFrom;
+      dragInsertLineTop = rect.top;
+      dragInsertLineLeft = rect.left;
+      dragInsertLineWidth = rect.width;
+    } catch { /* best-effort seed; handleDragMove corrects on first movement */ }
+  }
+
+  function handleDragHandleMouseDown(event: MouseEvent) {
+    if (event.button !== 0 || !editor) return;
+    event.preventDefault(); // don't let this become a text-selection drag
+    cancelHandleHide();
+    isDraggingBlock = true;
+    showDragHandle = false; // the insertion line takes over as the visual cue
+    seedDragInsertLineAtUnit();
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('mouseup', handleDragEnd);
+  }
+
   /** Toggle task list checkbox when clicking on the checkbox area (::before pseudo-element). */
   function handleCheckboxClick(event: MouseEvent) {
     if (event.button !== 0 || !editor) return;
@@ -2246,6 +2548,11 @@
       proseMirrorEl.addEventListener('paste', handlePaste as EventListener, true);
       proseMirrorEl.addEventListener('contextmenu', handleContextMenu as EventListener);
     }
+    // handleBlockHover/handleBlockHoverLeave are wired on .editor-wrapper (see
+    // template), NOT proseMirrorEl — the wrapper's own padding + the centered
+    // .editor-content-area's auto margins put the handle's left gutter OUTSIDE
+    // proseMirrorEl's own box, so mousemove from text to the icon would cross
+    // a dead zone and fire a mouseleave before ever reaching the icon.
 
     // Prevent default browser drop behavior on editor
     editorEl.addEventListener('dragover', handleDragover);
@@ -2852,6 +3159,16 @@
     if (scrollRafOutline) cancelAnimationFrame(scrollRafOutline);
     if (headingTopsRaf) cancelAnimationFrame(headingTopsRaf);
     if (outlineScrollRaf) cancelAnimationFrame(outlineScrollRaf);
+    if (dragHoverRaf) cancelAnimationFrame(dragHoverRaf);
+    if (dragMoveRaf) cancelAnimationFrame(dragMoveRaf);
+    if (dragHandleHideTimer) clearTimeout(dragHandleHideTimer);
+    // Defensive: if the component unmounts mid-drag (e.g. a file switch while
+    // the mouse button is still down), drop the document-level drag listeners
+    // rather than leaking them onto whatever mounts next.
+    if (isDraggingBlock) {
+      document.removeEventListener('mousemove', handleDragMove);
+      document.removeEventListener('mouseup', handleDragEnd);
+    }
 
     // Remove all event listeners added in onMount to prevent listener accumulation
     // across editor mode switches (visual ↔ source ↔ split).
@@ -2864,7 +3181,6 @@
     if (mountedProseMirrorEl && mountedHandlers) {
       mountedProseMirrorEl.removeEventListener('click', mountedHandlers.handleProseMirrorClick as EventListener);
       mountedProseMirrorEl.removeEventListener('mousemove', handleCheckboxHover as EventListener);
-
       mountedProseMirrorEl.removeEventListener('paste', handlePaste as EventListener, true);
       mountedProseMirrorEl.removeEventListener('contextmenu', handleContextMenu as EventListener);
     }
@@ -2998,7 +3314,7 @@
     if (outlineClickScrolling) return; // covers a RAF scheduled just before the click
     updateActiveHeading();
   });
-}}>
+}} onmousemove={handleBlockHover} onmouseleave={handleBlockHoverLeave}>
   <div class="editor-content-area" style="max-width: {showOutline ? `${editorLineWidth + outlineWidth}px` : `${editorLineWidth}px`}">
     {#if showOutline}
       <OutlinePanel headings={outlineHeadings} activeId={activeHeadingId} width={outlineWidth} containerHeight={wrapperHeight} onSelect={handleOutlineSelect} onWidthChange={onOutlineWidthChange} />
@@ -3014,6 +3330,31 @@
     {/if}
   </div>
 </div>
+
+{#if showDragHandle && !isDraggingBlock}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="block-drag-handle"
+    style="top: {dragHandleTop}px; left: {dragHandleLeft}px"
+    title={$t('editor.drag_handle_tooltip')}
+    onmousedown={handleDragHandleMouseDown}
+    onmouseenter={handleDragHandleEnter}
+    onmouseleave={handleDragHandleLeave}
+  >
+    <svg width="12" height="18" viewBox="0 0 12 18" fill="currentColor" aria-hidden="true">
+      <circle cx="3" cy="3" r="1.5"/><circle cx="9" cy="3" r="1.5"/>
+      <circle cx="3" cy="9" r="1.5"/><circle cx="9" cy="9" r="1.5"/>
+      <circle cx="3" cy="15" r="1.5"/><circle cx="9" cy="15" r="1.5"/>
+    </svg>
+  </div>
+{/if}
+
+{#if isDraggingBlock}
+  <div
+    class="block-drag-insert-line"
+    style="top: {dragInsertLineTop}px; left: {dragInsertLineLeft}px; width: {dragInsertLineWidth}px"
+  ></div>
+{/if}
 
 {#if showEditorContextMenu}
   <EditorContextMenu
@@ -3200,5 +3541,38 @@
   .has-outline .editor-root {
     flex: 1;
     min-width: 0;
+  }
+
+  .block-drag-handle {
+    position: fixed;
+    width: 18px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: grab;
+    background: transparent;
+    z-index: 50;
+    user-select: none;
+  }
+
+  .block-drag-handle:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+  }
+
+  .block-drag-handle:active {
+    cursor: grabbing;
+  }
+
+  .block-drag-insert-line {
+    position: fixed;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--accent-color);
+    z-index: 51;
+    pointer-events: none;
   }
 </style>
