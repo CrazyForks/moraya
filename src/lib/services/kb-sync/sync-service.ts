@@ -143,6 +143,23 @@ export async function runSync(
   const { getPicoraApiKey } = await import('$lib/services/picora/credentials');
   const apiKey = await getPicoraApiKey(target);
 
+  // Cloud-sync entitlement gate (hard, engine-level). An account with no active
+  // paid plan must not touch Picora KB-sync endpoints — the server-side gate
+  // would reject them and a wall of failing requests tanks perceived perf. Fall
+  // back to local-only: do nothing on the network, surface a clear reason. This
+  // one check covers every trigger (manual / on-save / interval / startup /
+  // close / conflict re-sync) since they all run through runSync.
+  const { getPicoraPlan, isKbSyncEntitled } = await import('$lib/services/picora/entitlement');
+  if (!isKbSyncEntitled(await getPicoraPlan(target))) {
+    if (dryRun) {
+      kbSyncStore.setState(localKbId, { status: 'idle' });
+    } else {
+      const { t } = await import('$lib/i18n');
+      kbSyncStore.setState(localKbId, { status: 'error', lastError: get(t)('kb_sync.gate.no_plan') });
+    }
+    return { uploaded: 0, downloaded: 0, deletedRemote: 0, deletedLocal: 0, skipped: 0, conflicts: [] };
+  }
+
   kbSyncStore.setState(localKbId, { status: 'syncing', lastError: null });
 
   try {
@@ -402,7 +419,15 @@ export async function applyResolvedContent(
   const apiKey = await getPicoraApiKey(target);
 
   const hash = await sha256Hex(mergedText);
+  // Always persist the resolved merge to the local file (local-first).
   await invoke('write_file', { path: `${kb.path}/${relativePath}`, content: mergedText });
+
+  // Cloud-sync entitlement gate: without an active paid plan, keep the local
+  // write but skip the Picora upload + manifest advance. (Defensive — an
+  // unentitled account can't reach a conflict since runSync is gated upstream.)
+  const { getPicoraPlan, isKbSyncEntitled } = await import('$lib/services/picora/entitlement');
+  if (!isKbSyncEntitled(await getPicoraPlan(target))) return;
+
   await syncBatch(apiBase, apiKey, picoraKbId, [
     { op: 'upsert', relativePath, content: mergedText, sourceHash: hash },
   ]);

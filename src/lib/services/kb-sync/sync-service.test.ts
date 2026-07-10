@@ -23,9 +23,25 @@ vi.mock('./picora-kb-client', () => ({
   fetchRaw: vi.fn(),
 }));
 
+// Cloud-sync entitlement gate — default to an entitled ('pro') account so the
+// existing behavior tests exercise real sync; individual tests override
+// getPicoraPlan to 'none' to assert the gate blocks.
+vi.mock('$lib/services/picora/entitlement', () => ({
+  getPicoraPlan: vi.fn().mockResolvedValue('pro'),
+  isKbSyncEntitled: vi.fn((plan: string | null | undefined) => !!plan && plan !== 'none'),
+}));
+
+// The gate resolves its user-facing reason via the i18n store; stub it so the
+// dynamic import doesn't drag the locale JSON loader into the test env.
+vi.mock('$lib/i18n', async () => {
+  const { readable } = await import('svelte/store');
+  return { t: readable((k: string) => k) };
+});
+
 import { invoke } from '@tauri-apps/api/core';
 import { buildLocalManifest, loadLastManifest, saveLastManifest, moveToTrash } from './manifest';
 import { fetchManifest, syncBatch, fetchRaw } from './picora-kb-client';
+import { getPicoraPlan } from '$lib/services/picora/entitlement';
 import { kbSyncStore, runSync, dryRunSync, clearAllIntervals, isMemoryNamespacePath } from './sync-service';
 import type { KbBinding, LocalManifestEntry, ManifestEntry, ConflictEntry } from './types';
 import type { KnowledgeBase } from '$lib/stores/files-store';
@@ -311,6 +327,48 @@ describe('runSync — success path', () => {
 
     expect(onComplete).toHaveBeenCalledOnce();
     expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({ uploaded: 0 }));
+  });
+});
+
+describe('runSync — cloud-sync entitlement gate', () => {
+  it('blocks sync with no active plan: no network, error state carries the reason', async () => {
+    vi.mocked(getPicoraPlan).mockResolvedValueOnce('none');
+
+    const report = await runSync(makeBinding(), makeKb(), makeTarget(), false);
+
+    // Early return with a zeroed report — and crucially, no KB-sync request.
+    expect(report.uploaded).toBe(0);
+    expect(report.conflicts).toHaveLength(0);
+    expect(fetchManifest).not.toHaveBeenCalled();
+    expect(syncBatch).not.toHaveBeenCalled();
+    expect(buildLocalManifest).not.toHaveBeenCalled();
+    const state = kbSyncStore.getState('kb-1');
+    expect(state.status).toBe('error');
+    expect(state.lastError).toBe('kb_sync.gate.no_plan');
+  });
+
+  it('dry-run with no plan returns zeros in idle state, no manifest fetch', async () => {
+    vi.mocked(getPicoraPlan).mockResolvedValueOnce('none');
+
+    const report = await runSync(makeBinding(), makeKb(), makeTarget(), true);
+
+    expect(report.uploaded).toBe(0);
+    expect(fetchManifest).not.toHaveBeenCalled();
+    expect(kbSyncStore.getState('kb-1').status).toBe('idle');
+  });
+
+  it('allows sync for a trial/pro/pro_plus plan', async () => {
+    vi.mocked(getPicoraPlan).mockResolvedValueOnce('trial');
+    vi.mocked(buildLocalManifest).mockResolvedValue(new Map([['note.md', localEntry('aaa')]]));
+    vi.mocked(loadLastManifest).mockResolvedValue(new Map());
+    vi.mocked(fetchManifest).mockResolvedValue([]);
+    vi.mocked(invoke).mockResolvedValue('# Hello');
+    vi.mocked(syncBatch).mockResolvedValue({ applied: ['note.md'], conflicts: [] });
+
+    const report = await runSync(makeBinding(), makeKb(), makeTarget(), false);
+
+    expect(report.uploaded).toBe(1);
+    expect(fetchManifest).toHaveBeenCalledOnce();
   });
 });
 
