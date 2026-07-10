@@ -12,6 +12,14 @@ export interface TabItem {
   lastMtime: number | null;
   /** When true, the tab displays an image preview instead of the editor. */
   isImage?: boolean;
+  /** When true, the tab is a read-only document-version preview: content is
+   *  shown in the editor but editing is blocked, and its state is never synced
+   *  back from the editor (see syncFromEditor). filePath is null (no real file). */
+  readOnly?: boolean;
+  /** Dedupe key for read-only preview tabs (e.g. `${filePath}#${snapshotFile}`
+   *  or `${filePath}#cloud:${revId}`). Reopening the same version focuses the
+   *  existing tab instead of creating a duplicate. */
+  previewKey?: string;
 }
 
 interface TabsState {
@@ -46,8 +54,9 @@ function createTabsStore() {
   function syncFromEditor() {
     const s = get({ subscribe });
     const activeTab = s.tabs.find(t => t.id === s.activeTabId);
-    // Image tabs have no editor state to sync
-    if (activeTab?.isImage) return;
+    // Image tabs have no editor state to sync; read-only version previews must
+    // never absorb editor state (their content is a fixed historical snapshot).
+    if (activeTab?.isImage || activeTab?.readOnly) return;
     const edState = editorStore.getState();
     update(state => ({
       ...state,
@@ -146,6 +155,40 @@ function createTabsStore() {
         scrollFraction: 0,
         lastMtime: mtime ?? null,
         isImage,
+      };
+      update(s => ({
+        tabs: [...s.tabs, newTab],
+        activeTabId: newTab.id,
+      }));
+      syncToEditor(newTab);
+      return newTab.id;
+    },
+
+    /** Open a document version in a new READ-ONLY preview tab, or focus the
+     *  existing preview if this version is already open (deduped by previewKey).
+     *  filePath is null so it never collides with real files or triggers saves/
+     *  version snapshots. fileName is the tab label (e.g. "note.md #3"). */
+    openReadOnlyTab(previewKey: string, fileName: string, content: string): string {
+      const state = get({ subscribe });
+      const existing = state.tabs.find(t => t.previewKey === previewKey);
+      if (existing) {
+        syncFromEditor();
+        update(s => ({ ...s, activeTabId: existing.id }));
+        syncToEditor(existing);
+        return existing.id;
+      }
+      syncFromEditor();
+      const newTab: TabItem = {
+        id: generateTabId(),
+        filePath: null,
+        fileName,
+        content,
+        isDirty: false,
+        cursorOffset: 0,
+        scrollFraction: 0,
+        lastMtime: null,
+        readOnly: true,
+        previewKey,
       };
       update(s => ({
         tabs: [...s.tabs, newTab],

@@ -61,6 +61,7 @@
     content = $bindable(''),
     showOutline = false,
     outlineWidth = 200,
+    readOnly = false,
     onEditorReady,
     onContentChange,
     onNotify,
@@ -78,6 +79,8 @@
     content?: string;
     showOutline?: boolean;
     outlineWidth?: number;
+    /** Read-only version-preview mode: blocks all editing (ProseMirror editable=false). */
+    readOnly?: boolean;
     onEditorReady?: (editor: MorayaEditor) => void;
     onContentChange?: (content: string) => void;
     onNotify?: (text: string, type: 'success' | 'error') => void;
@@ -2227,6 +2230,7 @@
     const editorOptions: Parameters<typeof createEditor>[0] = {
       root: editorEl,
       defaultValue: body,
+      editable: !readOnly,
       onFocus: () => {
         if (isMounted) editorStore.setFocused(true);
       },
@@ -2678,6 +2682,15 @@
     // Debounce: avoid running toHardBreaks + sync on every keystroke
     if (externalSyncTimer) clearTimeout(externalSyncTimer);
     externalSyncTimer = setTimeout(() => applySyncToEditor(current), 80);
+  });
+
+  // Read-only toggle (version preview): re-evaluate ProseMirror editability
+  // whenever readOnly flips (the editor instance is reused across tab switches).
+  $effect(() => {
+    const ro = readOnly;
+    if (!isReady || !editor) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (editor.view as any).setProps({ editable: () => !ro });
   });
 
   // When outline is toggled on (e.g. after async settings load), extract headings.

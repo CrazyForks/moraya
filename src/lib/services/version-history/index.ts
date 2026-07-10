@@ -19,6 +19,7 @@ export {
   fetchRemoteRevisions,
   mergeRemoteRevisions,
   restoreRemoteVersion,
+  fetchRemoteRevisionContent,
 } from './cloud-revisions';
 export type {
   RemoteRevision,

@@ -499,6 +499,7 @@
       >
         <span class="tab-name">
           {#if tab.isDirty}<span class="dirty-dot"></span>{/if}
+          {#if tab.readOnly}<svg class="readonly-lock" width="9" height="10" viewBox="0 0 10 12" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><rect x="1.5" y="5" width="7" height="6" rx="1"/><path d="M3 5V3.5a2 2 0 0 1 4 0V5"/></svg>{/if}
           {tab.fileName}
         </span>
         <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -636,6 +637,12 @@
     border-radius: 50%;
     background: var(--accent-color);
     flex-shrink: 0;
+  }
+
+  .readonly-lock {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    vertical-align: -1px;
   }
 
   .tab-close {

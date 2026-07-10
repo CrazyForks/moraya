@@ -222,6 +222,9 @@ ${tr('welcome.tip')}
   // v1.21.0: local document version history (bottom sheet from the status bar)
   let showVersionHistory = $state(false);
   let versionHistoryAvailable = $state(false);
+  // v1.23.0: read-only version-preview tab — the active tab is a historical
+  // version snapshot; the editor is mounted non-editable.
+  let editorReadOnly = $state(false);
   let showBlame = $state(false);
   let blameData = $state<import('$lib/services/git').GitBlameEntry[]>([]);
   let diffViewState = $state<null | { leftHash: string | null; rightHash: string | null }>(null);
@@ -529,6 +532,9 @@ ${tr('welcome.tip')}
   }
 
   async function handleSave(asNew = false, opts?: { auto?: boolean }): Promise<boolean> {
+    // v1.23.0: read-only version-preview tab — never save or snapshot.
+    const activeTab = tabsStore.getState().tabs.find(t => t.id === tabsStore.getState().activeTabId);
+    if (activeTab?.readOnly) return false;
     const prevFilePath = editorStore.getState().currentFilePath;
     const latestContent = getCurrentContent();
 
@@ -641,6 +647,13 @@ ${tr('welcome.tip')}
       }).catch(() => {});
     }
     showToast($t('version_history.restored'), 'success');
+  }
+
+  /** Open a historical version's content in a read-only preview tab. */
+  function handleOpenVersion(versionContent: string, label: string, previewKey: string) {
+    tabsStore.openReadOnlyTab(previewKey, label, versionContent);
+    // The tabs subscriber loads the content into the editor and sets
+    // editorReadOnly; nothing else to do here.
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -902,13 +915,16 @@ ${tr('welcome.tip')}
         activeImageTab = null;
         if (imagePreviewUrl) { URL.revokeObjectURL(imagePreviewUrl); imagePreviewUrl = null; }
 
+        // v1.23.0: read-only version-preview tab → mount editor non-editable
+        editorReadOnly = tab.readOnly ?? false;
+
         console.log('[TabsSub] activeTab changed, setting content length:', tab.content.length, 'preview:', JSON.stringify(tab.content.slice(0, 80)));
         content = tab.content;
         currentFileName = tab.fileName;
         replaceContentAndScrollToTop(tab.content);
 
-        // Refresh review anchors for the newly active tab (non-image, git-bound KB)
-        if (!tab.isImage && tab.filePath) {
+        // Refresh review anchors for the newly active tab (non-image, non-preview, git-bound KB)
+        if (!tab.isImage && !tab.readOnly && tab.filePath) {
           const kb2 = filesStore.getActiveKnowledgeBase?.();
           if (kb2?.git) {
             const rp = tab.filePath.startsWith(kb2.path + '/')
@@ -3715,16 +3731,16 @@ ${tr('welcome.tip')}
           </div>
         </div>
       {:else if editorMode === 'visual'}
-        <Editor bind:this={visualEditorRef} bind:content {showOutline} {outlineWidth} onEditorReady={handleEditorReady} onNotify={showToast} onOutlineWidthChange={(w) => settingsStore.update({ outlineWidth: w })} onWorkflowSEO={handleWorkflowSEO} onWorkflowImageGen={handleWorkflowImageGen} onWorkflowPublish={handleWorkflowPublish} onForceShowAIPanel={() => { showAIPanel = true; }} onAddReview={handleAddReview} onInsertCloudImage={(pos) => { cloudPickerState = { kind: 'image', pos }; }} onInsertCloudAudio={(pos) => { cloudPickerState = { kind: 'audio', pos }; }} onInsertCloudVideo={(pos) => { cloudPickerState = { kind: 'video', pos }; }} />
+        <Editor bind:this={visualEditorRef} bind:content {showOutline} {outlineWidth} readOnly={editorReadOnly} onEditorReady={handleEditorReady} onNotify={showToast} onOutlineWidthChange={(w) => settingsStore.update({ outlineWidth: w })} onWorkflowSEO={handleWorkflowSEO} onWorkflowImageGen={handleWorkflowImageGen} onWorkflowPublish={handleWorkflowPublish} onForceShowAIPanel={() => { showAIPanel = true; }} onAddReview={handleAddReview} onInsertCloudImage={(pos) => { cloudPickerState = { kind: 'image', pos }; }} onInsertCloudAudio={(pos) => { cloudPickerState = { kind: 'audio', pos }; }} onInsertCloudVideo={(pos) => { cloudPickerState = { kind: 'video', pos }; }} />
       {:else if editorMode === 'source'}
-        <SourceEditor bind:this={sourceEditorRef} bind:content {showOutline} {outlineWidth} {showBlame} {blameData} onContentChange={handleContentChange} onOutlineWidthChange={(w) => settingsStore.update({ outlineWidth: w })} />
+        <SourceEditor bind:this={sourceEditorRef} bind:content {showOutline} {outlineWidth} {showBlame} {blameData} readOnly={editorReadOnly} onContentChange={handleContentChange} onOutlineWidthChange={(w) => settingsStore.update({ outlineWidth: w })} />
       {:else if editorMode === 'split'}
         <div class="split-container">
           <div class="split-source" bind:this={splitSourceEl}>
-            <SourceEditor bind:this={splitSourceRef} bind:content onContentChange={handleContentChange} hideScrollbar />
+            <SourceEditor bind:this={splitSourceRef} bind:content readOnly={editorReadOnly} onContentChange={handleContentChange} hideScrollbar />
           </div>
           <div class="split-visual" bind:this={splitVisualEl}>
-            <Editor bind:this={splitVisualRef} bind:content onEditorReady={handleEditorReady} onContentChange={handleContentChange} onNotify={showToast} onWorkflowSEO={handleWorkflowSEO} onWorkflowImageGen={handleWorkflowImageGen} onWorkflowPublish={handleWorkflowPublish} onCursorLineChange={(line) => splitSourceRef?.setHighlightLine(line)} onForceShowAIPanel={() => { showAIPanel = true; }} />
+            <Editor bind:this={splitVisualRef} bind:content readOnly={editorReadOnly} onEditorReady={handleEditorReady} onContentChange={handleContentChange} onNotify={showToast} onWorkflowSEO={handleWorkflowSEO} onWorkflowImageGen={handleWorkflowImageGen} onWorkflowPublish={handleWorkflowPublish} onCursorLineChange={(line) => splitSourceRef?.setHighlightLine(line)} onForceShowAIPanel={() => { showAIPanel = true; }} />
           </div>
         </div>
       {/if}
@@ -3911,6 +3927,7 @@ ${tr('welcome.tip')}
         fileName={getFileNameFromPath(vhFilePath)}
         onClose={() => { showVersionHistory = false; }}
         onRestored={handleVersionRestored}
+        onOpenVersion={handleOpenVersion}
       />
     {/await}
   {/if}

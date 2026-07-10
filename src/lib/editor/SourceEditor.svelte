@@ -12,6 +12,7 @@
     outlineWidth = 200,
     showBlame = false,
     blameData = [],
+    readOnly = false,
     onContentChange,
     onOutlineWidthChange,
   }: {
@@ -23,6 +24,8 @@
     showBlame?: boolean;
     /** v0.32.0: per-line blame data (1-based, indexed by line number) */
     blameData?: import('$lib/services/git').GitBlameEntry[];
+    /** Read-only version-preview mode: textarea becomes readonly. */
+    readOnly?: boolean;
     onContentChange?: (content: string) => void;
     onOutlineWidthChange?: (width: number) => void;
   } = $props();
@@ -702,6 +705,7 @@
         onpaste={handlePaste}
         onkeydown={handleKeydown}
         spellcheck="true"
+        readonly={readOnly}
       ></textarea>
     </div>
   </div>

@@ -165,12 +165,10 @@ export function mergeRemoteRevisions(
 }
 
 /**
- * Restore a cloud-only revision: pull its content from the server, then run
- * the local restore flow (current content snapshotted first). Returns the
- * restored content, or null on failure.
+ * Fetch a cloud revision's markdown content WITHOUT writing anything to disk.
+ * Used for read-only version preview. Returns null on failure.
  */
-export async function restoreRemoteVersion(
-  filePath: string,
+export async function fetchRemoteRevisionContent(
   ctx: Pick<RemoteRevisionsContext, 'apiBase' | 'apiKey' | 'docId'>,
   revId: string
 ): Promise<string | null> {
@@ -181,8 +179,23 @@ export async function restoreRemoteVersion(
       docId: ctx.docId,
       revId,
     });
-    return await restoreContent(filePath, rev.content);
+    return rev.content;
   } catch {
     return null;
   }
+}
+
+/**
+ * Restore a cloud-only revision: pull its content from the server, then run
+ * the local restore flow (current content snapshotted first). Returns the
+ * restored content, or null on failure.
+ */
+export async function restoreRemoteVersion(
+  filePath: string,
+  ctx: Pick<RemoteRevisionsContext, 'apiBase' | 'apiKey' | 'docId'>,
+  revId: string
+): Promise<string | null> {
+  const content = await fetchRemoteRevisionContent(ctx, revId);
+  if (content == null) return null;
+  return await restoreContent(filePath, content);
 }

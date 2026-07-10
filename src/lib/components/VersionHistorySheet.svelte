@@ -1,14 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import { ask } from '@tauri-apps/plugin-dialog';
   import { t } from '$lib/i18n';
   import {
     listVersions,
+    readVersion,
     restoreVersion,
     clearVersions,
     fetchRemoteRevisions,
+    fetchRemoteRevisionContent,
     mergeRemoteRevisions,
     restoreRemoteVersion,
+    sha256Hex,
     type VersionEntry,
     type MergedVersionRow,
     type RemoteRevisionsContext,
@@ -19,17 +23,23 @@
     fileName,
     onClose,
     onRestored,
+    onOpenVersion,
   }: {
     filePath: string;
     fileName: string;
     onClose: () => void;
     onRestored: (content: string) => void;
+    /** Open a historical version in a read-only preview tab. */
+    onOpenVersion: (content: string, label: string, previewKey: string) => void;
   } = $props();
 
   let rows = $state<MergedVersionRow[]>([]);
   let loading = $state(true);
   let busy = $state(false);
   let cloudLoading = $state(false);
+  // sourceHash of the current on-disk document — the row matching it is the
+  // "current" version (clicking it just closes the panel, no new tab).
+  let currentHash = $state<string | null>(null);
   let remoteCtx: RemoteRevisionsContext | null = null;
   // Guard stale async overlays after rapid refreshes
   let refreshSerial = 0;
@@ -42,6 +52,12 @@
     rows = local.map((e) => ({ ...e }));
     loading = false;
 
+    // Hash the current on-disk content to flag which row is "current".
+    invoke<string>('read_file', { path: filePath })
+      .then((text) => sha256Hex(text))
+      .then((h) => { if (serial === refreshSerial) currentHash = h; })
+      .catch(() => { if (serial === refreshSerial) currentHash = null; });
+
     // Cloud overlay: best-effort, never blocks the local list. Any gate miss
     // or failure keeps the panel in local-only mode.
     cloudLoading = true;
@@ -50,6 +66,38 @@
     remoteCtx = ctx;
     if (ctx) rows = mergeRemoteRevisions(local, ctx.revisions);
     cloudLoading = false;
+  }
+
+  function isCurrent(row: MergedVersionRow): boolean {
+    return currentHash != null && row.sourceHash === currentHash;
+  }
+
+  function previewKeyFor(row: MergedVersionRow): string {
+    return row.cloudOnly
+      ? `${filePath}#cloud:${row.remote?.revId}`
+      : `${filePath}#${row.file}`;
+  }
+
+  /** Row click → read-only open, unless the row is the current document. */
+  async function handleOpenRow(row: MergedVersionRow) {
+    if (busy) return;
+    if (isCurrent(row)) {
+      onClose();
+      return;
+    }
+    busy = true;
+    let content: string | null;
+    if (row.cloudOnly) {
+      content = remoteCtx
+        ? await fetchRemoteRevisionContent(remoteCtx, row.remote!.revId)
+        : null;
+    } else {
+      content = await readVersion(filePath, row as unknown as VersionEntry).catch(() => null);
+    }
+    busy = false;
+    if (content == null) return;
+    onOpenVersion(content, `${fileName} #${row.revNumber}`, previewKeyFor(row));
+    onClose();
   }
 
   onMount(() => {
@@ -150,12 +198,26 @@
         <div class="vh-empty">{$t('version_history.empty')}</div>
       {:else}
         {#each rows as row (rowKey(row))}
-          <div class="vh-row" class:vh-row-cloud={row.cloudOnly}>
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class="vh-row"
+            class:vh-row-cloud={row.cloudOnly}
+            class:vh-row-current={isCurrent(row)}
+            role="button"
+            tabindex="0"
+            title={isCurrent(row) ? undefined : $t('version_history.open_hint')}
+            onclick={() => handleOpenRow(row)}
+            onkeydown={(e) => { if (e.key === 'Enter') handleOpenRow(row); }}
+          >
             <span class="vh-rev">#{row.revNumber}</span>
             <span class="vh-time">{formatTime(row)}</span>
             <span class="vh-origin" class:origin-manual={row.origin === 'manual' || row.origin === 'upload'} class:origin-restore={row.origin === 'restore'}>
               {$t(`version_history.origin_${row.origin}`)}
             </span>
+            {#if isCurrent(row)}
+              <span class="vh-current">{$t('version_history.current')}</span>
+            {/if}
             {#if row.cloudOnly}
               <span class="vh-cloud-only">{$t('version_history.cloud_only')}</span>
             {/if}
@@ -166,7 +228,7 @@
                 <svg width="10" height="12" viewBox="8 6 16 20" fill="none" aria-hidden="true"><path d="M9.5 7.5v17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="14" r="6.5" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="14" r="2.4" fill="currentColor"/></svg>
               </span>
             {/if}
-            <button class="vh-restore" onclick={() => handleRestore(row)} disabled={busy}>
+            <button class="vh-restore" onclick={(e) => { e.stopPropagation(); handleRestore(row); }} disabled={busy}>
               {$t('version_history.restore')}
             </button>
           </div>
@@ -281,8 +343,20 @@
     gap: 0.75rem;
     padding: 0.4rem 0.9rem;
     font-size: var(--font-size-xs);
+    cursor: pointer;
   }
   .vh-row:hover { background: var(--bg-hover); }
+  .vh-row-current { cursor: default; }
+
+  .vh-current {
+    color: var(--accent-color);
+    border: 1px solid var(--accent-color);
+    border-radius: 3px;
+    padding: 0 0.35rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-size: var(--font-size-xs);
+  }
 
   .vh-rev {
     color: var(--text-muted);

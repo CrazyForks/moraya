@@ -53,6 +53,9 @@ export interface EditorOptions {
   changeDebounceMs?: number
   onFocus?: () => void
   onBlur?: () => void
+  /** Initial editability. When false, the view mounts non-editable (read-only
+   *  version preview). Runtime toggling is done via view.setProps. Default true. */
+  editable?: boolean
 }
 
 // ── Platform DI: derived from moraya's editor-store + utils/platform ──
@@ -121,9 +124,11 @@ export async function createEditor(options: EditorOptions): Promise<MorayaEditor
     : (schema as Schema).topNodeType.createAndFill()!
 
   const state = EditorState.create({ schema: schema as Schema, doc: initialDoc, plugins })
+  const initialEditable = options.editable !== false
   const view = new EditorView(options.root, {
     state,
     nodeViews,
+    editable: () => initialEditable,
     attributes: {
       class: 'moraya-editor',
       spellcheck: 'true',
