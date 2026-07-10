@@ -283,25 +283,6 @@
         {/if}
       </span>
     {/if}
-    {#if onToggleVersionHistory}
-      <button
-        class="status-icon vh-btn"
-        onclick={onToggleVersionHistory}
-        disabled={!versionHistoryAvailable}
-        title={versionHistoryAvailable
-          ? $t('version_history.statusbar_tooltip')
-          : $t('version_history.statusbar_disabled')}
-        aria-label={$t('version_history.statusbar_tooltip')}
-        type="button"
-      >
-        <!-- history: clock with counter-clockwise arrow -->
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M2.5 8a5.5 5.5 0 1 1 1.6 3.9" />
-          <path d="M2.5 8.5V6h2.5" transform="translate(0 3)" />
-          <path d="M8 5.2V8l2 1.4" />
-        </svg>
-      </button>
-    {/if}
     {#if onGitSync}
       <GitSyncStatus onSync={onGitSync} />
     {/if}
@@ -338,6 +319,25 @@
           </div>
         </div>
       {/if}
+    {/if}
+    {#if onToggleVersionHistory}
+      <button
+        class="status-icon vh-btn"
+        onclick={onToggleVersionHistory}
+        disabled={!versionHistoryAvailable}
+        title={versionHistoryAvailable
+          ? $t('version_history.statusbar_tooltip')
+          : $t('version_history.statusbar_disabled')}
+        aria-label={$t('version_history.statusbar_tooltip')}
+        type="button"
+      >
+        <!-- history: clock with counter-clockwise arrow -->
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M2.5 8a5.5 5.5 0 1 1 1.6 3.9" />
+          <path d="M2.5 8.5V6h2.5" transform="translate(0 3)" />
+          <path d="M8 5.2V8l2 1.4" />
+        </svg>
+      </button>
     {/if}
   </div>
   <div class="statusbar-right">
