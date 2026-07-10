@@ -232,10 +232,36 @@ export async function readVersion(filePath: string, entry: VersionEntry): Promis
 }
 
 /**
- * Restore a document to a past version. Mirrors Picora's restore semantics:
- * the file's current on-disk content is snapshotted first (origin 'restore',
- * bypassing the enabled flag so nothing is ever lost), then the old content
- * is written back. Returns the restored content, or null on failure.
+ * Write arbitrary content into a document as a restore operation. Mirrors
+ * Picora's restore semantics: the file's current on-disk content is
+ * snapshotted first (origin 'restore', bypassing the enabled flag so nothing
+ * is ever lost), then the new content is written. Returns the written
+ * content, or null on failure. Also used by the cloud phase to restore a
+ * server-side revision's content.
+ */
+export async function restoreContent(
+  filePath: string,
+  content: string
+): Promise<string | null> {
+  const dir = resolveVersionsDir(filePath);
+  if (!dir) return null;
+  try {
+    try {
+      const current = await invoke<string>('read_file', { path: filePath });
+      await writeSnapshot(dir, current, 'restore');
+    } catch {
+      // current file unreadable (deleted?) — restore proceeds regardless
+    }
+    await invoke('write_file', { path: filePath, content });
+    return content;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Restore a document to a past local version (see restoreContent for the
+ * safety-snapshot semantics). Returns the restored content, or null on failure.
  */
 export async function restoreVersion(
   filePath: string,
@@ -245,14 +271,7 @@ export async function restoreVersion(
   if (!dir) return null;
   try {
     const old = await invoke<string>('read_file', { path: `${dir}/${entry.file}` });
-    try {
-      const current = await invoke<string>('read_file', { path: filePath });
-      await writeSnapshot(dir, current, 'restore');
-    } catch {
-      // current file unreadable (deleted?) — restore proceeds regardless
-    }
-    await invoke('write_file', { path: filePath, content: old });
-    return old;
+    return await restoreContent(filePath, old);
   } catch {
     return null;
   }

@@ -82,6 +82,11 @@ pub struct UsageBlock {
     pub public_count: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub private_count: Option<i64>,
+    // v1.22.0 (server v0.74.0): docs block only — document revision-history usage.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision_bytes: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

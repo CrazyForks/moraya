@@ -6,7 +6,12 @@
     listVersions,
     restoreVersion,
     clearVersions,
+    fetchRemoteRevisions,
+    mergeRemoteRevisions,
+    restoreRemoteVersion,
     type VersionEntry,
+    type MergedVersionRow,
+    type RemoteRevisionsContext,
   } from '$lib/services/version-history';
 
   let {
@@ -21,27 +26,43 @@
     onRestored: (content: string) => void;
   } = $props();
 
-  let entries = $state<VersionEntry[]>([]);
+  let rows = $state<MergedVersionRow[]>([]);
   let loading = $state(true);
   let busy = $state(false);
+  let cloudLoading = $state(false);
+  let remoteCtx: RemoteRevisionsContext | null = null;
+  // Guard stale async overlays after rapid refreshes
+  let refreshSerial = 0;
 
   async function refresh() {
+    const serial = ++refreshSerial;
     loading = true;
-    entries = await listVersions(filePath);
+    const local = await listVersions(filePath);
+    if (serial !== refreshSerial) return;
+    rows = local.map((e) => ({ ...e }));
     loading = false;
+
+    // Cloud overlay: best-effort, never blocks the local list. Any gate miss
+    // or failure keeps the panel in local-only mode.
+    cloudLoading = true;
+    const ctx = await fetchRemoteRevisions(filePath);
+    if (serial !== refreshSerial) return;
+    remoteCtx = ctx;
+    if (ctx) rows = mergeRemoteRevisions(local, ctx.revisions);
+    cloudLoading = false;
   }
 
   onMount(() => {
     refresh();
   });
 
-  function formatTime(entry: VersionEntry): string {
-    if (entry.createdAt) {
-      const d = new Date(entry.createdAt);
+  function formatTime(row: MergedVersionRow): string {
+    if (row.createdAt) {
+      const d = new Date(row.createdAt);
       if (!Number.isNaN(d.getTime())) return d.toLocaleString();
     }
     // meta was rebuilt without timestamps — fall back to the filename stem
-    return entry.file.replace(/(_r\d+)?\.md$/, '').replace('_', ' ');
+    return row.file.replace(/(_r\d+)?\.md$/, '').replace('_', ' ');
   }
 
   function formatSize(bytes: number): string {
@@ -50,23 +71,31 @@
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
 
-  /**
-   * Cloud-sync badge (Picora doc_revisions phase, not yet wired): shown once
-   * an entry carries a `remote` mapping — always absent in the local-only phase.
-   */
-  function isCloudSynced(entry: VersionEntry): boolean {
-    return entry.remote != null;
+  /** "P" badge: the version's content is retrievable from Picora. */
+  function isCloudSynced(row: MergedVersionRow): boolean {
+    return row.remote != null;
   }
 
-  async function handleRestore(entry: VersionEntry) {
+  function rowKey(row: MergedVersionRow): string {
+    return row.cloudOnly ? `c:${row.remote!.revId}` : `l:${row.file}`;
+  }
+
+  async function handleRestore(row: MergedVersionRow) {
     if (busy) return;
     const confirmed = await ask(
-      $t('version_history.restore_confirm', { time: formatTime(entry) }),
+      $t('version_history.restore_confirm', { time: formatTime(row) }),
       { title: $t('version_history.restore'), kind: 'warning' }
     );
     if (!confirmed) return;
     busy = true;
-    const restored = await restoreVersion(filePath, entry);
+    let restored: string | null;
+    if (row.cloudOnly) {
+      restored = remoteCtx
+        ? await restoreRemoteVersion(filePath, remoteCtx, row.remote!.revId)
+        : null;
+    } else {
+      restored = await restoreVersion(filePath, row as unknown as VersionEntry);
+    }
     busy = false;
     if (restored != null) {
       onRestored(restored);
@@ -75,7 +104,7 @@
   }
 
   async function handleClear() {
-    if (busy || entries.length === 0) return;
+    if (busy || rows.length === 0) return;
     const confirmed = await ask($t('version_history.clear_confirm'), {
       title: $t('version_history.clear'),
       kind: 'warning',
@@ -84,7 +113,7 @@
     busy = true;
     const ok = await clearVersions(filePath);
     busy = false;
-    if (ok) entries = [];
+    if (ok) await refresh();
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -102,7 +131,10 @@
       <span class="vh-title">{$t('version_history.title')}</span>
       <span class="vh-file" title={filePath}>{fileName}</span>
       <div class="vh-header-actions">
-        {#if entries.length > 0}
+        {#if cloudLoading}
+          <span class="vh-cloud-loading">{$t('version_history.cloud_loading')}</span>
+        {/if}
+        {#if rows.some((r) => !r.cloudOnly)}
           <button class="vh-clear" onclick={handleClear} disabled={busy}>
             {$t('version_history.clear')}
           </button>
@@ -114,24 +146,27 @@
     <div class="vh-list">
       {#if loading}
         <div class="vh-empty">…</div>
-      {:else if entries.length === 0}
+      {:else if rows.length === 0}
         <div class="vh-empty">{$t('version_history.empty')}</div>
       {:else}
-        {#each entries as entry (entry.revNumber)}
-          <div class="vh-row">
-            <span class="vh-rev">#{entry.revNumber}</span>
-            <span class="vh-time">{formatTime(entry)}</span>
-            <span class="vh-origin" class:origin-manual={entry.origin === 'manual'} class:origin-restore={entry.origin === 'restore'}>
-              {$t(`version_history.origin_${entry.origin}`)}
+        {#each rows as row (rowKey(row))}
+          <div class="vh-row" class:vh-row-cloud={row.cloudOnly}>
+            <span class="vh-rev">#{row.revNumber}</span>
+            <span class="vh-time">{formatTime(row)}</span>
+            <span class="vh-origin" class:origin-manual={row.origin === 'manual' || row.origin === 'upload'} class:origin-restore={row.origin === 'restore'}>
+              {$t(`version_history.origin_${row.origin}`)}
             </span>
-            <span class="vh-size">{formatSize(entry.sizeBytes)}</span>
-            {#if isCloudSynced(entry)}
+            {#if row.cloudOnly}
+              <span class="vh-cloud-only">{$t('version_history.cloud_only')}</span>
+            {/if}
+            <span class="vh-size">{formatSize(row.sizeBytes)}</span>
+            {#if isCloudSynced(row)}
               <!-- Picora brand mark (picora-mark-mono-blue.svg) — cloud-synced badge -->
               <span class="vh-cloud" title={$t('version_history.cloud_synced')}>
                 <svg width="10" height="12" viewBox="8 6 16 20" fill="none" aria-hidden="true"><path d="M9.5 7.5v17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="14" r="6.5" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="14" r="2.4" fill="currentColor"/></svg>
               </span>
             {/if}
-            <button class="vh-restore" onclick={() => handleRestore(entry)} disabled={busy}>
+            <button class="vh-restore" onclick={() => handleRestore(row)} disabled={busy}>
               {$t('version_history.restore')}
             </button>
           </div>
@@ -286,6 +321,26 @@
     display: inline-flex;
     align-items: center;
     flex-shrink: 0;
+  }
+
+  .vh-cloud-loading {
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+  }
+
+  .vh-row-cloud {
+    opacity: 0.85;
+  }
+
+  .vh-cloud-only {
+    color: #2563eb;
+    border: 1px solid #2563eb;
+    border-radius: 3px;
+    padding: 0 0.35rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-size: var(--font-size-xs);
   }
 
   .vh-restore {

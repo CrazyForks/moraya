@@ -22,6 +22,12 @@ pub struct PicoraUserInfo {
     pub plan: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nickname: Option<String>,
+    // v1.22.0 (server v0.74.0): server-side doc versioning user settings.
+    // Absent on older Picora deployments.
+    #[serde(rename = "docVersioningEnabled", skip_serializing_if = "Option::is_none")]
+    pub doc_versioning_enabled: Option<bool>,
+    #[serde(rename = "docVersioningMax", skip_serializing_if = "Option::is_none")]
+    pub doc_versioning_max: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -176,6 +182,11 @@ pub async fn verify_picora_token(
             .get("nickname")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
+        doc_versioning_enabled: data.get("docVersioningEnabled").and_then(|v| v.as_bool()),
+        doc_versioning_max: data
+            .get("docVersioningMax")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32),
     })
 }
 
@@ -288,6 +299,8 @@ pub async fn exchange_picora_export_token(
                 .get("nickname")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string()),
+            doc_versioning_enabled: None,
+            doc_versioning_max: None,
         },
     })
 }
@@ -325,6 +338,8 @@ mod tests {
                 email: "test@example.com".to_string(),
                 plan: "pro".to_string(),
                 nickname: None,
+                doc_versioning_enabled: None,
+                doc_versioning_max: None,
             },
         };
         let json = serde_json::to_string(&payload).unwrap();

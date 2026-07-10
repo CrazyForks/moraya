@@ -49,6 +49,11 @@ pub struct ManifestEntry {
     pub size_bytes: i64,
     #[serde(rename = "updatedAt")]
     pub updated_at: String,
+    // v1.22.0: server-side document id — the key into the doc-revisions API
+    // (GET /v1/docs/{id}/revisions). The server has always returned it in the
+    // manifest; older struct versions silently dropped it at deserialize.
+    #[serde(rename = "docId", skip_serializing_if = "Option::is_none")]
+    pub doc_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

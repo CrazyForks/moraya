@@ -7,6 +7,7 @@ pub mod git;
 pub mod image_hosting_picora;
 pub mod kb;
 pub mod picora_account;
+pub mod picora_doc_revisions;
 pub mod picora_media;
 pub mod picora_oauth;
 pub mod kb_sync;

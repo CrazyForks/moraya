@@ -24,6 +24,18 @@ export type {
 
 // ── PC-specific orchestration types (desktop runSync engine) ─────────────────
 
+/**
+ * v1.22.0: the server manifest has always carried each entry's server-side
+ * document id (`docId`) — the key into the doc-revisions API. Core's
+ * ManifestEntry contract stays at 4 fields; PC extends it locally. Entries
+ * flowing remote manifest → lastManifest carry it through persistence
+ * (`~/.moraya/kb-sync/{kbId}.manifest.json`), giving relativePath → docId
+ * for any KB that has synced at least once.
+ */
+export type ManifestEntryWithDocId = import('@moraya/core/sync').ManifestEntry & {
+  docId?: string;
+};
+
 export type SyncMode = 'manual' | 'on-save' | 'interval' | 'on-startup-and-close';
 export type SyncScope = 'markdown-only' | 'markdown-plus-rules' | 'all-including-hidden';
 export type ConflictPolicy = 'prompt' | 'prefer-local' | 'prefer-remote';
