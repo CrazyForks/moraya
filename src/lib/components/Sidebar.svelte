@@ -10,6 +10,7 @@
   import { startWatching, stopWatching, refreshFileTree } from '$lib/services/file-watcher';
   import { load as loadStore } from '@tauri-apps/plugin-store';
   import FileContextMenu from './FileContextMenu.svelte';
+  import KbMemoryAssetDialog from './KbMemoryAssetDialog.svelte';
   import LockIndicator from './LockIndicator.svelte';
   import type { Lock } from '$lib/services/review/types';
   import { kbSyncStore, runSync } from '$lib/services/kb-sync/sync-service';
@@ -84,6 +85,8 @@
   let activeKBId = $state<string | null>(null);
   let showKBDropdown = $state(false);
   let showSaveAsKBHint = $state(false);
+  // KB whose memory-directory assets dialog is open (Picora-bound KBs only).
+  let memoryPanelKb = $state<KnowledgeBase | null>(null);
 
   // Top-level store subscription — do NOT wrap in $effect().
   // Svelte 5 $effect tracks reads in subscribe callbacks, causing infinite loops.
@@ -1049,27 +1052,39 @@
       <div class="kb-dropdown">
         {#each knowledgeBases as kb (kb.id)}
           {@const status = kbSyncStatus(kb.id)}
-          <button
-            class="kb-dropdown-item"
-            class:active={kb.id === activeKBId}
-            onclick={() => switchKB(kb.id)}
-          >
-            {#if kb.id === activeKBId}
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
-            {:else}
-              <span class="kb-check-spacer"></span>
-            {/if}
-            <span class="kb-dropdown-name">{kb.name}</span>
+          <div class="kb-dropdown-row" class:active={kb.id === activeKBId}>
+            <button
+              class="kb-dropdown-item"
+              class:active={kb.id === activeKBId}
+              onclick={() => switchKB(kb.id)}
+            >
+              {#if kb.id === activeKBId}
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+              {:else}
+                <span class="kb-check-spacer"></span>
+              {/if}
+              <span class="kb-dropdown-name">{kb.name}</span>
+              {#if kb.picoraBinding}
+                <span
+                  class="kb-sync-badge"
+                  class:syncing={status === 'syncing'}
+                  class:error={status === 'error'}
+                  class:conflict={status === 'conflict'}
+                  title={$t('kb_sync.statusbar.tooltip')}
+                ><svg width="10" height="10" viewBox="8 6 16 20" fill="none" style="vertical-align:-1px;display:inline-block" aria-hidden="true"><path d="M9.5 7.5v17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="14" r="6.5" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="14" r="2.4" fill="currentColor"/></svg>{status === 'error' ? ' ✗' : status === 'conflict' ? ' ⚠' : ''}</span>
+              {/if}
+            </button>
             {#if kb.picoraBinding}
-              <span
-                class="kb-sync-badge"
-                class:syncing={status === 'syncing'}
-                class:error={status === 'error'}
-                class:conflict={status === 'conflict'}
-                title={$t('kb_sync.statusbar.tooltip')}
-              ><svg width="10" height="10" viewBox="8 6 16 20" fill="none" style="vertical-align:-1px;display:inline-block" aria-hidden="true"><path d="M9.5 7.5v17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="14" r="6.5" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="14" r="2.4" fill="currentColor"/></svg>{status === 'error' ? ' ✗' : status === 'conflict' ? ' ⚠' : ''}</span>
+              <button
+                class="kb-mem-btn"
+                title={$t('kb_sync.settings.memory_asset')}
+                aria-label={$t('kb_sync.settings.memory_asset')}
+                onclick={(e) => { e.stopPropagation(); showKBDropdown = false; memoryPanelKb = kb; }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>
+              </button>
             {/if}
-          </button>
+          </div>
         {/each}
         <div class="kb-dropdown-divider"></div>
         <button class="kb-dropdown-item kb-manage" onclick={() => { showKBDropdown = false; onOpenKBManager?.(); }}>
@@ -1226,6 +1241,10 @@
     {/if}
   </div>
 </div>
+
+{#if memoryPanelKb}
+  <KbMemoryAssetDialog kb={memoryPanelKb} onClose={() => (memoryPanelKb = null)} />
+{/if}
 
 {#snippet fileTreeItem(entry: FileEntry, depth: number)}
   {#if inputDialog?.mode === 'rename' && inputDialog.targetPath === entry.path}
@@ -1876,11 +1895,45 @@
     overflow-y: auto;
   }
 
+  .kb-dropdown-row {
+    display: flex;
+    align-items: center;
+  }
+  .kb-dropdown-row:hover {
+    background: var(--bg-hover);
+  }
+  .kb-dropdown-row .kb-dropdown-item:hover {
+    background: transparent;
+  }
+
+  .kb-mem-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 1.6rem;
+    height: 1.6rem;
+    margin-right: 0.35rem;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--transition-fast, 0.12s), background var(--transition-fast, 0.12s);
+  }
+  .kb-dropdown-row:hover .kb-mem-btn { opacity: 1; }
+  .kb-mem-btn:hover {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+  }
+
   .kb-dropdown-item {
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     padding: 0.4rem 0.5rem;
     border: none;
     background: transparent;

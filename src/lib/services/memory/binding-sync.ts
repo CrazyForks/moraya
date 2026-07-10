@@ -239,6 +239,49 @@ export async function listAvailableKbs(): Promise<Array<{ id: string; name: stri
   }
 }
 
+/**
+ * Extract the distinct memory namespaces (top-level dot-directories, excluding
+ * `.moraya` which is the folder-synced KB's own namespace) from a KB manifest.
+ * Pure — the top-level of a memory tool binding is `mountAs/…` (e.g. `.claude/`).
+ */
+export function extractNamespaces(manifest: Array<{ relativePath: string }>): string[] {
+  const set = new Set<string>()
+  for (const e of manifest) {
+    const top = e.relativePath.split('/')[0]
+    if (top && top.startsWith('.') && top !== '.moraya') set.add(top)
+  }
+  return [...set].sort()
+}
+
+/**
+ * List the memory namespaces present in a KB's cloud manifest. Used to surface
+ * "cloud-only" assets: namespaces that still exist in the cloud after their
+ * local binding was removed. Best-effort → [] on error / no account.
+ */
+export async function listCloudNamespaces(kbId: string): Promise<string[]> {
+  const acct = await resolveAccount()
+  if (!acct) return []
+  try {
+    const manifest = await fetchManifest(acct.apiBase, acct.apiKey, kbId)
+    return extractNamespaces(manifest)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Delete a cloud memory namespace (every file under `mountAs/`) from a KB.
+ * The caller MUST ensure the namespace has no active local binding (deleting a
+ * bound namespace's cloud copy is disallowed by the UI). Never touches local
+ * files. Returns false if there is no Picora account.
+ */
+export async function deleteCloudNamespace(kbId: string, mountAs: string): Promise<boolean> {
+  const acct = await resolveAccount()
+  if (!acct) return false
+  await cleanNamespace({ apiBase: acct.apiBase, apiKey: acct.apiKey, kbId }, mountAs)
+  return true
+}
+
 async function cleanNamespace(ctx: CloudCtx, mountAs: string): Promise<void> {
   try {
     const manifest = await fetchManifest(ctx.apiBase, ctx.apiKey, ctx.kbId)

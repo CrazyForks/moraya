@@ -43,7 +43,7 @@ import {
 } from './tool-profiles'
 import * as store from './store'
 import { addToolBinding, addCustomBinding, removeBinding, listBindings, hasBinding } from './bindings'
-import { flattenFiles, syncBinding, syncAllBindings, restoreBinding, toolDirPresent, scanHomeMemoryDirs, moveBindingToDedicatedKb, routeBindingToKb, listAvailableKbs, _setBindingSyncIO } from './binding-sync'
+import { flattenFiles, syncBinding, syncAllBindings, restoreBinding, toolDirPresent, scanHomeMemoryDirs, moveBindingToDedicatedKb, routeBindingToKb, listAvailableKbs, extractNamespaces, _setBindingSyncIO } from './binding-sync'
 import type { BindingSyncIO } from './binding-sync'
 import { isIndexFile, unionMergeLines, mergeMemoryFile } from './memory-merge'
 
@@ -200,6 +200,22 @@ describe('flattenFiles', () => {
       { rel: 'CLAUDE.md', abs: '/root/CLAUDE.md' },
       { rel: 'agents/r.md', abs: '/root/agents/r.md' },
     ])
+  })
+})
+
+describe('extractNamespaces', () => {
+  it('extracts distinct top-level dot-namespaces, excluding .moraya', () => {
+    const manifest = [
+      { relativePath: '.claude/CLAUDE.md' },
+      { relativePath: '.claude/agents/r.md' },
+      { relativePath: '.codex/AGENTS.md' },
+      { relativePath: '.moraya/memories/x.md' },
+      { relativePath: 'notes/todo.md' }, // non-namespace KB doc
+    ]
+    expect(extractNamespaces(manifest)).toEqual(['.claude', '.codex'])
+  })
+  it('returns [] for a manifest with no memory namespaces', () => {
+    expect(extractNamespaces([{ relativePath: 'a.md' }, { relativePath: '.moraya/m.md' }])).toEqual([])
   })
 })
 

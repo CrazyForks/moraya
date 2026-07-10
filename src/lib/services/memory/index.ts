@@ -74,6 +74,9 @@ export {
   moveBindingToDedicatedKb,
   routeBindingToKb,
   listAvailableKbs,
+  listCloudNamespaces,
+  extractNamespaces,
+  deleteCloudNamespace,
 } from './binding-sync'
 export { createMemoryAutoSync, startMemoryAutoSync, stopMemoryAutoSync, type MemoryAutoSync } from './auto-sync'
 export { mergeMemoryFile, unionMergeLines, isIndexFile, type MemoryMergeOutcome } from './memory-merge'
