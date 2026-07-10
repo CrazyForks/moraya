@@ -14,6 +14,7 @@
   import type { Lock } from '$lib/services/review/types';
   import { kbSyncStore, runSync } from '$lib/services/kb-sync/sync-service';
   import type { KbSyncState } from '$lib/services/kb-sync/types';
+  import { renameVersionsDir } from '$lib/services/version-history';
 
   let {
     onFileSelect,
@@ -757,6 +758,9 @@
         const newPath = `${parentDir}/${finalValue}`;
         try {
           await invoke('rename_file', { oldPath, newPath });
+          // v1.21.0: keep local version history attached (best-effort; works
+          // for files and directories alike since .versions mirrors the tree)
+          renameVersionsDir(oldPath, newPath);
           if (folderPath) await refreshFileTree(folderPath);
           onRename?.(oldPath, newPath);
         } catch (e) {
@@ -929,6 +933,8 @@
         if (parentDir !== target) {
           try {
             await invoke('rename_file', { oldPath: filePath, newPath: `${target}/${fileName}` });
+            // v1.21.0: move the file's local version history along (best-effort)
+            renameVersionsDir(filePath, `${target}/${fileName}`);
             if (folderPath) await refreshFileTree(folderPath);
             expandedDirs = new Set([...expandedDirs, target]);
           } catch (err) {

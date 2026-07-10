@@ -63,7 +63,13 @@ interface Settings {
   fontSize: number;
   lineWidth: number;
   autoSave: boolean;
+  /** @deprecated v1.21.0 — replaced by autoSaveMaxMinutes/autoSaveIdleMinutes; kept so older settings.json files still parse. */
   autoSaveInterval: number; // milliseconds
+  // v1.21.0: dual-condition autosave — force-save a dirty doc at most this many
+  // minutes after the last save, even while the user keeps typing.
+  autoSaveMaxMinutes: number;
+  // v1.21.0: save a dirty doc once the user has paused input for this many minutes.
+  autoSaveIdleMinutes: number;
   showSidebar: boolean;
   showStatusBar: boolean;
   localeSelection: LocaleSelection;
@@ -100,6 +106,9 @@ interface Settings {
   outlineWidth: number;
   aiPanelWidth: number | null;   // null = use default (33% of window)
   rulesHistoryCount: number;
+  // v1.21.0: local per-document version history (snapshots under {kbRoot}/.versions/)
+  versionHistoryEnabled: boolean;
+  versionHistoryMax: number;     // per-document snapshot retention (1-500)
   // Knowledge base embedding settings
   embeddingProvider: string | null;       // null = follow AI chat provider
   embeddingConfigId: string;             // provider config ID for keychain
@@ -161,6 +170,8 @@ const DEFAULT_SETTINGS: Settings = {
   lineWidth: 800,
   autoSave: true,
   autoSaveInterval: 30000,
+  autoSaveMaxMinutes: 10,
+  autoSaveIdleMinutes: 3,
   showSidebar: false,
   showStatusBar: true,
   localeSelection: 'system',
@@ -190,6 +201,8 @@ const DEFAULT_SETTINGS: Settings = {
   outlineWidth: 200,
   aiPanelWidth: null,
   rulesHistoryCount: 10,
+  versionHistoryEnabled: true,
+  versionHistoryMax: 50,
   embeddingProvider: null,
   embeddingConfigId: '',
   embeddingModel: '',

@@ -48,6 +48,8 @@
   import { initContainerManager } from '$lib/services/mcp/container-manager';
   import { registerKbInterval, clearAllIntervals, runSync, kbSyncStore } from '$lib/services/kb-sync/sync-service';
   import type { KbSyncState } from '$lib/services/kb-sync/types';
+  import { snapshotVersion, isVersionedPath } from '$lib/services/version-history';
+  import { shouldAutoSave } from '$lib/utils/autosave';
   import { preloadEnhancementPlugins } from '$lib/editor/setup';
   import { openFile, saveFile, saveFileAs, loadFile, getFileNameFromPath, readImageAsBlobUrl, migrateTempImages, isImageFile } from '$lib/services/file-service';
   import { exportDocument, type ExportFormat } from '$lib/services/export-service';
@@ -217,6 +219,9 @@ ${tr('welcome.tip')}
   let showReviewPanel = $state(false);
   // v0.32.0: history panel + DiffView state
   let showHistoryPanel = $state(false);
+  // v1.21.0: local document version history (bottom sheet from the status bar)
+  let showVersionHistory = $state(false);
+  let versionHistoryAvailable = $state(false);
   let showBlame = $state(false);
   let blameData = $state<import('$lib/services/git').GitBlameEntry[]>([]);
   let diffViewState = $state<null | { leftHash: string | null; rightHash: string | null }>(null);
@@ -523,7 +528,7 @@ ${tr('welcome.tip')}
     return `${name}.md`;
   }
 
-  async function handleSave(asNew = false): Promise<boolean> {
+  async function handleSave(asNew = false, opts?: { auto?: boolean }): Promise<boolean> {
     const prevFilePath = editorStore.getState().currentFilePath;
     const latestContent = getCurrentContent();
 
@@ -537,6 +542,7 @@ ${tr('welcome.tip')}
     }
 
     if (saved) {
+      pendingEditsSince = 0; // autosave clock: no pending edits after a successful save
       const state = editorStore.getState();
       const newFilePath = state.currentFilePath;
 
@@ -556,6 +562,12 @@ ${tr('welcome.tip')}
 
       if (!asNew && newFilePath && getFileNameFromPath(newFilePath) === 'MORAYA.md') {
         createMorayaHistory(newFilePath, latestContent);
+      }
+
+      // Local version history: snapshot every successful save of a KB document
+      // (hash-deduped inside; best-effort, never blocks the save path)
+      if (newFilePath) {
+        snapshotVersion(newFilePath, latestContent, opts?.auto ? 'auto' : 'manual');
       }
 
       // on-save KB sync: trigger 3 seconds after save to batch rapid saves
@@ -600,6 +612,35 @@ ${tr('welcome.tip')}
     }
 
     return saved;
+  }
+
+  // ── Local version history (v1.21.0) ─────────────────────────────────
+
+  function toggleVersionHistory() {
+    // Re-check availability at click time (a KB may have been registered
+    // after this file was opened)
+    const fp = editorStore.getState().currentFilePath;
+    versionHistoryAvailable = isVersionedPath(fp);
+    if (!versionHistoryAvailable) return;
+    showVersionHistory = !showVersionHistory;
+  }
+
+  /** Reload the editor after a snapshot was restored to disk. */
+  function handleVersionRestored(restored: string) {
+    content = restored;
+    editorStore.setDirtyContent(false, restored);
+    syncVisualEditor(restored);
+    const fp = editorStore.getState().currentFilePath;
+    if (fp) {
+      // Refresh the tab mtime so the external-change watcher doesn't flag the restore
+      invoke('get_files_mtime', { paths: [fp] }).then((result: unknown) => {
+        const mtimes = result as [string, number][];
+        if (mtimes.length > 0) {
+          tabsStore.updateActiveFile(fp, getFileNameFromPath(fp), mtimes[0][1]);
+        }
+      }).catch(() => {});
+    }
+    showToast($t('version_history.restored'), 'success');
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -722,10 +763,20 @@ ${tr('welcome.tip')}
   // In Svelte 5, $effect tracks reads inside subscribe callbacks, causing
   // infinite re-subscription loops when callbacks compare/write $state vars.
   // This was the root cause of the AI panel freeze (introduced in v0.17.1).
+  let prevAutoSaveKey = '';
   const unsubSettings = settingsStore.subscribe(state => {
     showSidebar = state.showSidebar;
     showOutline = state.showOutline;
     if (state.outlineWidth !== outlineWidth) outlineWidth = state.outlineWidth;
+    // Rebuild the autosave ticker when its settings change (previously a
+    // toggle only took effect after an app restart). prev-value key guard
+    // keeps this hot subscriber a no-op on unrelated updates.
+    const autoSaveKey = `${state.autoSave}|${state.autoSaveMaxMinutes}|${state.autoSaveIdleMinutes}`;
+    if (autoSaveKey !== prevAutoSaveKey) {
+      const isFirstRun = prevAutoSaveKey === '';
+      prevAutoSaveKey = autoSaveKey;
+      if (!isFirstRun) setupAutoSave();
+    }
   });
 
   // Track previous values to skip redundant work in hot subscriber path.
@@ -735,7 +786,21 @@ ${tr('welcome.tip')}
   let prevFilePath: string | null | undefined = undefined;
   let prevEditorMode: EditorMode | null = null;
 
+  // Autosave activity tracking (plain vars, not $state — read by the ticker only).
+  // pendingEditsSince = when the first unsaved edit occurred (0 = none pending);
+  // lastEditAt = most recent edit. handleSave resets pendingEditsSince on success.
+  let pendingEditsSince = 0;
+  let lastEditAt = 0;
+  let prevAutosaveContent: string | null = null;
+
   const unsubEditor = editorStore.subscribe(state => {
+    // Autosave: record edit activity on dirty content changes. Unchanged
+    // content is usually the same string reference, so the !== check is cheap.
+    if (state.isDirty && state.content !== prevAutosaveContent) {
+      prevAutosaveContent = state.content;
+      lastEditAt = Date.now();
+      if (pendingEditsSince === 0) pendingEditsSince = lastEditAt;
+    }
     // Only recompute file name when path actually changes
     if (state.currentFilePath !== prevFilePath) {
       // v0.32.1 §F2: auto-exit DiffView on file switch
@@ -752,6 +817,11 @@ ${tr('welcome.tip')}
       currentFileName = state.currentFilePath
         ? getFileNameFromPath(state.currentFilePath)
         : $t('common.untitled');
+
+      // v1.21.0: version-history entry is only meaningful for KB documents;
+      // close a sheet left open for the previous file
+      versionHistoryAvailable = isVersionedPath(state.currentFilePath);
+      if (showVersionHistory) showVersionHistory = false;
 
       // Register with macOS Dock menu tracker
       if (isTauri && isMacOS) {
@@ -1072,22 +1142,31 @@ ${tr('welcome.tip')}
     if (isTauri) invoke('update_menu_labels', { labels });
   });
 
-  // Auto-save timer
+  // Auto-save (v1.21.0): dual-condition scheduler — force-save pending edits
+  // after autoSaveMaxMinutes, or once input pauses for autoSaveIdleMinutes.
+  // A coarse 15s ticker polls the pure shouldAutoSave() decision; edit
+  // timestamps are tracked in the editorStore subscriber above.
+  const AUTOSAVE_TICK_MS = 15_000;
   let autoSaveTimer: ReturnType<typeof setInterval> | null = null;
   // KB sync trash purge timer (v0.68.0) — purge entries older than 7 days
   let trashPurgeTimer: ReturnType<typeof setInterval> | null = null;
 
   function setupAutoSave() {
     if (autoSaveTimer) clearInterval(autoSaveTimer);
-    const settings = settingsStore.getState();
-    if (settings.autoSave) {
-      autoSaveTimer = setInterval(() => {
-        const editorState = editorStore.getState();
-        if (editorState.isDirty && editorState.currentFilePath) {
-          handleSave();
-        }
-      }, settings.autoSaveInterval);
-    }
+    if (!settingsStore.getState().autoSave) return;
+    autoSaveTimer = setInterval(() => {
+      const editorState = editorStore.getState();
+      if (!editorState.isDirty || !editorState.currentFilePath) return;
+      // Dirty without a tracked edit (e.g. dirty tab restored) — start the clock now
+      if (pendingEditsSince === 0) pendingEditsSince = Date.now();
+      const s = settingsStore.getState();
+      if (shouldAutoSave(Date.now(), pendingEditsSince, lastEditAt, {
+        maxMinutes: s.autoSaveMaxMinutes,
+        idleMinutes: s.autoSaveIdleMinutes,
+      })) {
+        handleSave(false, { auto: true });
+      }
+    }, AUTOSAVE_TICK_MS);
   }
 
   // ── MCP shortcut action handlers (v0.41.6) ─────────────────────────
@@ -3785,6 +3864,8 @@ ${tr('welcome.tip')}
     onModeChange={(mode) => { editorMode = mode; editorStore.setEditorMode(mode); }}
     onGitSync={gitBound ? handleGitSync : undefined}
     onShowConflicts={() => { conflictKbId = filesStore.getState().activeKnowledgeBaseId; }}
+    onToggleVersionHistory={toggleVersionHistory}
+    {versionHistoryAvailable}
     currentMode={editorMode}
     hideModeSwitcher={!!activeImageTab}
     aiPanelOpen={showAIPanel}
@@ -3816,6 +3897,20 @@ ${tr('welcome.tip')}
         binding={conflictKb.picoraBinding}
         conflicts={kbSyncStates.get(conflictKbId)?.pendingConflicts ?? []}
         onClose={() => { conflictKbId = null; }}
+      />
+    {/await}
+  {/if}
+{/if}
+
+{#if showVersionHistory}
+  {@const vhFilePath = editorStore.getState().currentFilePath}
+  {#if vhFilePath}
+    {#await import('$lib/components/VersionHistorySheet.svelte') then { default: VersionHistorySheet }}
+      <VersionHistorySheet
+        filePath={vhFilePath}
+        fileName={getFileNameFromPath(vhFilePath)}
+        onClose={() => { showVersionHistory = false; }}
+        onRestored={handleVersionRestored}
       />
     {/await}
   {/if}
