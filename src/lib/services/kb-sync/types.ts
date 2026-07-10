@@ -1,3 +1,29 @@
+// The generalized sync data contracts (manifest entries, diff result, line-
+// merge shapes, conflict entry) now live in @moraya/core/sync (extracted in
+// core v0.8.0 so PC / Web / Mobile share one contract). They are re-exported
+// here so every existing `./types` import keeps working unchanged. The
+// PC-specific orchestration types below (sync mode, KB bindings, sync reports,
+// batch protocol) stay local — they describe the desktop runSync engine, not
+// the shared merge core. `InitialAuthority` is intentionally re-exported from
+// `./diff` (not here) to preserve the original module layout.
+import type { ConflictEntry } from '@moraya/core/sync';
+
+export type {
+  ManifestEntry,
+  LocalManifestEntry,
+  LocalManifest,
+  RemoteManifest,
+  DiffAction,
+  DiffResult,
+  MergeChunk,
+  MergeResult,
+  ChunkPick,
+  ConflictEntry,
+  ConflictResolution,
+} from '@moraya/core/sync';
+
+// ── PC-specific orchestration types (desktop runSync engine) ─────────────────
+
 export type SyncMode = 'manual' | 'on-save' | 'interval' | 'on-startup-and-close';
 export type SyncScope = 'markdown-only' | 'markdown-plus-rules' | 'all-including-hidden';
 export type ConflictPolicy = 'prompt' | 'prefer-local' | 'prefer-remote';
@@ -53,13 +79,6 @@ export interface PicoraKb {
   updatedAt: string;
 }
 
-export interface ManifestEntry {
-  relativePath: string;
-  sourceHash: string;
-  sizeBytes: number;
-  updatedAt: string;
-}
-
 export type SyncOpType = 'upsert' | 'delete';
 
 export interface SyncOp {
@@ -73,86 +92,6 @@ export interface SyncOp {
 export interface SyncBatchResult {
   applied: string[];
   conflicts: ConflictEntry[];
-}
-
-export interface ConflictEntry {
-  relativePath: string;
-  localUpdatedAt: string;
-  remoteUpdatedAt: string;
-  localSizeBytes: number;
-  remoteSizeBytes: number;
-  localPreview: string;
-  remotePreview: string;
-  localHash: string;
-  remoteHash: string;
-  /** Full local file content (for line-level merge in the resolution UI). */
-  localContent: string;
-  /** Full remote file content. */
-  remoteContent: string;
-  /** Last-synced common ancestor content, or null if no merge base is known
-   *  (e.g. first sync, or file predates base-content caching). */
-  baseContent: string | null;
-}
-
-export type ConflictResolution = 'prefer-local' | 'prefer-remote' | 'keep-both';
-
-// ── Line-level merge (git-style) ─────────────────────────────────────
-
-/** One region of a line-level merge. `stable` regions are agreed-upon lines;
- *  `conflict` regions carry the diverging local/remote (and base) line arrays. */
-export interface MergeChunk {
-  type: 'stable' | 'conflict';
-  /** For stable chunks: the agreed lines. */
-  lines?: string[];
-  /** For conflict chunks: local side ("mine"). */
-  local?: string[];
-  /** For conflict chunks: remote side ("theirs"). */
-  remote?: string[];
-  /** For conflict chunks: base side (common ancestor); absent when no base. */
-  base?: string[];
-}
-
-export interface MergeResult {
-  chunks: MergeChunk[];
-  hasConflict: boolean;
-  /** Fully auto-merged text when `hasConflict` is false; otherwise null. */
-  mergedText: string | null;
-}
-
-/** Per-conflict-chunk pick in the resolution UI. */
-export type ChunkPick = 'local' | 'remote' | 'both-local-first' | 'both-remote-first';
-
-// Local manifest for three-way diff
-
-export interface LocalManifestEntry {
-  relativePath: string;
-  sourceHash: string;
-  sizeBytes: number;
-  mtime: number;
-}
-
-export type LocalManifest = Map<string, LocalManifestEntry>;
-export type RemoteManifest = Map<string, ManifestEntry>;
-
-// Diff result
-
-export type DiffAction =
-  | { kind: 'upload'; relativePath: string }
-  | { kind: 'download'; relativePath: string }
-  | { kind: 'delete-remote'; relativePath: string }
-  | { kind: 'delete-local'; relativePath: string }
-  | { kind: 'conflict'; relativePath: string }
-  | { kind: 'skip-large'; relativePath: string; sizeBytes: number }
-  | { kind: 'aligned' };
-
-export interface DiffResult {
-  actions: DiffAction[];
-  uploadPaths: string[];
-  downloadPaths: string[];
-  deleteRemotePaths: string[];
-  deleteLocalPaths: string[];
-  conflictPaths: string[];
-  skippedLarge: Array<{ relativePath: string; sizeBytes: number }>;
 }
 
 // Sync state per KB (for UI reactivity)
