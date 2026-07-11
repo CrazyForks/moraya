@@ -14,17 +14,7 @@
   } from '$lib/services/kb';
   import { EMBEDDING_MODELS, getMaxDimension } from '$lib/services/kb/types';
   import type { IndexStatus } from '$lib/services/kb/types';
-
-  import type { KnowledgeBase } from '$lib/stores/files-store';
   import { Select } from '$lib/components/ui';
-
-  let {
-    onOpenKBManager,
-  }: {
-    onOpenKBManager?: () => void;
-  } = $props();
-
-  let knowledgeBases = $state<KnowledgeBase[]>([]);
 
   const SOURCE_OPTIONS = [
     { value: 'online', labelKey: 'kb.online_model' },
@@ -104,7 +94,6 @@
   });
 
   const unsubFiles = filesStore.subscribe((s) => {
-    knowledgeBases = s.knowledgeBases;
     const kb = s.knowledgeBases.find((k) => k.id === s.activeKnowledgeBaseId);
     const newPath = kb?.path || '';
     const newName = kb?.name || '';
@@ -273,18 +262,8 @@
 </script>
 
 <div class="kb-settings gx-tab">
-  <!-- Knowledge Base Management -->
-  <div class="kb-manage-section">
-    <div class="kb-manage-row">
-      <button class="kb-manage-btn" onclick={() => onOpenKBManager?.()}>
-        {$t('knowledge_base.manage')}
-      </button>
-      <span class="kb-count">{knowledgeBases.length} {$t('knowledge_base.title').toLowerCase()}</span>
-    </div>
-  </div>
-
-  <div class="section-divider"></div>
-
+  <!-- Knowledge base management lives in the sidebar KB dropdown ("Manage
+       knowledge bases"); this tab only configures embedding/indexing. -->
   <div class="setting-group">
     <label class="setting-label">{$t('kb.provider')}</label>
     <Select class="setting-input" block value={embeddingSource} options={sourceOptions} onchange={handleSourceChange} />
@@ -497,38 +476,6 @@
 
 <style>
   /* Outer layout: .gx-tab on root. */
-
-  .kb-manage-section {
-    display: flex;
-    align-items: center;
-  }
-
-  .kb-manage-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .kb-manage-btn {
-    padding: 4px 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 5px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    font-size: var(--font-size-sm);
-    font-family: inherit;
-    cursor: pointer;
-    transition: background 0.1s ease, border-color 0.1s ease;
-  }
-
-  .kb-manage-btn:hover {
-    background: var(--bg-hover);
-  }
-
-  .kb-count {
-    font-size: var(--font-size-xs);
-    color: var(--text-secondary);
-  }
 
   .section-divider {
     height: 1px;

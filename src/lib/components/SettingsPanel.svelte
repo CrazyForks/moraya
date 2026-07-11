@@ -60,7 +60,6 @@
   let showLineNumbers = $state(false);
 
   let knowledgeBases = $state<KnowledgeBase[]>([]);
-  let showKBManager = $state(false);
 
   function openPicoraManualImport() {
     window.dispatchEvent(new CustomEvent('moraya:picora-open-manual'));
@@ -294,7 +293,7 @@
              bindings now live per-KB inside KbSyncSettings' "AI memory asset" panel). -->
         <div class="tab-pane merged-kb" class:active={activeTab === 'knowledge-base'}>
           {#if visitedTabs['knowledge-base']}
-            <KBIndexSettings onOpenKBManager={() => showKBManager = true} />
+            <KBIndexSettings />
             <KbSyncSettings />
           {/if}
         </div>
@@ -623,12 +622,6 @@
     </div><!-- panel-body -->
   </div><!-- settings-panel -->
 </div><!-- settings-overlay -->
-
-{#if showKBManager}
-  {#await import('./KnowledgeBaseManager.svelte') then { default: KnowledgeBaseManager }}
-    <KnowledgeBaseManager onClose={() => showKBManager = false} />
-  {/await}
-{/if}
 
 <style>
   .settings-overlay {

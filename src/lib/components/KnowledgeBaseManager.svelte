@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { filesStore, type KnowledgeBase } from '../stores/files-store';
   import { settingsStore } from '$lib/stores/settings-store';
   import { open, ask } from '@tauri-apps/plugin-dialog';
@@ -7,6 +7,7 @@
   import { checkGitInstalled, deleteGitToken } from '$lib/services/git';
   import GitBindDialog from './GitBindDialog.svelte';
   import KbPicoraBindDialog from './KbPicoraBindDialog.svelte';
+  import KbMemoryAssetPanel from './KbMemoryAssetPanel.svelte';
   import { kbSyncStore } from '$lib/services/kb-sync/sync-service';
   import type { KbSyncState } from '$lib/services/kb-sync/types';
 
@@ -20,9 +21,19 @@
   let bindingKb = $state<KnowledgeBase | null>(null);
   let picoraBindingKb = $state<KnowledgeBase | null>(null);
   let syncStates = $state<Map<string, KbSyncState>>(new Map());
+  // Which KB's inline "AI memory asset" panel is expanded (Picora-bound KBs).
+  let memoryExpandedId = $state<string | null>(null);
+  // Which KB's "…" overflow menu (rename / delete) is open.
+  let openMenuId = $state<string | null>(null);
 
   const unsubSync = kbSyncStore.subscribe(map => { syncStates = map; });
   onDestroy(() => { unsubSync(); });
+
+  function handleWindowClick(e: MouseEvent) {
+    if (!(e.target as HTMLElement).closest('.kb-more')) openMenuId = null;
+  }
+  onMount(() => { window.addEventListener('click', handleWindowClick); });
+  onDestroy(() => { window.removeEventListener('click', handleWindowClick); });
 
   // Top-level store subscription — do NOT wrap in $effect().
   // Svelte 5 $effect tracks reads in subscribe callbacks, causing infinite loops.
@@ -148,6 +159,11 @@
       {:else}
         <div class="kb-list">
           {#each knowledgeBases as kb}
+            {@const gitBound = !!kb.git}
+            {@const picoraBound = !!kb.picoraBinding}
+            {@const picoraBlocked = !picoraBound && gitBound}
+            {@const gitBlocked = !gitBound && picoraBound}
+            <div class="kb-row-wrap">
             <div class="kb-list-item">
               <div class="kb-list-info">
                 {#if editingId === kb.id}
@@ -178,8 +194,9 @@
               <div class="kb-list-actions">
                 <button
                   class="kb-action-btn kb-picora-btn {picoraButtonClass(kb)}"
-                  onclick={() => { picoraBindingKb = kb; }}
-                  title={kb.picoraBinding ? $t('kb_sync.card.settings') : $t('kb_sync.card.bind')}
+                  onclick={() => { if (!picoraBlocked) picoraBindingKb = kb; }}
+                  disabled={picoraBlocked}
+                  title={picoraBlocked ? $t('kb_sync.card.unbind_git_first') : (picoraBound ? $t('kb_sync.card.settings') : $t('kb_sync.card.bind'))}
                 >
                   <span class="picora-icon"><svg width="13" height="13" viewBox="8 6 16 20" fill="none" style="vertical-align:-1px;display:inline-block" aria-hidden="true"><path d="M9.5 7.5v17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="14" r="6.5" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="14" r="2.4" fill="currentColor"/></svg></span>{#if kb.picoraBinding}{@const _s = syncStates.get(kb.id)}{#if _s?.status === 'conflict'} ⚠{_s.conflictCount}{:else if _s?.status === 'error'} ✗{:else if _s?.status === 'syncing'}{:else} {kb.picoraBinding.picoraKbName.slice(0, 12)}{/if}{/if}
                 </button>
@@ -188,17 +205,36 @@
                     <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M4.28 3.22a.75.75 0 00-1.06 1.06L6.94 8l-3.72 3.72a.75.75 0 101.06 1.06L8 9.06l3.72 3.72a.75.75 0 101.06-1.06L9.06 8l3.72-3.72a.75.75 0 00-1.06-1.06L8 6.94 4.28 3.22z"/></svg>
                   </button>
                 {:else if gitAvailable}
-                  <button class="kb-action-btn" onclick={() => { bindingKb = kb; }} title={$t('git.bind')}>
+                  <button class="kb-action-btn" onclick={() => { if (!gitBlocked) bindingKb = kb; }} disabled={gitBlocked} title={gitBlocked ? $t('git.unbind_picora_first') : $t('git.bind')}>
                     <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm0 2.122a2.25 2.25 0 1 0-1.5 0v.878A2.25 2.25 0 0 0 5.75 8.5h1.5v2.128a2.251 2.251 0 1 0 1.5 0V8.5h1.5a2.25 2.25 0 0 0 2.25-2.25V5.372a2.25 2.25 0 1 0-1.5 0v.878a.75.75 0 0 1-.75.75h-4.5A.75.75 0 0 1 5 6.25v-.878zm3.75 7.378a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm3-8.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0z"/></svg>
                   </button>
                 {/if}
-                <button class="kb-action-btn" onclick={() => startRename(kb)} title={$t('knowledge_base.rename')}>
-                  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61zM11.189 3.5L3 11.689v.001l-.59 2.058 2.058-.59L12.657 4.97 11.19 3.5z"/></svg>
-                </button>
-                <button class="kb-action-btn kb-action-danger" onclick={() => removeKnowledgeBase(kb)} title={$t('knowledge_base.remove')}>
-                  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M6.5 1.75a.25.25 0 01.25-.25h2.5a.25.25 0 01.25.25V3h-3V1.75zm4.5 0V3h2.25a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM4.496 6.675a.75.75 0 10-1.492.15l.66 6.6A1.75 1.75 0 005.405 15h5.19a1.75 1.75 0 001.741-1.575l.66-6.6a.75.75 0 00-1.492-.15l-.66 6.6a.25.25 0 01-.249.225h-5.19a.25.25 0 01-.249-.225l-.66-6.6z"/></svg>
-                </button>
+                {#if picoraBound}
+                  <button
+                    class="kb-action-btn"
+                    class:active={memoryExpandedId === kb.id}
+                    onclick={() => memoryExpandedId = memoryExpandedId === kb.id ? null : kb.id}
+                    title={$t('kb_sync.settings.memory_asset')}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>
+                  </button>
+                {/if}
+                <div class="kb-more">
+                  <button class="kb-action-btn" onclick={(e) => { e.stopPropagation(); openMenuId = openMenuId === kb.id ? null : kb.id; }} title={$t('knowledge_base.more')}>
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>
+                  </button>
+                  {#if openMenuId === kb.id}
+                    <div class="kb-more-menu">
+                      <button class="kb-more-item" onclick={() => { openMenuId = null; startRename(kb); }}>{$t('knowledge_base.rename')}</button>
+                      <button class="kb-more-item danger" onclick={() => { openMenuId = null; removeKnowledgeBase(kb); }}>{$t('knowledge_base.remove')}</button>
+                    </div>
+                  {/if}
+                </div>
               </div>
+            </div>
+            {#if memoryExpandedId === kb.id}
+              <KbMemoryAssetPanel {kb} />
+            {/if}
             </div>
           {/each}
         </div>
@@ -372,7 +408,62 @@
     color: var(--text-primary);
   }
 
+  .kb-action-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .kb-action-btn.active {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
   .kb-action-danger:hover {
+    color: var(--color-danger, #ef4444);
+  }
+
+  .kb-row-wrap {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .kb-more {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .kb-more-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 2px;
+    min-width: 120px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    z-index: 20;
+    padding: 0.25rem;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .kb-more-item {
+    text-align: left;
+    padding: 0.4rem 0.6rem;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .kb-more-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .kb-more-item.danger {
     color: var(--color-danger, #ef4444);
   }
 
