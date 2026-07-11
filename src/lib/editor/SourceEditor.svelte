@@ -4,6 +4,8 @@
   import { editorStore } from '../stores/editor-store';
   import OutlinePanel, { type OutlineHeading } from '$lib/components/OutlinePanel.svelte';
   import katex from 'katex';
+  // Side-effect: \ce/\pu (mhchem) for chemistry in the source-mode preview.
+  import 'katex/contrib/mhchem';
 
   let {
     content = $bindable(''),

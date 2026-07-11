@@ -37,6 +37,8 @@
   import ImageAltEditor from './ImageAltEditor.svelte';
   import OutlinePanel, { type OutlineHeading } from '$lib/components/OutlinePanel.svelte';
   import katex from 'katex';
+  // Side-effect: \ce/\pu (mhchem) for chemistry in inline previews.
+  import 'katex/contrib/mhchem';
 
   const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'tiff', 'tif', 'avif']);
 
