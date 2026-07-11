@@ -652,10 +652,26 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div class="source-editor-outer" class:hide-scrollbar={hideScrollbar} class:has-outline={showOutline} bind:clientHeight={outerHeight} onclick={(e) => {
-  // Click on empty area below content → refocus textarea (prevent losing focus)
+  // Click on empty area around the content column. The textarea is
+  // content-height (auto-sized by the ghost div), so a short document leaves
+  // a tall empty region below it; that region is this wrapper, not the
+  // textarea, so the caret would otherwise stay put on focus.
   const target = e.target as HTMLElement;
   if (target.closest('.source-textarea') || target.closest('.outline-wrapper') || target.closest('.resize-handle')) return;
-  textareaEl?.focus();
+  if (!textareaEl) return;
+  // Only teleport the caret to the document end when the click is genuinely
+  // BELOW the textarea's content box (the short-doc empty-area case, matching
+  // the visual editor + Typora). A click in the side gutters (line numbers /
+  // blame, at a Y still within content) keeps a plain focus so it doesn't
+  // jump the caret unexpectedly.
+  const taRect = textareaEl.getBoundingClientRect();
+  if (e.clientY > taRect.bottom) {
+    const end = textareaEl.value.length;
+    textareaEl.focus();
+    textareaEl.setSelectionRange(end, end);
+  } else {
+    textareaEl.focus();
+  }
 }} onscroll={() => {
   if (!showOutline) return;
   if (scrollRafOutline) return;

@@ -3292,6 +3292,49 @@
     dragDropUnlisten?.();
     unsubSettings();
   });
+
+  /**
+   * Handle a click that landed on the empty gutter/padding around the
+   * content column (NOT inside `.ProseMirror`). Because `.ProseMirror` is a
+   * content-height block centered in a max-width reading column with large
+   * bottom padding, a short document leaves a tall empty region below the
+   * text. That region is consumer DOM (`.editor-root` / `.editor-content-area`),
+   * so the contenteditable never receives the click and the caret would
+   * otherwise stay wherever it last was.
+   *
+   * Behavior (matches Typora): map the click to the nearest document position.
+   * When the click is below all content — the common short-doc case —
+   * `posAtCoords` returns null and we fall back to the document end. A click
+   * in the side gutter at a given Y snaps to the nearest position on that line.
+   *
+   * NOTE: this is intentionally consumer-side, not in `@moraya/core`. Core's
+   * ProseMirror plugins only receive events on `view.dom` (the editable); an
+   * empty-area click never reaches it. The only core-shareable atom would be
+   * the 2-line "select-to-end" dispatch, which isn't worth a publish cycle.
+   * Source mode (SourceEditor.svelte) and split mode carry their own handling.
+   */
+  function focusEmptyAreaClick(clientX: number, clientY: number) {
+    if (!editor) return;
+    const view = editor.view;
+    try {
+      const coords = view.posAtCoords({ left: clientX, top: clientY });
+      let sel: import('prosemirror-state').Selection;
+      if (coords) {
+        // Click beside content — snap to nearest position on that line.
+        sel = TextSelection.near(view.state.doc.resolve(coords.pos));
+      } else {
+        // Click below all content — caret to document end. Bias -1 so
+        // `near` searches backward from the end into the last textblock.
+        sel = TextSelection.near(view.state.doc.resolve(view.state.doc.content.size), -1);
+      }
+      view.dispatch(view.state.tr.setSelection(sel).scrollIntoView());
+      view.focus();
+    } catch {
+      // Any coords/resolve failure: fall back to a plain focus so the click
+      // is never a total no-op.
+      view.focus();
+    }
+  }
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -3312,8 +3355,11 @@
   const target = e.target as HTMLElement;
   if (target.closest('.outline-wrapper')) return;
   if (target === e.currentTarget || target.classList.contains('editor-root') || target.classList.contains('editor-content-area')) {
-    const pm = editorEl?.querySelector('.ProseMirror') as HTMLElement | null;
-    if (pm) pm.focus();
+    // Empty gutter/padding below or beside the content column. Move the caret
+    // to the nearest position (doc end when the click is below all content),
+    // then focus — previously this only called pm.focus(), which restored the
+    // stale caret instead of following the click.
+    focusEmptyAreaClick(e.clientX, e.clientY);
   } else if (editor && !editor.view.hasFocus()) {
     // WKWebView may fail to focus contenteditable on click in empty docs
     editor.view.focus();

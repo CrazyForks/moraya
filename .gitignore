@@ -116,6 +116,8 @@ watermarks.local.json.ots
 /moraya-web
 /moraya-mobile
 /moraya-site
+/moraya-board
+/moraya-boardraw
 
 # Local sandbox — anything dropped here stays uncommitted.
 # (Historically held pre-publication @moraya/core tarballs; now empty.)
