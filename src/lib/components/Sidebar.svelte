@@ -1936,6 +1936,10 @@
     min-width: 0;
     padding: 0.4rem 0.5rem;
     border: none;
+    /* Kill the native macOS WKWebView push-button chrome (rounded grey box) —
+       without this the standalone "manage" button renders its native look. */
+    appearance: none;
+    -webkit-appearance: none;
     background: transparent;
     color: var(--text-primary);
     font-size: var(--font-size-sm);
@@ -1952,8 +1956,13 @@
   }
 
   .kb-dropdown-item.kb-manage {
+    width: 100%;
+    box-sizing: border-box;
     color: var(--text-secondary);
     font-size: var(--font-size-xs);
+  }
+  .kb-dropdown-item.kb-manage:hover {
+    background: var(--bg-hover);
   }
 
   .kb-check-spacer {

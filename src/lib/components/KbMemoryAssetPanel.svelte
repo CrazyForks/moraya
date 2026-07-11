@@ -166,6 +166,13 @@
     statusKey = null;
     if (!showAdd) { scanned = false; scannedDirs = []; customPath = ''; }
   }
+
+  /** Human-readable last-sync time. */
+  function formatSyncTime(iso: string): string {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString();
+  }
 </script>
 
 <div class="kb-memory-asset">
@@ -183,13 +190,38 @@
         {#each kbBindings as b (b.mountAs)}
           <div class="binding-row">
             <span class="binding-info">
-              <strong>{b.tool}</strong>
-              <code>{b.externalPath} → {b.mountAs}/</code>
+              <span class="binding-path">
+                <strong>{b.tool}</strong>
+                <code>{b.externalPath} → {b.mountAs}/</code>
+              </span>
+              <span class="binding-sync" class:synced={!!b.lastSyncedAt}>
+                {#if b.lastSyncedAt}
+                  ✓ {$t('kb_sync.memory_asset.last_synced', { time: formatSyncTime(b.lastSyncedAt) })}
+                {:else}
+                  {$t('kb_sync.memory_asset.never_synced')}
+                {/if}
+              </span>
             </span>
             <div class="binding-actions">
               <button class="ghost-btn" onclick={() => handleSync(b)} disabled={busy}>{$t('memory.sync_now')}</button>
               <button class="ghost-btn" onclick={() => handleRestore(b)} disabled={busy}>{$t('memory.restore')}</button>
-              <button class="cancel-btn" onclick={() => handleUnbind(b.mountAs)} disabled={busy}>{$t('memory.unbind')}</button>
+              <button
+                class="icon-btn"
+                onclick={() => handleUnbind(b.mountAs)}
+                disabled={busy}
+                title={$t('memory.unbind')}
+                aria-label={$t('memory.unbind')}
+              >
+                <!-- unlink: broken chain -->
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M18.84 12.25l1.72-1.71a4 4 0 0 0-5.66-5.66l-1.51 1.51"/>
+                  <path d="M5.17 11.75l-1.72 1.71a4 4 0 0 0 5.66 5.66l1.51-1.51"/>
+                  <line x1="8" y1="2" x2="8" y2="5"/>
+                  <line x1="2" y1="8" x2="5" y2="8"/>
+                  <line x1="16" y1="19" x2="16" y2="22"/>
+                  <line x1="19" y1="16" x2="22" y2="16"/>
+                </svg>
+              </button>
             </div>
           </div>
         {/each}
@@ -296,10 +328,29 @@
     gap: 0.75rem;
   }
   .cloud-only-row { opacity: 0.85; }
-  .binding-info { font-size: var(--font-size-sm); color: var(--text-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .binding-info { display: flex; flex-direction: column; gap: 0.15rem; font-size: var(--font-size-sm); color: var(--text-primary); min-width: 0; }
+  .binding-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .binding-info code { font-size: var(--font-size-xs); color: var(--text-secondary); }
   .binding-info .dim { font-size: var(--font-size-xs); color: var(--text-muted); }
+  .binding-sync { font-size: var(--font-size-xs); color: var(--text-muted); }
+  .binding-sync.synced { color: var(--color-success, #16a34a); }
   .binding-actions { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
+  .icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.7rem;
+    height: 1.7rem;
+    padding: 0;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+  .icon-btn:hover { color: var(--color-danger, #d9534f); border-color: var(--color-danger, #d9534f); }
+  .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .confirm-text { font-size: var(--font-size-xs); color: var(--text-secondary); }
   .empty-hint { margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); }
   .add-toggle {

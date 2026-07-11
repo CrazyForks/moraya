@@ -145,6 +145,16 @@ export async function syncBinding(binding: MemoryBinding): Promise<{ pushed: num
     await syncBatch(ctx.apiBase, ctx.apiKey, ctx.kbId, batch)
     pushed += batch.length
   }
+
+  // Record the successful backup time so the panel can show sync status.
+  try {
+    const syncedAt = new Date().toISOString()
+    const all = await store.getBindings()
+    await store.setBindings(
+      all.map(b => (b.mountAs === binding.mountAs ? { ...b, lastSyncedAt: syncedAt } : b)),
+    )
+  } catch { /* best-effort — a failed timestamp write must not fail the sync */ }
+
   return { pushed, skipped }
 }
 

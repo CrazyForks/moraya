@@ -75,6 +75,12 @@ export interface MemoryBinding {
    * unset, it syncs to the shared "AI Memory" KB (Tier 1).
    */
   kbId?: string
+  /**
+   * ISO 8601 timestamp of the last successful cloud backup of this binding.
+   * `undefined` = never synced. Recorded by `syncBinding()` and shown in the
+   * memory-asset panel so the user can tell whether/when it reached the cloud.
+   */
+  lastSyncedAt?: string
 }
 
 /** Build a binding from a profile. Hard-excludes are always taken from the profile. */
