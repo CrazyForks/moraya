@@ -14,6 +14,7 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import type { MediaResolver } from '@moraya/core'
+import { boardrawToSvg } from '@moraya/board'
 
 const blobCache = new Map<string, string>()
 
@@ -40,6 +41,18 @@ function buildBlob(bytes: Uint8Array, mime: string): string {
   return URL.createObjectURL(blob)
 }
 
+/**
+ * A `.boardraw` file is scene JSON, not a picture. Render it to an SVG via
+ * @moraya/board (rendering is board's job; this app just injects it into the
+ * editor's media pipeline) so `![](x.boardraw)` shows the board as an image.
+ */
+async function boardrawToImageUrl(bytes: Uint8Array): Promise<string> {
+  const text = new TextDecoder().decode(bytes)
+  const svg = boardrawToSvg(text)
+  if (!svg) return ''
+  return buildBlob(new TextEncoder().encode(svg), 'image/svg+xml')
+}
+
 export class TauriMediaResolver implements MediaResolver {
   async loadLocalImage(absolutePath: string): Promise<string> {
     const cached = blobCache.get(absolutePath)
@@ -47,6 +60,11 @@ export class TauriMediaResolver implements MediaResolver {
     try {
       const data = await invoke<number[]>('read_file_binary', { path: absolutePath })
       const bytes = new Uint8Array(data)
+      if (pathExt(absolutePath) === 'boardraw') {
+        const url = await boardrawToImageUrl(bytes)
+        if (url) blobCache.set(absolutePath, url)
+        return url
+      }
       const mime = IMAGE_MIME[pathExt(absolutePath)] || 'image/png'
       const url = buildBlob(bytes, mime)
       blobCache.set(absolutePath, url)

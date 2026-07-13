@@ -442,6 +442,19 @@ Moraya ships as a coordinated multi-product suite — each lives in its own repo
 | v0.96.0 | **Unified i18n at `@moraya/core/i18n`** — engine extracted (framework-agnostic, dynamic locale loading); 12 PC locales + Web's 2 merged into 12 unified bundles (3,210 keys each); CI gates for key-coverage + boundary isolation `[cross-product]` | ✅ |
 | v0.7.0 | **Shared memory serialization contract at `@moraya/core/memory`** — platform-agnostic MemoryDoc type + zero-dependency Markdown serialization aligned with Picora dot-directory hosting; single source of truth for web/mobile/PC memory sync; 21 memory i18n keys added across all 12 locales `[cross-product]` | ✅ |
 
+### Teaching Whiteboard — [`@moraya/board`](https://www.npmjs.com/package/@moraya/board) core + `boardraw` frontend
+
+| Version | Feature | Status |
+| --- | --- | --- |
+| v0.4.0 | **Board core + `.mboard.svg`** — scene-graph model (stroke/shape/text/formula/image), KaTeX+mhchem formulas as first-class editable elements, self-contained `.mboard.svg` (scene JSON embedded in SVG metadata), board ↔ Markdown extraction | ✅ |
+| v0.5.0 | **Element style & layering generalized to `@moraya/board/style`** — framework-free `ToolStyle` model, per-tool property descriptors, apply/read style, z-order reorder; consumed by boardraw's tool-driven, responsive **properties panel** (stroke/background/width/pressure/opacity/layers) shared across PC/web/app | ✅ |
+| v0.7.0 | **`.boardraw` JSON source format** — plain scene-JSON documents (`serializeBoardraw`/`parseBoardraw`, legacy self-contained-SVG fallback) with `boardrawToSvg` powering `![](x.boardraw)` picture rendering in Moraya markdown clients (PC/web/mobile via MediaResolver injection) | ✅ |
+| v0.8.0 | **Excalidraw-derived geometry (alignment P1)** — arrow↔shape binding (arrows follow moved shapes), groups, align/distribute, diamond shape, adapted from Excalidraw's MIT pure-TS core into `@moraya/board` (SVG architecture unchanged; ADR 003); full parity roadmap P1–P5 | ✅ |
+| v0.9.0 | **Hand-drawn style system (alignment P2)** — sloppiness (rough.js sketchy render as SVG paths), fill styles (hachure/cross-hatch/solid), line styles (dashed/dotted), rounded edges, per-end arrowheads; opt-in and backward-compatible (default clean) | ✅ |
+| v0.10.0 | **Container text labels (alignment P3a)** — double-click a shape to add a centered text label bound to it; the label follows the shape on move/resize and is deleted with it (`text.containerId`) | ✅ |
+| v0.11.0 | **Multi-point polylines (alignment P3b)** — click to add line/arrow vertices, finish on double-click/Enter; drag vertex handles to reshape; multi-point rendering (clean `<path>` + rough hand-drawn + dashed + per-end arrowheads), bbox/hit-test/binding over all vertices; two-point lines stay backward compatible | ✅ |
+| v0.12.0 | **Elbow arrows (alignment P3c)** — toggle an arrow to orthogonal (right-angle) routing via the properties panel; the Manhattan route auto-recomputes when a bound shape moves; completes the P3 linear-elements phase (container text + polylines + elbow) | ✅ |
+
 ### Homebrew Distribution
 
 | Version | Feature | Status |
