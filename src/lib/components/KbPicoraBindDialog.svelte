@@ -152,11 +152,19 @@
       onClose();
     } catch (e) {
       const msg = typeof e === 'string' ? e : (e instanceof Error ? e.message : 'Binding failed');
-      dryRunError = msg;
-      // Detect "create-kb" + (409 already exists / 422 validation / "exists" / "duplicate" / "conflict")
-      // → offer to switch to link-existing mode and refresh the remote KB list.
-      if (createMode && /create-kb/i.test(msg) && /exist|duplicat|conflict|already/i.test(msg)) {
+      // Cloud KB count hit the plan limit (server: "KB count N/N reached …").
+      // Show an actionable message instead of the raw English/JSON error, and
+      // steer the user toward linking an existing cloud KB.
+      if (createMode && /quota|reached|KB count|plan (limit|count)/i.test(msg)) {
+        dryRunError = $t('kb_sync.error.kb_quota_reached');
         conflictRecoverable = true;
+      } else {
+        dryRunError = msg;
+        // Detect "create-kb" + (409 already exists / 422 validation / "exists" / "duplicate" / "conflict")
+        // → offer to switch to link-existing mode and refresh the remote KB list.
+        if (createMode && /create-kb/i.test(msg) && /exist|duplicat|conflict|already/i.test(msg)) {
+          conflictRecoverable = true;
+        }
       }
     } finally {
       submitting = false;

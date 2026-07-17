@@ -167,6 +167,18 @@ fn sanitize_status(status: u16, ctx: &str) -> String {
     }
 }
 
+/// A 403 whose body describes a plan / quota / count limit is a PLAN-LIMIT
+/// rejection (e.g. "KB count 5/5 reached for current plan"), not an auth
+/// failure — the server reuses 403 for both. Detect it so the message reads as
+/// a quota problem the user can act on, not a misleading "authentication failed".
+fn body_is_plan_limit(body: &str) -> bool {
+    let b = body.to_lowercase();
+    b.contains("quota")
+        || b.contains("reached")
+        || b.contains("upgrade")
+        || (b.contains("plan") && (b.contains("limit") || b.contains("count")))
+}
+
 /// Build a user-facing error from a non-2xx Picora response. Strips Bearer
 /// tokens / sk_live prefixes from the body, caps body length at 200 chars,
 /// and falls back to the status-only message when the body is empty.
@@ -181,10 +193,12 @@ fn build_error_with_body(status: u16, body: &str, ctx: &str) -> String {
     let cleaned = cleaned
         .replace("sk_live_", "sk_***_")
         .replace("Bearer ", "Bearer ***");
+    // Reclassify plan-limit 403s as quota (402) so they don't read as auth failures.
+    let effective_status = if status == 403 && body_is_plan_limit(&cleaned) { 402 } else { status };
     if cleaned.is_empty() {
-        sanitize_status(status, ctx)
+        sanitize_status(effective_status, ctx)
     } else {
-        format!("{} — {}", sanitize_status(status, ctx), cleaned)
+        format!("{} — {}", sanitize_status(effective_status, ctx), cleaned)
     }
 }
 
@@ -1005,6 +1019,31 @@ fn sum_dir_sizes(dir: &Path, report: &mut PurgeReport) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plan_limit_403_is_reclassified_as_quota_not_auth() {
+        // The exact server body from the reported bug.
+        let body = r#"{"success":false,"error":"KB count 5/5 reached for current plan"}"#;
+        let msg = build_error_with_body(403, body, "create-kb");
+        assert!(msg.contains("quota") || msg.contains("upgrade"), "{msg}");
+        assert!(!msg.contains("authentication failed"), "{msg}");
+        assert!(msg.contains("create-kb"), "{msg}");
+    }
+
+    #[test]
+    fn genuine_403_still_reads_as_auth_failure() {
+        let msg = build_error_with_body(403, "Forbidden", "list-kbs");
+        assert!(msg.contains("authentication failed"), "{msg}");
+    }
+
+    #[test]
+    fn body_is_plan_limit_matches_quota_shapes() {
+        assert!(body_is_plan_limit("KB count 5/5 reached for current plan"));
+        assert!(body_is_plan_limit("quota exceeded"));
+        assert!(body_is_plan_limit("please upgrade your plan"));
+        assert!(!body_is_plan_limit("Forbidden"));
+        assert!(!body_is_plan_limit("invalid token"));
+    }
 
     #[test]
     fn validate_relative_path_accepts_valid() {
