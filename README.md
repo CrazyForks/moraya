@@ -464,6 +464,7 @@ Moraya ships as a coordinated multi-product suite — each lives in its own repo
 | v0.16.0 | **Object alignment guides (alignment P4c.2)** — `alignmentSnap` in `@moraya/board`: dragging an element snaps its edges/centers onto nearby elements and draws pink guide lines | ✅ |
 | v0.17.1–.2 | **Equal-gap distribution snapping (alignment P4c.3)** — `distributionSnap` in `@moraya/board`: dragging an element snaps it to equal spacing between two in-line neighbors *or* extends an existing equal-gap series, with orange gap indicators; completes the P4 smart-guide work (`@moraya/board` 0.17.0 also lands host-extensible custom elements) | ✅ |
 | v0.17.3 | **Frame content clipping** — `frameClipMap`/`frameClipDefs` in `@moraya/board`: content inside a frame is clipped to the frame's bounds in both the live canvas and `renderSceneToSvg`/export (Excalidraw-parity) | ✅ |
+| v0.18.0 | **Secondary tool panel alignment** — completes the Excalidraw per-tool "tool tree": independent start/end arrowheads, three-way line routing (straight/curved/elbow, curved via Catmull-Rom), container-label vertical align (top/middle/bottom), and a full line editor (double-click a segment to add a vertex, Alt-click to delete); freedraw "mode" already covered by the pen pressure toggle | ✅ |
 
 ### Homebrew Distribution
 
