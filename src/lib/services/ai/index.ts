@@ -23,6 +23,7 @@ export { mcpToolsToToolDefs } from './tool-bridge';
 export { INTERNAL_TOOLS, isInternalTool, executeInternalTool } from './internal-tools';
 export {
   AI_COMMANDS,
+  CHAT_PROVIDERS,
   DEFAULT_MODELS,
   REALTIME_VOICE_DEFAULT_MODELS,
   DEFAULT_IMAGE_MODELS,

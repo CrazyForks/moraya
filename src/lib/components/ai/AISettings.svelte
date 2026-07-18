@@ -2,6 +2,7 @@
   import {
     aiStore,
     testAIConnectionWithResolve,
+    CHAT_PROVIDERS,
     DEFAULT_MODELS,
     PROVIDER_BASE_URLS,
     REALTIME_VOICE_DEFAULT_MODELS,
@@ -56,19 +57,8 @@
   let chatTestTimer: ReturnType<typeof setTimeout> | null = null;
   let realtimeTestTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const CHAT_PROVIDERS: AIProvider[] = [
-    'claude',
-    'openai',
-    'gemini',
-    'deepseek',
-    'grok',
-    'mistral',
-    'glm',
-    'minimax',
-    'doubao',
-    'ollama',
-    'custom',
-  ];
+  // CHAT_PROVIDERS now comes from the shared @moraya/core/ai catalog
+  // (resolveCatalog desktop view) via $lib/services/ai — no local hardcoded list.
 
   const REALTIME_PROVIDERS: RealtimeVoiceProvider[] = [
     'gemini-live',

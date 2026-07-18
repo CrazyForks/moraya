@@ -15,7 +15,8 @@
     "test:e2e": "playwright test",
     "version:bump": "node scripts/bump-version.mjs",
     "prepare": "git config core.hooksPath .githooks || true",
-    "check:core-dep": "node scripts/check-core-dep.mjs"
+    "check:core-dep": "node scripts/check-core-dep.mjs",
+    "check:ai-catalog": "node scripts/check-ai-catalog.mjs"
   },
   "license": "Apache-2.0",
   "pnpm": {
@@ -24,7 +25,8 @@
     ]
   },
   "dependencies": {
-    "@moraya/core": "^0.8.1",
+    "@moraya/board": "file:./vendor/moraya-board-0.17.3.tgz",
+    "@moraya/core": "^0.10.0",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-dialog": "^2.6.0",
     "@tauri-apps/plugin-fs": "^2.4.5",
@@ -55,8 +57,7 @@
     "prosemirror-state": "^1.4.4",
     "prosemirror-tables": "^1.8.5",
     "prosemirror-view": "^1.41.6",
-    "qrcode": "^1.5.4",
-    "@moraya/board": "file:./vendor/moraya-board-0.12.0.tgz"
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

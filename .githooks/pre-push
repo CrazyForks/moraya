@@ -32,3 +32,10 @@ if ! node "$repo_root/scripts/check-core-dep.mjs" "$mode"; then
   echo "Override only if you know what you're doing: git push --no-verify"
   exit 1
 fi
+
+if ! node "$repo_root/scripts/check-ai-catalog.mjs"; then
+  echo ""
+  echo "pre-push blocked by check-ai-catalog."
+  echo "Override only if you know what you're doing: git push --no-verify"
+  exit 1
+fi
