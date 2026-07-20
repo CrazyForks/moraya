@@ -14,8 +14,6 @@
 use serde::{Deserialize, Serialize};
 use tauri::command;
 
-const DEFAULT_TIMEOUT_SECS: u64 = 30;
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PicoraUserInfo {
     pub email: String,
@@ -41,44 +39,16 @@ pub struct PicoraImportPayload {
     pub user: PicoraUserInfo,
 }
 
-fn http_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS))
-        .build()
-        .map_err(|_| "Failed to initialize HTTP client".to_string())
-}
+// HTTP client + error sanitization live in the `picora-sdk` crate now. Most
+// commands here build a `PicoraClient`; `upload_to_picora` (multipart POST to a
+// full image-endpoint URL, not base+path) and the OTT exchange use the crate's
+// lower-level `HttpCore` + `build_error_with_body` directly.
+use picora_sdk::error::build_error_with_body;
+use picora_sdk::http::HttpCore;
+use picora_sdk::PicoraClient;
 
-fn sanitize_status(status: u16) -> String {
-    match status {
-        401 | 403 => format!("Picora authentication failed ({})", status),
-        404 => "Picora resource not found (404)".to_string(),
-        408 | 504 => format!("Picora request timed out ({})", status),
-        410 => "Picora import token expired (410)".to_string(),
-        429 => "Picora rate limit exceeded (429)".to_string(),
-        500..=599 => format!("Picora service unavailable ({})", status),
-        _ => format!("Picora request failed ({})", status),
-    }
-}
-
-/// Sanitize a server error body for safe surfacing to the user. Strips Bearer
-/// tokens / sk_live prefixes, caps length at 200 chars, and falls back to the
-/// status-only message when the body is empty.
-fn build_error_with_body(status: u16, body: &str, ctx: &str) -> String {
-    let cleaned: String = body
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(200)
-        .collect();
-    let cleaned = cleaned
-        .replace("sk_live_", "sk_***_")
-        .replace("Bearer ", "Bearer ***");
-    if cleaned.is_empty() {
-        format!("[{}] {}", ctx, sanitize_status(status))
-    } else {
-        format!("[{}] {} — {}", ctx, sanitize_status(status), cleaned)
-    }
+fn client(api_base: &str, api_key: &str) -> Result<PicoraClient, String> {
+    PicoraClient::new(api_base, api_key).map_err(|e| e.to_string())
 }
 
 /// Upload a single image to Picora. Returns the public URL of the uploaded asset.
@@ -97,14 +67,17 @@ pub async fn upload_to_picora(
         return Err("Picora API key is empty".to_string());
     }
 
-    let client = http_client()?;
+    // Multipart POST to a FULL image-endpoint URL (not base+path), so this uses
+    // the crate's shared HTTP client directly rather than PicoraClient's path join.
+    let http = HttpCore::new().map_err(|e| e.to_string())?;
     let part = reqwest::multipart::Part::bytes(file_bytes)
         .file_name(filename)
         .mime_str(&mime_type)
         .map_err(|_| "Invalid image MIME type".to_string())?;
     let form = reqwest::multipart::Form::new().part("file", part);
 
-    let res = client
+    let res = http
+        .reqwest()
         .post(&api_url)
         .bearer_auth(&api_key)
         .multipart(form)
@@ -136,32 +109,12 @@ pub async fn verify_picora_token(
     api_base: String,
     api_key: String,
 ) -> Result<PicoraUserInfo, String> {
-    if api_base.trim().is_empty() {
-        return Err("Picora endpoint is empty".to_string());
-    }
-    if api_key.trim().is_empty() {
-        return Err("Picora API key is empty".to_string());
-    }
-
-    let url = format!("{}/v1/user/me", api_base.trim_end_matches('/'));
-    let client = http_client()?;
-    let res = client
-        .get(&url)
-        .bearer_auth(&api_key)
-        .send()
+    let c = client(&api_base, &api_key)?;
+    let body: serde_json::Value = c
+        .http()
+        .send_json(c.get("/v1/user/me"), "verify")
         .await
-        .map_err(|_| "Network error contacting Picora".to_string())?;
-
-    if !res.status().is_success() {
-        let status = res.status().as_u16();
-        let body = res.text().await.unwrap_or_default();
-        return Err(build_error_with_body(status, &body, "verify"));
-    }
-
-    let body: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|_| "Picora returned invalid JSON".to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let data = body
         .get("data")
@@ -199,29 +152,12 @@ pub async fn test_picora_connection(
     api_base: String,
     api_key: String,
 ) -> Result<(), String> {
-    if api_base.trim().is_empty() {
-        return Err("Picora endpoint is empty".to_string());
-    }
-    if api_key.trim().is_empty() {
-        return Err("Picora API key is empty".to_string());
-    }
-
-    let url = format!("{}/v1/auth/verify", api_base.trim_end_matches('/'));
-    let client = http_client()?;
-    let res = client
-        .get(&url)
-        .bearer_auth(&api_key)
-        .send()
+    let c = client(&api_base, &api_key)?;
+    c.http()
+        .send_text(c.get("/v1/auth/verify"), "test")
         .await
-        .map_err(|_| "Network error contacting Picora".to_string())?;
-
-    if !res.status().is_success() {
-        let status = res.status().as_u16();
-        let body = res.text().await.unwrap_or_default();
-        return Err(build_error_with_body(status, &body, "test"));
-    }
-
-    Ok(())
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// Exchange a one-time export token for the full Picora import payload (V2 flow).
@@ -237,12 +173,12 @@ pub async fn exchange_picora_export_token(
         return Err("Picora import token is empty".to_string());
     }
 
-    let url = format!(
-        "{}/v1/auth/exchange-export-token",
-        api_base.trim_end_matches('/')
-    );
-    let client = http_client()?;
-    let res = client
+    // No bearer here — the one-time token is carried in the body — so this uses
+    // the crate's shared HTTP client directly (PicoraClient requires a token).
+    let http = HttpCore::new().map_err(|e| e.to_string())?;
+    let url = format!("{}/v1/auth/exchange-export-token", api_base.trim_end_matches('/'));
+    let res = http
+        .reqwest()
         .post(&url)
         .json(&serde_json::json!({ "ott": ott }))
         .send()
@@ -250,7 +186,9 @@ pub async fn exchange_picora_export_token(
         .map_err(|_| "Network error contacting Picora".to_string())?;
 
     if !res.status().is_success() {
-        return Err(sanitize_status(res.status().as_u16()));
+        let status = res.status().as_u16();
+        let body = res.text().await.unwrap_or_default();
+        return Err(build_error_with_body(status, &body, "exchange"));
     }
 
     let body: serde_json::Value = res
@@ -309,24 +247,7 @@ pub async fn exchange_picora_export_token(
 mod tests {
     use super::*;
 
-    #[test]
-    fn sanitize_status_redacts_credentials() {
-        for code in [401u16, 403, 410, 429, 500] {
-            let msg = sanitize_status(code);
-            assert!(!msg.contains("sk_live_"), "must not leak api key marker");
-            assert!(!msg.contains("ott_"), "must not leak ott marker");
-            assert!(!msg.contains("Bearer"), "must not leak header value");
-            assert!(!msg.is_empty());
-        }
-    }
-
-    #[test]
-    fn sanitize_status_known_codes() {
-        assert!(sanitize_status(401).contains("authentication"));
-        assert!(sanitize_status(410).contains("expired"));
-        assert!(sanitize_status(429).contains("rate"));
-        assert!(sanitize_status(503).contains("unavailable"));
-    }
+    // Status sanitization (incl. 410-expired) is tested in the picora-sdk crate.
 
     #[test]
     fn upload_payload_structure_serializes() {

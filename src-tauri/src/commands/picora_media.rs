@@ -10,47 +10,14 @@
  * All HTTP calls use Bearer auth; errors are sanitized before returning.
  */
 
+use picora_sdk::{PicoraClient, PicoraError};
 use serde::{Deserialize, Serialize};
 use tauri::command;
 
-const DEFAULT_TIMEOUT_SECS: u64 = 20;
-
-// ── HTTP helpers ──────────────────────────────────────────────────────
-
-fn http_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS))
-        .build()
-        .map_err(|_| "Failed to initialize HTTP client".to_string())
-}
-
-fn sanitize_status(status: u16) -> String {
-    match status {
-        401 | 403 => format!("Picora authentication failed ({})", status),
-        404 => "Picora resource not found (404)".to_string(),
-        408 | 504 => format!("Picora request timed out ({})", status),
-        429 => "Picora rate limit exceeded (429)".to_string(),
-        500..=599 => format!("Picora service unavailable ({})", status),
-        _ => format!("Picora request failed ({})", status),
-    }
-}
-
-fn build_error(status: u16, body: &str, ctx: &str) -> String {
-    let cleaned: String = body
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(200)
-        .collect();
-    let cleaned = cleaned
-        .replace("sk_live_", "sk_***_")
-        .replace("Bearer ", "Bearer ***");
-    if cleaned.is_empty() {
-        format!("[{}] {}", ctx, sanitize_status(status))
-    } else {
-        format!("[{}] {} — {}", ctx, sanitize_status(status), cleaned)
-    }
+// HTTP client + error sanitization come from the `picora-sdk` crate now; the
+// bespoke media response parsing (unified list + typed-endpoint fallbacks) stays.
+fn client(api_base: &str, api_key: &str) -> Result<PicoraClient, String> {
+    PicoraClient::new(api_base, api_key).map_err(|e| e.to_string())
 }
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -133,28 +100,17 @@ pub async fn picora_media_list(
     kb_id: Option<String>,
     status_filter: Option<String>,
 ) -> Result<MediaListResponse, String> {
-    if api_base.trim().is_empty() {
-        return Err("Picora endpoint is empty".to_string());
-    }
-    if api_key.trim().is_empty() {
-        return Err("Picora API key is empty".to_string());
-    }
     if !["image", "audio", "video"].contains(&media_type.as_str()) {
         return Err(format!("Invalid media_type: {}", media_type));
     }
     let limit = limit.clamp(1, 50);
 
-    let base = api_base.trim_end_matches('/');
-    let url = format!("{}/v1/media", base);
-
-    let client = http_client()?;
-    let mut req = client
-        .get(&url)
-        .bearer_auth(&api_key)
+    let c = client(&api_base, &api_key)?;
+    let mut req = c
+        .get("/v1/media")
         .query(&[("type", media_type.as_str()), ("limit", &limit.to_string())]);
-
-    if let Some(c) = &cursor {
-        req = req.query(&[("cursor", c.as_str())]);
+    if let Some(cur) = &cursor {
+        req = req.query(&[("cursor", cur.as_str())]);
     }
     if let Some(q_val) = &q {
         if !q_val.is_empty() {
@@ -173,18 +129,7 @@ pub async fn picora_media_list(
         }
     }
 
-    let res = req.send().await.map_err(|_| "Network error contacting Picora".to_string())?;
-
-    if !res.status().is_success() {
-        let status = res.status().as_u16();
-        let body = res.text().await.unwrap_or_default();
-        return Err(build_error(status, &body, "media_list"));
-    }
-
-    let body: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|_| "Picora returned invalid JSON".to_string())?;
+    let body: serde_json::Value = c.http().send_json(req, "media_list").await.map_err(|e| e.to_string())?;
 
     let data = body.get("data").unwrap_or(&body);
     // Picora `/v1/media` returns one of:
@@ -231,12 +176,6 @@ pub async fn picora_media_detail(
     media_type: String,
     id: String,
 ) -> Result<UnifiedMediaItem, String> {
-    if api_base.trim().is_empty() {
-        return Err("Picora endpoint is empty".to_string());
-    }
-    if api_key.trim().is_empty() {
-        return Err("Picora API key is empty".to_string());
-    }
     let path = match media_type.as_str() {
         "image" => "images",
         "audio" => "audio",
@@ -247,41 +186,18 @@ pub async fn picora_media_detail(
         return Err("Media ID is empty".to_string());
     }
 
-    let base = api_base.trim_end_matches('/');
-    let unified = format!("{}/v1/media/{}", base, id.trim());
-    let client = http_client()?;
-
-    // 1) Unified endpoint first.
-    let res = client
-        .get(&unified)
-        .bearer_auth(&api_key)
-        .send()
-        .await
-        .map_err(|_| "Network error contacting Picora".to_string())?;
-
-    // 2) Fallback to type-specific path for older Picora (< v0.18.4) on 404.
-    let res = if res.status().as_u16() == 404 {
-        let typed = format!("{}/v1/{}/{}", base, path, id.trim());
-        client
-            .get(&typed)
-            .bearer_auth(&api_key)
-            .send()
-            .await
-            .map_err(|_| "Network error contacting Picora".to_string())?
-    } else {
-        res
+    let c = client(&api_base, &api_key)?;
+    // 1) Unified endpoint first; 2) fall back to the type-specific path only on
+    // a 404 (older Picora < v0.18.4).
+    let unified = format!("/v1/media/{}", id.trim());
+    let body: serde_json::Value = match c.http().send_json::<serde_json::Value>(c.get(&unified), "media_detail").await {
+        Ok(v) => v,
+        Err(PicoraError::Api { status: 404, .. }) => {
+            let typed = format!("/v1/{}/{}", path, id.trim());
+            c.http().send_json(c.get(&typed), "media_detail").await.map_err(|e| e.to_string())?
+        }
+        Err(e) => return Err(e.to_string()),
     };
-
-    if !res.status().is_success() {
-        let status = res.status().as_u16();
-        let body = res.text().await.unwrap_or_default();
-        return Err(build_error(status, &body, "media_detail"));
-    }
-
-    let body: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|_| "Picora returned invalid JSON".to_string())?;
 
     let data = body.get("data").unwrap_or(&body);
     let mut item: UnifiedMediaItem = serde_json::from_value(data.clone())
@@ -345,37 +261,13 @@ pub async fn picora_video_status(
     api_key: String,
     id: String,
 ) -> Result<VideoStatus, String> {
-    if api_base.trim().is_empty() {
-        return Err("Picora endpoint is empty".to_string());
-    }
-    if api_key.trim().is_empty() {
-        return Err("Picora API key is empty".to_string());
-    }
     if id.trim().is_empty() {
         return Err("Video ID is empty".to_string());
     }
 
-    let base = api_base.trim_end_matches('/');
-    let url = format!("{}/v1/videos/{}/status", base, id.trim());
-    let client = http_client()?;
-
-    let res = client
-        .get(&url)
-        .bearer_auth(&api_key)
-        .send()
-        .await
-        .map_err(|_| "Network error contacting Picora".to_string())?;
-
-    if !res.status().is_success() {
-        let status = res.status().as_u16();
-        let body = res.text().await.unwrap_or_default();
-        return Err(build_error(status, &body, "video_status"));
-    }
-
-    let body: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|_| "Picora returned invalid JSON".to_string())?;
+    let c = client(&api_base, &api_key)?;
+    let url = format!("/v1/videos/{}/status", id.trim());
+    let body: serde_json::Value = c.http().send_json(c.get(&url), "video_status").await.map_err(|e| e.to_string())?;
 
     let data = body.get("data").unwrap_or(&body);
     serde_json::from_value(data.clone())
@@ -391,12 +283,6 @@ pub async fn picora_media_update_visibility(
     id: String,
     is_public: bool,
 ) -> Result<(), String> {
-    if api_base.trim().is_empty() {
-        return Err("Picora endpoint is empty".to_string());
-    }
-    if api_key.trim().is_empty() {
-        return Err("Picora API key is empty".to_string());
-    }
     let path = match media_type.as_str() {
         "image" => "images",
         "audio" => "audio",
@@ -407,26 +293,10 @@ pub async fn picora_media_update_visibility(
         return Err("Media ID is empty".to_string());
     }
 
-    let base = api_base.trim_end_matches('/');
-    let url = format!("{}/v1/{}/{}", base, path, id.trim());
-    let client = http_client()?;
-
-    let body = serde_json::json!({ "isPublic": is_public });
-    let res = client
-        .patch(&url)
-        .bearer_auth(&api_key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|_| "Network error contacting Picora".to_string())?;
-
-    if !res.status().is_success() {
-        let status = res.status().as_u16();
-        let body_text = res.text().await.unwrap_or_default();
-        return Err(build_error(status, &body_text, "media_visibility"));
-    }
-
-    Ok(())
+    let c = client(&api_base, &api_key)?;
+    let url = format!("/v1/{}/{}", path, id.trim());
+    let req = c.patch(&url).json(&serde_json::json!({ "isPublic": is_public }));
+    c.http().send_text(req, "media_visibility").await.map(|_| ()).map_err(|e| e.to_string())
 }
 
 /// Probe Picora server capabilities via GET /v1/health.
@@ -439,11 +309,12 @@ pub async fn picora_server_caps(
         return Err("Picora endpoint is empty".to_string());
     }
 
-    let base = api_base.trim_end_matches('/');
-    let url = format!("{}/v1/health", base);
-    let client = http_client()?;
-
-    let mut req = client.get(&url);
+    // A probe with special semantics — optional auth, and any failure yields
+    // `media_listing_v2: false` rather than an error — so it uses the crate's
+    // shared HTTP client directly instead of the (token-requiring) PicoraClient.
+    let http = picora_sdk::http::HttpCore::new().map_err(|e| e.to_string())?;
+    let url = format!("{}/v1/health", api_base.trim_end_matches('/'));
+    let mut req = http.reqwest().get(&url);
     if !api_key.is_empty() {
         req = req.bearer_auth(&api_key);
     }
@@ -470,46 +341,6 @@ pub async fn picora_server_caps(
 
 // ── Unit tests ────────────────────────────────────────────────────────
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sanitize_status_401() {
-        let msg = sanitize_status(401);
-        assert!(msg.contains("authentication failed"));
-        assert!(!msg.contains("sk_live"));
-    }
-
-    #[test]
-    fn sanitize_status_404() {
-        assert!(sanitize_status(404).contains("not found"));
-    }
-
-    #[test]
-    fn sanitize_status_500() {
-        assert!(sanitize_status(500).contains("unavailable"));
-    }
-
-    #[test]
-    fn build_error_strips_bearer_token() {
-        let msg = build_error(401, "Bearer sk_live_secrettoken invalid", "test");
-        assert!(!msg.contains("sk_live_secrettoken"));
-        assert!(msg.contains("sk_***_"));
-    }
-
-    #[test]
-    fn build_error_truncates_long_body() {
-        let long_body = "x".repeat(300);
-        let msg = build_error(500, &long_body, "ctx");
-        // Should not exceed sane length (200 char body cap + prefix)
-        assert!(msg.len() < 350);
-    }
-
-    #[test]
-    fn build_error_fallback_on_empty_body() {
-        let msg = build_error(403, "", "test");
-        assert!(msg.contains("authentication failed"));
-        assert!(msg.contains("[test]"));
-    }
-}
+// Status sanitization + credential-stripping error building are tested in the
+// picora-sdk crate now; this file's remaining logic is the bespoke media
+// response parsing exercised via the live commands.

@@ -32,7 +32,6 @@ use super::util::current_epoch_ms;
 const DEFAULT_API_BASE: &str = "https://api.picora.me";
 const PICORA_DESKTOP_CLIENT_ID: &str = "picora_desktop_official_moraya";
 const DEFAULT_SCOPE: &str = "image:write video:write kb:write";
-const REQUEST_TIMEOUT_SECS: u64 = 30;
 const POLL_DEFAULT_INTERVAL_SECS: u64 = 5;
 const REFRESH_SLACK_SECS: u64 = 60;
 
@@ -151,11 +150,14 @@ fn forget_interval(device_code: &str) {
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
+/// Reqwest client for the OAuth device-flow requests. Reuses the `picora-sdk`
+/// crate's shared HTTP client builder (the last of the copy-pasted
+/// `http_client` helpers) — the OAuth request/response handling stays here
+/// because it follows RFC 8628 semantics, not the generic `build_error` path.
 fn build_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
-        .build()
-        .map_err(|_| "Failed to create HTTP client".to_string())
+    picora_sdk::http::HttpCore::new()
+        .map(|h| h.reqwest().clone())
+        .map_err(|e| e.to_string())
 }
 
 pub fn token_key(account_id: &str) -> String {

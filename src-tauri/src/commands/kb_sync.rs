@@ -17,91 +17,18 @@ use std::path::{Path, PathBuf};
 use tauri::command;
 
 use super::util::current_epoch_ms;
+// Picora HTTP + KB types come from the shared crate now (the http_client /
+// build_error / api_url helpers this file used to carry live there). The local
+// `validate_relative_path` + fs-scan/trash commands below are Moraya-desktop
+// specific and stay here.
+use picora_sdk::{Kb, ManifestEntry, PicoraClient, SyncBatchResult, SyncOp};
 
-const DEFAULT_TIMEOUT_SECS: u64 = 60;
 const MAX_RELATIVE_PATH_LEN: usize = 1024;
 
 // ── Types ──────────────────────────────────────────────────────────────
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct PicoraKb {
-    pub id: String,
-    pub name: String,
-    pub slug: String,
-    pub description: Option<String>,
-    #[serde(rename = "docCount")]
-    pub doc_count: i64,
-    #[serde(rename = "sizeBytes")]
-    pub size_bytes: i64,
-    #[serde(rename = "createdAt")]
-    pub created_at: String,
-    #[serde(rename = "updatedAt")]
-    pub updated_at: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ManifestEntry {
-    #[serde(rename = "relativePath")]
-    pub relative_path: String,
-    #[serde(rename = "sourceHash")]
-    pub source_hash: String,
-    #[serde(rename = "sizeBytes")]
-    pub size_bytes: i64,
-    #[serde(rename = "updatedAt")]
-    pub updated_at: String,
-    // v1.22.0: server-side document id — the key into the doc-revisions API
-    // (GET /v1/docs/{id}/revisions). The server has always returned it in the
-    // manifest; older struct versions silently dropped it at deserialize.
-    #[serde(rename = "docId", skip_serializing_if = "Option::is_none")]
-    pub doc_id: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct SyncOp {
-    pub op: String, // "upsert" | "delete"
-    #[serde(rename = "relativePath")]
-    pub relative_path: String,
-    // Optional fields use `skip_serializing_if` so missing values are
-    // omitted from the wire format entirely. Picora's validator rejects
-    // `null` for these fields ("Expected string, received null") — only
-    // "present string" or "absent" are accepted. In particular:
-    //   • `delete` ops carry only op + relativePath
-    //   • first-sync `upsert` ops have no baseUpdatedAt
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<String>,
-    #[serde(rename = "sourceHash", skip_serializing_if = "Option::is_none")]
-    pub source_hash: Option<String>,
-    #[serde(rename = "baseUpdatedAt", skip_serializing_if = "Option::is_none")]
-    pub base_updated_at: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ConflictEntry {
-    #[serde(rename = "relativePath")]
-    pub relative_path: String,
-    #[serde(rename = "localUpdatedAt")]
-    pub local_updated_at: String,
-    #[serde(rename = "remoteUpdatedAt")]
-    pub remote_updated_at: String,
-    #[serde(rename = "localSizeBytes")]
-    pub local_size_bytes: i64,
-    #[serde(rename = "remoteSizeBytes")]
-    pub remote_size_bytes: i64,
-    #[serde(rename = "localPreview")]
-    pub local_preview: String,
-    #[serde(rename = "remotePreview")]
-    pub remote_preview: String,
-    #[serde(rename = "localHash")]
-    pub local_hash: String,
-    #[serde(rename = "remoteHash")]
-    pub remote_hash: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct SyncBatchResult {
-    pub applied: Vec<String>,
-    pub conflicts: Vec<ConflictEntry>,
-}
+// KB/sync types (PicoraKb→Kb, ManifestEntry, SyncOp, ConflictEntry,
+// SyncBatchResult) now come from the `picora-sdk` crate. Only the local
+// filesystem-scan type is defined here.
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileScanEntry {
@@ -144,111 +71,23 @@ pub fn validate_relative_path(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-// ── HTTP client ───────────────────────────────────────────────────────
-
-fn http_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS))
-        .build()
-        .map_err(|_| "Failed to initialize HTTP client".to_string())
-}
-
-fn sanitize_status(status: u16, ctx: &str) -> String {
-    match status {
-        401 | 403 => format!("Picora authentication failed ({ctx})"),
-        402 => format!("Picora quota exceeded — upgrade your plan ({ctx})"),
-        404 => format!("Picora resource not found ({ctx})"),
-        408 | 504 => format!("Picora request timed out ({ctx})"),
-        409 => format!("Picora resource already exists ({ctx})"),
-        422 => format!("Picora rejected request — validation failed ({ctx})"),
-        429 => format!("Picora rate limit exceeded ({ctx})"),
-        500..=599 => format!("Picora service unavailable ({ctx})"),
-        _ => format!("Picora request failed with status {status} ({ctx})"),
-    }
-}
-
-/// A 403 whose body describes a plan / quota / count limit is a PLAN-LIMIT
-/// rejection (e.g. "KB count 5/5 reached for current plan"), not an auth
-/// failure — the server reuses 403 for both. Detect it so the message reads as
-/// a quota problem the user can act on, not a misleading "authentication failed".
-fn body_is_plan_limit(body: &str) -> bool {
-    let b = body.to_lowercase();
-    b.contains("quota")
-        || b.contains("reached")
-        || b.contains("upgrade")
-        || (b.contains("plan") && (b.contains("limit") || b.contains("count")))
-}
-
-/// Build a user-facing error from a non-2xx Picora response. Strips Bearer
-/// tokens / sk_live prefixes from the body, caps body length at 200 chars,
-/// and falls back to the status-only message when the body is empty.
-fn build_error_with_body(status: u16, body: &str, ctx: &str) -> String {
-    let cleaned: String = body
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(200)
-        .collect();
-    let cleaned = cleaned
-        .replace("sk_live_", "sk_***_")
-        .replace("Bearer ", "Bearer ***");
-    // Reclassify plan-limit 403s as quota (402) so they don't read as auth failures.
-    let effective_status = if status == 403 && body_is_plan_limit(&cleaned) { 402 } else { status };
-    if cleaned.is_empty() {
-        sanitize_status(effective_status, ctx)
-    } else {
-        format!("{} — {}", sanitize_status(effective_status, ctx), cleaned)
-    }
-}
-
-fn api_url(api_base: &str, path: &str) -> String {
-    format!("{}/{}", api_base.trim_end_matches('/'), path.trim_start_matches('/'))
-}
-
 // ── Commands ──────────────────────────────────────────────────────────
+//
+// The Picora KB commands below are thin wrappers over `picora-sdk`
+// (`PicoraClient`), which owns the HTTP client, error sanitization (including
+// the plan-limit-403→quota reclassification), URL joining, and path/nanoid
+// validation that used to be duplicated here. `.map_err(|e| e.to_string())`
+// yields the same user-facing strings the frontend already renders.
+
+/// Build a client from the frontend-supplied credentials.
+fn kb_client(api_base: &str, api_key: &str) -> Result<PicoraClient, String> {
+    PicoraClient::new(api_base, api_key).map_err(|e| e.to_string())
+}
 
 /// List all Knowledge Bases for the authenticated user.
 #[command]
-pub async fn picora_kb_list(api_base: String, api_key: String) -> Result<Vec<PicoraKb>, String> {
-    if api_base.trim().is_empty() || api_key.trim().is_empty() {
-        return Err("Picora endpoint or API key is empty".to_string());
-    }
-
-    let client = http_client()?;
-    let url = api_url(&api_base, "/v1/kbs");
-
-    let res = client
-        .get(&url)
-        .bearer_auth(&api_key)
-        .send()
-        .await
-        .map_err(|_| "Network error contacting Picora".to_string())?;
-
-    if !res.status().is_success() {
-        return Err(sanitize_status(res.status().as_u16(), "list-kbs"));
-    }
-
-    let body: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|_| "Picora returned invalid JSON".to_string())?;
-
-    // Picora `/v1/kbs` may return any of three shapes:
-    //   1. `[...]`                                  (bare array)
-    //   2. `{ "data": [...] }`                      (legacy wrapper)
-    //   3. `{ "data": { "items": [...], ... } }`    (paginated wrapper, v0.17.1+)
-    // Match the same defensive parsing that `picora_media_list` uses so the
-    // KB picker doesn't break when the server-side response shape evolves.
-    let data = body.get("data").unwrap_or(&body);
-    let items_val = data
-        .get("items")
-        .cloned()
-        .or_else(|| data.as_array().map(|arr| serde_json::Value::Array(arr.clone())))
-        .unwrap_or(serde_json::Value::Array(vec![]));
-
-    serde_json::from_value::<Vec<PicoraKb>>(items_val)
-        .map_err(|e| format!("Failed to parse Picora KB list: {}", e))
+pub async fn picora_kb_list(api_base: String, api_key: String) -> Result<Vec<Kb>, String> {
+    kb_client(&api_base, &api_key)?.kb_list().await.map_err(|e| e.to_string())
 }
 
 /// Create a new Knowledge Base on Picora.
@@ -258,49 +97,15 @@ pub async fn picora_kb_create(
     api_key: String,
     name: String,
     slug: Option<String>,
-) -> Result<PicoraKb, String> {
-    if api_base.trim().is_empty() || api_key.trim().is_empty() {
-        return Err("Picora endpoint or API key is empty".to_string());
-    }
+) -> Result<Kb, String> {
     if name.trim().is_empty() {
         return Err("KB name must not be empty".to_string());
     }
-
-    let client = http_client()?;
-    let url = api_url(&api_base, "/v1/kbs");
-
-    let mut payload = serde_json::json!({ "name": name.trim() });
-    if let Some(s) = slug {
-        if !s.trim().is_empty() {
-            payload["slug"] = serde_json::Value::String(s.trim().to_string());
-        }
-    }
-
-    let res = client
-        .post(&url)
-        .bearer_auth(&api_key)
-        .json(&payload)
-        .send()
+    let slug = slug.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    kb_client(&api_base, &api_key)?
+        .kb_create(name.trim(), slug)
         .await
-        .map_err(|_| "Network error contacting Picora".to_string())?;
-
-    if !res.status().is_success() {
-        let status = res.status().as_u16();
-        let body = res.text().await.unwrap_or_default();
-        return Err(build_error_with_body(status, &body, "create-kb"));
-    }
-
-    let body: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|_| "Picora returned invalid JSON".to_string())?;
-
-    serde_json::from_value(
-        body.get("data")
-            .cloned()
-            .ok_or("Picora response missing KB data")?,
-    )
-    .map_err(|_| "Failed to parse created KB".to_string())
+        .map_err(|e| e.to_string())
 }
 
 /// Fetch the full manifest for a KB (all active docs with hashes).
@@ -310,48 +115,11 @@ pub async fn picora_kb_manifest(
     api_key: String,
     kb_id: String,
 ) -> Result<Vec<ManifestEntry>, String> {
-    if api_base.trim().is_empty() || api_key.trim().is_empty() {
-        return Err("Picora endpoint or API key is empty".to_string());
-    }
-
-    let client = http_client()?;
-    let url = api_url(&api_base, &format!("/v1/kbs/{}/manifest", kb_id));
-
-    let res = client
-        .get(&url)
-        .bearer_auth(&api_key)
-        .send()
-        .await
-        .map_err(|_| "Network error contacting Picora".to_string())?;
-
-    if !res.status().is_success() {
-        let status = res.status().as_u16();
-        let body = res.text().await.unwrap_or_default();
-        return Err(build_error_with_body(status, &body, "manifest"));
-    }
-
-    let body: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|_| "Picora returned invalid JSON".to_string())?;
-
-    // Picora `/v1/kbs/{id}/manifest` may return any of three shapes (mirrors
-    // the evolution of `/v1/kbs` itself — see `picora_kb_list`):
-    //   1. `[...]`                                  (bare array)
-    //   2. `{ "data": [...] }`                      (legacy wrapper)
-    //   3. `{ "data": { "items": [...], ... } }`    (paginated wrapper, v0.17.1+)
-    let data = body.get("data").unwrap_or(&body);
-    let items_val = data
-        .get("items")
-        .cloned()
-        .or_else(|| data.as_array().map(|arr| serde_json::Value::Array(arr.clone())))
-        .unwrap_or(serde_json::Value::Array(vec![]));
-
-    serde_json::from_value::<Vec<ManifestEntry>>(items_val)
-        .map_err(|e| format!("Failed to parse KB manifest: {}", e))
+    kb_client(&api_base, &api_key)?.kb_manifest(&kb_id).await.map_err(|e| e.to_string())
 }
 
-/// Batch sync operations (upsert + delete) against a KB.
+/// Batch sync operations (upsert + delete) against a KB. Relative-path
+/// validation happens inside the crate before the request leaves.
 #[command]
 pub async fn picora_kb_sync_batch(
     api_base: String,
@@ -359,48 +127,10 @@ pub async fn picora_kb_sync_batch(
     kb_id: String,
     ops: Vec<SyncOp>,
 ) -> Result<SyncBatchResult, String> {
-    if api_base.trim().is_empty() || api_key.trim().is_empty() {
-        return Err("Picora endpoint or API key is empty".to_string());
-    }
-
-    // Validate all relative paths before sending to the network
-    for op in &ops {
-        validate_relative_path(&op.relative_path)?;
-    }
-
-    let client = http_client()?;
-    let url = api_url(&api_base, &format!("/v1/kbs/{}/sync", kb_id));
-
-    let res = client
-        .post(&url)
-        .bearer_auth(&api_key)
-        .json(&serde_json::json!({ "ops": ops }))
-        .send()
+    kb_client(&api_base, &api_key)?
+        .kb_sync_batch(&kb_id, &ops)
         .await
-        .map_err(|_| "Network error contacting Picora".to_string())?;
-
-    if !res.status().is_success() {
-        let status = res.status().as_u16();
-        let body = res.text().await.unwrap_or_default();
-        return Err(build_error_with_body(status, &body, "sync-batch"));
-    }
-
-    let body: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|_| "Picora returned invalid JSON".to_string())?;
-
-    let data = body.get("data").ok_or("Picora response missing data")?;
-    Ok(SyncBatchResult {
-        applied: serde_json::from_value(
-            data.get("applied").cloned().unwrap_or(serde_json::Value::Array(vec![])),
-        )
-        .unwrap_or_default(),
-        conflicts: serde_json::from_value(
-            data.get("conflicts").cloned().unwrap_or(serde_json::Value::Array(vec![])),
-        )
-        .unwrap_or_default(),
-    })
+        .map_err(|e| e.to_string())
 }
 
 /// Fetch raw content of a single doc by relativePath.
@@ -411,31 +141,10 @@ pub async fn picora_kb_raw(
     kb_id: String,
     relative_path: String,
 ) -> Result<String, String> {
-    if api_base.trim().is_empty() || api_key.trim().is_empty() {
-        return Err("Picora endpoint or API key is empty".to_string());
-    }
-    validate_relative_path(&relative_path)?;
-
-    let client = http_client()?;
-    let url = api_url(&api_base, &format!("/v1/kbs/{}/raw", kb_id));
-
-    let res = client
-        .get(&url)
-        .query(&[("path", relative_path.as_str())])
-        .bearer_auth(&api_key)
-        .send()
+    kb_client(&api_base, &api_key)?
+        .kb_raw(&kb_id, &relative_path)
         .await
-        .map_err(|_| "Network error contacting Picora".to_string())?;
-
-    if !res.status().is_success() {
-        let status = res.status().as_u16();
-        let body = res.text().await.unwrap_or_default();
-        return Err(build_error_with_body(status, &body, "raw"));
-    }
-
-    res.text()
-        .await
-        .map_err(|_| "Failed to read Picora response body".to_string())
+        .map_err(|e| e.to_string())
 }
 
 /// Scan a local KB directory, returning file stat + SHA-256 hash for each file.
@@ -1020,30 +729,9 @@ fn sum_dir_sizes(dir: &Path, report: &mut PurgeReport) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn plan_limit_403_is_reclassified_as_quota_not_auth() {
-        // The exact server body from the reported bug.
-        let body = r#"{"success":false,"error":"KB count 5/5 reached for current plan"}"#;
-        let msg = build_error_with_body(403, body, "create-kb");
-        assert!(msg.contains("quota") || msg.contains("upgrade"), "{msg}");
-        assert!(!msg.contains("authentication failed"), "{msg}");
-        assert!(msg.contains("create-kb"), "{msg}");
-    }
-
-    #[test]
-    fn genuine_403_still_reads_as_auth_failure() {
-        let msg = build_error_with_body(403, "Forbidden", "list-kbs");
-        assert!(msg.contains("authentication failed"), "{msg}");
-    }
-
-    #[test]
-    fn body_is_plan_limit_matches_quota_shapes() {
-        assert!(body_is_plan_limit("KB count 5/5 reached for current plan"));
-        assert!(body_is_plan_limit("quota exceeded"));
-        assert!(body_is_plan_limit("please upgrade your plan"));
-        assert!(!body_is_plan_limit("Forbidden"));
-        assert!(!body_is_plan_limit("invalid token"));
-    }
+    // Error sanitization + plan-limit-403 reclassification now live in the
+    // `picora-sdk` crate (with their own tests there). The local tests below
+    // cover the Moraya-desktop-specific `validate_relative_path` + fs helpers.
 
     #[test]
     fn validate_relative_path_accepts_valid() {
@@ -1104,150 +792,8 @@ mod tests {
         assert!(glob_match(".DS_Store", "subdir/.DS_Store"));
     }
 
-    #[test]
-    fn sanitize_status_no_credentials() {
-        for code in [401u16, 402, 404, 422, 429, 500, 503] {
-            let msg = sanitize_status(code, "test");
-            assert!(!msg.contains("sk_live"), "status {code} leaks api key");
-            assert!(!msg.contains("Bearer"), "status {code} leaks header");
-            assert!(!msg.is_empty());
-        }
-    }
-
-    /// Inline replica of the picora_kb_list response-shape parsing logic so
-    /// we can lock in support for all three known Picora response wrappers
-    /// without spinning up an HTTP mock server. Keep in sync with the live
-    /// parser in `picora_kb_list`.
-    fn parse_kb_list_body(body: serde_json::Value) -> Result<Vec<PicoraKb>, String> {
-        let data = body.get("data").unwrap_or(&body);
-        let items_val = data
-            .get("items")
-            .cloned()
-            .or_else(|| data.as_array().map(|arr| serde_json::Value::Array(arr.clone())))
-            .unwrap_or(serde_json::Value::Array(vec![]));
-        serde_json::from_value::<Vec<PicoraKb>>(items_val)
-            .map_err(|e| format!("Failed to parse Picora KB list: {}", e))
-    }
-
-    fn sample_kb_value() -> serde_json::Value {
-        serde_json::json!({
-            "id": "kb_abc",
-            "name": "运营之光",
-            "slug": "ops-light",
-            "description": null,
-            "docCount": 12,
-            "sizeBytes": 4096,
-            "createdAt": "2026-04-30T12:00:00Z",
-            "updatedAt": "2026-04-30T12:00:00Z",
-        })
-    }
-
-    #[test]
-    fn picora_kb_list_parses_data_array_wrapper() {
-        // Legacy shape: { "data": [...] }
-        let body = serde_json::json!({ "data": [sample_kb_value()] });
-        let kbs = parse_kb_list_body(body).expect("data-array shape should parse");
-        assert_eq!(kbs.len(), 1);
-        assert_eq!(kbs[0].name, "运营之光");
-    }
-
-    #[test]
-    fn picora_kb_list_parses_data_items_pagination_wrapper() {
-        // Paginated shape (Picora v0.17.1+): { "data": { "items": [...], "nextCursor": null } }
-        let body = serde_json::json!({
-            "data": { "items": [sample_kb_value()], "nextCursor": null, "total": 1 },
-        });
-        let kbs = parse_kb_list_body(body).expect("paginated shape should parse");
-        assert_eq!(kbs.len(), 1);
-        assert_eq!(kbs[0].slug, "ops-light");
-    }
-
-    #[test]
-    fn picora_kb_list_parses_bare_array() {
-        // Bare top-level array
-        let body = serde_json::json!([sample_kb_value()]);
-        let kbs = parse_kb_list_body(body).expect("bare array should parse");
-        assert_eq!(kbs.len(), 1);
-    }
-
-    #[test]
-    fn picora_kb_list_returns_empty_for_missing_data() {
-        let body = serde_json::json!({});
-        let kbs = parse_kb_list_body(body).expect("empty object falls back to []");
-        assert!(kbs.is_empty());
-    }
-
-    #[test]
-    fn picora_kb_list_surfaces_serde_error_message() {
-        // Wrong field type — docCount is a string instead of number
-        let bad = serde_json::json!({ "data": [{
-            "id": "x", "name": "x", "slug": "x",
-            "docCount": "twelve", "sizeBytes": 0,
-            "createdAt": "", "updatedAt": "",
-        }] });
-        let err = parse_kb_list_body(bad).expect_err("should fail with descriptive message");
-        assert!(err.starts_with("Failed to parse Picora KB list:"), "{err}");
-        // serde error should describe what went wrong so we can debug
-        // (mentions the offending value or expected type)
-        assert!(err.contains("twelve") || err.contains("i64"), "{err}");
-    }
-
-    /// Inline replica of `picora_kb_manifest`'s response parser. Keep in sync
-    /// with the live parser. Picora's manifest endpoint went through the
-    /// same shape evolution as `/v1/kbs` — so we accept the same three forms.
-    fn parse_kb_manifest_body(body: serde_json::Value) -> Result<Vec<ManifestEntry>, String> {
-        let data = body.get("data").unwrap_or(&body);
-        let items_val = data
-            .get("items")
-            .cloned()
-            .or_else(|| data.as_array().map(|arr| serde_json::Value::Array(arr.clone())))
-            .unwrap_or(serde_json::Value::Array(vec![]));
-        serde_json::from_value::<Vec<ManifestEntry>>(items_val)
-            .map_err(|e| format!("Failed to parse KB manifest: {}", e))
-    }
-
-    fn sample_manifest_entry() -> serde_json::Value {
-        serde_json::json!({
-            "relativePath": "notes/foo.md",
-            "sourceHash": "abc123",
-            "sizeBytes": 1024,
-            "updatedAt": "2026-04-30T12:00:00Z",
-        })
-    }
-
-    #[test]
-    fn picora_kb_manifest_parses_data_array_wrapper() {
-        let body = serde_json::json!({ "data": [sample_manifest_entry()] });
-        let entries = parse_kb_manifest_body(body).expect("data-array shape should parse");
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].relative_path, "notes/foo.md");
-    }
-
-    #[test]
-    fn picora_kb_manifest_parses_data_items_pagination_wrapper() {
-        // Paginated shape — this is the case that was producing
-        // "Failed to parse KB manifest" before the fix.
-        let body = serde_json::json!({
-            "data": { "items": [sample_manifest_entry()], "nextCursor": null, "total": 1 },
-        });
-        let entries = parse_kb_manifest_body(body).expect("paginated shape should parse");
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].source_hash, "abc123");
-    }
-
-    #[test]
-    fn picora_kb_manifest_parses_bare_array() {
-        let body = serde_json::json!([sample_manifest_entry()]);
-        let entries = parse_kb_manifest_body(body).expect("bare array should parse");
-        assert_eq!(entries.len(), 1);
-    }
-
-    #[test]
-    fn picora_kb_manifest_returns_empty_for_missing_data() {
-        let body = serde_json::json!({});
-        let entries = parse_kb_manifest_body(body).expect("empty object falls back to []");
-        assert!(entries.is_empty());
-    }
+    // KB-list response-shape parsing (3 wrappers) + status sanitization moved
+    // to the picora-sdk crate (`extract_items` + error tests).
 
     #[test]
     fn sync_op_upsert_first_sync_omits_base_updated_at() {
@@ -1385,17 +931,4 @@ mod tests {
         assert!(s.contains("\"purgedFiles\":0"), "{s}");
     }
 
-    #[test]
-    fn picora_kb_manifest_surfaces_serde_error_message() {
-        // sizeBytes as string — should produce a descriptive error
-        let bad = serde_json::json!({ "data": { "items": [{
-            "relativePath": "x.md",
-            "sourceHash": "h",
-            "sizeBytes": "big",
-            "updatedAt": "",
-        }] } });
-        let err = parse_kb_manifest_body(bad).expect_err("should fail with descriptive message");
-        assert!(err.starts_with("Failed to parse KB manifest:"), "{err}");
-        assert!(err.contains("big") || err.contains("i64"), "{err}");
-    }
 }

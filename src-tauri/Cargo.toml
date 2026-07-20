@@ -26,6 +26,10 @@ tauri-plugin-http = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", features = ["stream", "multipart", "json"] }
+# Picora client SDK — pinned to a GitHub release tag (the crate lives in the
+# `sdk-rust/` subdir of a multi-language repo; cargo resolves it by package
+# name). Bump the tag when adopting a newer picora-sdk release.
+picora-sdk = { git = "https://github.com/zouwei/picora-sdk", tag = "rust-v0.1.0" }
 tokio = { version = "1", features = ["fs", "io-util", "sync", "rt", "time"] }
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 hmac = "0.12"
