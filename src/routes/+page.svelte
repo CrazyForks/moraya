@@ -3344,7 +3344,19 @@ ${tr('welcome.tip')}
                 return;
               }
             }
-            view.dispatch(view.state.tr.setSelection(new AllSelection(view.state.doc)));
+            // Whole-doc AllSelection. On macOS the Cmd+A menu accelerator ALSO
+            // mutates the native DOM selection; ProseMirror's DOM observer can
+            // re-sync a tick later and COLLAPSE our AllSelection, so it never
+            // visibly selects. Flush pending DOM mutations, assert AllSelection,
+            // then re-assert on the next frame to win that race.
+            const selectWholeDoc = () => {
+              const v = morayaEditor?.view;
+              if (!v) return;
+              try { (v as unknown as { domObserver?: { flush?: () => void } }).domObserver?.flush?.(); } catch { /* internal API */ }
+              v.dispatch(v.state.tr.setSelection(new AllSelection(v.state.doc)));
+            };
+            selectWholeDoc();
+            requestAnimationFrame(selectWholeDoc);
           }
         },
         // Edit — search
