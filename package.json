@@ -25,7 +25,7 @@
     ]
   },
   "dependencies": {
-    "@moraya/board": "file:./vendor/moraya-board-0.17.3.tgz",
+    "@moraya/board": "^0.18.1",
     "@moraya/core": "^0.10.1",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-dialog": "^2.6.0",
