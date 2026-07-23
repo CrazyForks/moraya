@@ -16,16 +16,24 @@
     syncNow,
     clearRemoteMemories,
     memorySyncStatus,
+    listBindings,
+    addToolBinding,
+    removeBinding,
+    syncBinding,
+    restoreBinding,
+    toolDirPresent,
+    routeBindingToKb,
+    listAvailableKbs,
+    EXTERNAL_TOOLS,
     type MemorySyncStatusKind,
     type MemoryDoc,
     type MemoryHalfLife,
     type HealthReport,
     type HealthIssue,
     type MemoryCloudConfig,
+    type MemoryBinding,
   } from '$lib/services/memory';
   import { HALF_LIFE_OPTIONS } from '$lib/services/memory/decay';
-  import { listKbs, picoraApiBase } from '$lib/services/kb-sync/picora-kb-client';
-  import { getPicoraApiKey } from '$lib/services/picora/credentials';
 
   // ── Local memory list ──────────────────────────────────────────────────
   let memories = $state<MemoryDoc[]>([]);
@@ -43,15 +51,36 @@
   const unsubSync = memorySyncStatus.subscribe((s) => { syncState = s; });
   onDestroy(() => unsubSync());
 
-  let cloud = $state<MemoryCloudConfig>({ enabled: false, targetId: null, kbId: null });
+  let cloud = $state<MemoryCloudConfig>({ enabled: false, targetId: null });
   let cloudBusy = $state(false);
-  let kbOptions = $state<SelectOption[]>([]);
   let confirmClearCloudOpen = $state(false);
   let clearCloudText = $state('');
 
-  // Picora-connected image-host targets (memory syncs to one of these accounts).
+  // Tool-memory bindings (P2/P3)
+  let bindings = $state<MemoryBinding[]>([]);
+  let availableKbs = $state<Array<{ id: string; name: string; slug?: string }>>([]);
+  let presentTools = $state<string[]>([]); // external tools whose local dir exists
+  let addKbSel = $state<Record<string, string>>({}); // tool → target kbId ('' = shared)
+
+  // KB options for the target picker: shared "AI Memory" first, then the user's
+  // other KBs (the shared memory KB itself is represented by the '' option).
+  let kbOptions = $derived<SelectOption[]>([
+    { value: '', label: $t('memory.shared_memory_kb') },
+    ...availableKbs.filter((k) => k.slug !== 'memory').map((k) => ({ value: k.id, label: k.name })),
+  ]);
+  // Tools present locally but not yet bound.
+  let bindableTools = $derived(
+    EXTERNAL_TOOLS.filter((t) => presentTools.includes(t) && !bindings.some((b) => b.tool === t)),
+  );
+  function kbLabel(kbId?: string): string {
+    if (!kbId) return $t('memory.shared_memory_kb');
+    return availableKbs.find((k) => k.id === kbId)?.name ?? kbId;
+  }
+
+  // Connected Picora accounts. Canonical filter = provider === 'picora'
+  // (matches PicoraSettingsTab); picoraApiUrl may be the default endpoint.
   let picoraTargets = $derived(
-    ($settingsStore.imageHostTargets ?? []).filter((tg) => !!tg.picoraApiUrl),
+    ($settingsStore.imageHostTargets ?? []).filter((tg) => tg.provider === 'picora'),
   );
   let targetOptions = $derived<SelectOption[]>(
     picoraTargets.map((tg) => ({ value: tg.id, label: tg.name || tg.id })),
@@ -76,8 +105,53 @@
     memories = await memoryStore.getAll(true);
     halfLife = await getHalfLife();
     cloud = await memoryStore.getCloudConfig();
+    // Single Picora account → auto-select it (no picker needed). The target KB
+    // is always the account's shared "AI Memory" KB, discovered by the sync layer.
+    if (!cloud.targetId && picoraTargets.length === 1) {
+      cloud = { ...cloud, targetId: picoraTargets[0].id };
+      await persistCloud();
+    }
+    bindings = await listBindings();
+    availableKbs = await listAvailableKbs();
+    const present: string[] = [];
+    for (const t of EXTERNAL_TOOLS) if (await toolDirPresent(t)) present.push(t);
+    presentTools = present;
     recomputeHealth();
-    if (cloud.enabled && cloud.targetId) void loadKbs(cloud.targetId);
+  }
+
+  // ── Tool-memory binding handlers ────────────────────────────────────────
+
+  async function handleBindTool(tool: string) {
+    if (cloudBusy) return;
+    cloudBusy = true;
+    try {
+      const b = await addToolBinding(tool, undefined, addKbSel[tool] || null);
+      if (b) await syncBinding(b);
+      await refresh();
+    } finally { cloudBusy = false; }
+  }
+
+  async function handleSyncBinding(b: MemoryBinding) {
+    if (cloudBusy) return;
+    cloudBusy = true;
+    try { await syncBinding(b); } finally { cloudBusy = false; }
+  }
+
+  async function handleRestoreBinding(b: MemoryBinding) {
+    if (cloudBusy) return;
+    cloudBusy = true;
+    try { await restoreBinding(b); } finally { cloudBusy = false; }
+  }
+
+  async function handleRerouteBinding(b: MemoryBinding, kbId: string) {
+    if (cloudBusy || (b.kbId ?? '') === kbId) return;
+    cloudBusy = true;
+    try { await routeBindingToKb(b, kbId || null); await refresh(); } finally { cloudBusy = false; }
+  }
+
+  async function handleUnbind(mountAs: string) {
+    await removeBinding(mountAs);
+    await refresh();
   }
 
   function recomputeHealth() {
@@ -136,31 +210,13 @@
   async function handleToggleSync() {
     cloud = { ...cloud, enabled: !cloud.enabled };
     await persistCloud();
-    if (cloud.enabled && cloud.targetId && cloud.kbId) void handleSyncNow();
+    if (cloud.enabled && cloud.targetId) void handleSyncNow();
   }
 
   async function handleTargetChange(v: unknown) {
-    cloud = { ...cloud, targetId: (v as string) ?? null, kbId: null };
-    kbOptions = [];
+    cloud = { ...cloud, targetId: (v as string) ?? null };
     await persistCloud();
-    if (cloud.targetId) await loadKbs(cloud.targetId);
-  }
-
-  async function handleKbChange(v: unknown) {
-    cloud = { ...cloud, kbId: (v as string) ?? null };
-    await persistCloud();
-  }
-
-  async function loadKbs(targetId: string) {
-    const target = picoraTargets.find((tg) => tg.id === targetId);
-    if (!target || !target.picoraApiUrl) { kbOptions = []; return; }
-    try {
-      const apiKey = await getPicoraApiKey(target);
-      const kbs = await listKbs(picoraApiBase(target.picoraApiUrl), apiKey);
-      kbOptions = kbs.map((kb) => ({ value: kb.id, label: kb.name }));
-    } catch {
-      kbOptions = [];
-    }
+    if (cloud.enabled && cloud.targetId) void handleSyncNow();
   }
 
   async function handleSyncNow() {
@@ -267,24 +323,20 @@
           ><span class="thumb"></span></button>
         </div>
         {#if cloud.enabled}
-          <div class="row">
-            <span class="row-label">{$t('kb_sync.bind_dialog.step1_title')}</span>
-            <Select value={cloud.targetId} options={targetOptions} onchange={handleTargetChange} placeholder={$t('kb_sync.bind_dialog.step1_title')} ariaLabel={$t('kb_sync.bind_dialog.step1_title')} />
-          </div>
-          {#if cloud.targetId}
+          {#if picoraTargets.length > 1}
             <div class="row">
-              <span class="row-label">{$t('settings.tabs.knowledge_base')}</span>
-              <Select value={cloud.kbId} options={kbOptions} onchange={handleKbChange} placeholder={$t('kb_sync.bind_dialog.select_kb')} ariaLabel={$t('kb_sync.bind_dialog.select_kb')} />
+              <span class="row-label">{$t('kb_sync.bind_dialog.step1_title')}</span>
+              <Select value={cloud.targetId} options={targetOptions} onchange={handleTargetChange} placeholder={$t('kb_sync.bind_dialog.step1_title')} ariaLabel={$t('kb_sync.bind_dialog.step1_title')} />
             </div>
           {/if}
           <div class="row">
             <span class="row-label">{$t(syncStateLabelKey[syncState])}</span>
-            <button class="ghost-btn" onclick={handleSyncNow} disabled={cloudBusy || !cloud.kbId}>{$t('memory.sync_now')}</button>
+            <button class="ghost-btn" onclick={handleSyncNow} disabled={cloudBusy || !cloud.targetId}>{$t('memory.sync_now')}</button>
           </div>
         {/if}
       {/if}
     </div>
-    {#if cloud.enabled && cloud.kbId}
+    {#if cloud.enabled && cloud.targetId}
       <div class="card danger-card">
         {#if !confirmClearCloudOpen}
           <button class="danger-btn" onclick={() => (confirmClearCloudOpen = true)} disabled={cloudBusy}>{$t('memory.clear_cloud')}</button>
@@ -298,6 +350,45 @@
         {/if}
       </div>
     {/if}
+  </section>
+
+  <!-- Tool memory bindings (P2) — always visible so the entry is discoverable -->
+  <section class="settings-section">
+    <div class="section-header">
+      <h3 class="section-title">{$t('memory.bindings_title')}</h3>
+      <p class="section-subtitle">{$t('memory.bindings_desc')}</p>
+    </div>
+    <div class="card">
+      {#if picoraTargets.length === 0}
+        <p class="empty-hint">{$t('memory.cloud_sync_signin_hint')}</p>
+      {:else}
+        <!-- Existing bindings: show target KB, allow re-routing -->
+        {#each bindings as b (b.mountAs)}
+          <div class="row binding-row">
+            <span class="binding-info"><strong>{b.tool}</strong> <code>{b.externalPath} → {b.mountAs}/</code> · {kbLabel(b.kbId)}</span>
+            <div class="binding-actions">
+              <Select value={b.kbId ?? ''} options={kbOptions} onchange={(v) => handleRerouteBinding(b, v as string)} ariaLabel={$t('memory.bind_to_kb')} />
+              <button class="ghost-btn" onclick={() => handleSyncBinding(b)} disabled={cloudBusy}>{$t('memory.sync_now')}</button>
+              <button class="ghost-btn" onclick={() => handleRestoreBinding(b)} disabled={cloudBusy}>{$t('memory.restore')}</button>
+              <button class="cancel-btn" onclick={() => handleUnbind(b.mountAs)} disabled={cloudBusy}>{$t('memory.unbind')}</button>
+            </div>
+          </div>
+        {/each}
+        <!-- Bindable tools detected locally: pick a target KB, then bind -->
+        {#each bindableTools as tool (tool)}
+          <div class="row binding-row">
+            <span class="binding-info"><strong>{tool}</strong> <span class="row-label">{$t('memory.bind_to_kb')}</span></span>
+            <div class="binding-actions">
+              <Select value={addKbSel[tool] ?? ''} options={kbOptions} onchange={(v) => (addKbSel = { ...addKbSel, [tool]: v as string })} ariaLabel={$t('memory.bind_to_kb')} />
+              <button class="ghost-btn" onclick={() => handleBindTool(tool)} disabled={cloudBusy}>{$t('memory.bind')}</button>
+            </div>
+          </div>
+        {/each}
+        {#if bindings.length === 0 && bindableTools.length === 0}
+          <p class="empty-hint">{$t('memory.bindings_none_detected')}</p>
+        {/if}
+      {/if}
+    </div>
   </section>
 
   <!-- Memory list -->
@@ -431,4 +522,8 @@
     background: #fff; transition: transform 0.15s;
   }
   .toggle.on .thumb { transform: translateX(18px); }
+  .binding-row { align-items: center; }
+  .binding-info { font-size: 0.82rem; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; }
+  .binding-info code { font-size: 0.72rem; color: var(--text-secondary); }
+  .binding-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
 </style>

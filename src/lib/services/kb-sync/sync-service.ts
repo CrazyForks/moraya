@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { writable, get } from 'svelte/store';
 import { threeWayDiff } from './diff';
+import { threeWayMergeLines } from './merge';
+import { saveBaseContent, loadBaseContent, deleteBaseContent } from './base-cache';
 import { buildLocalManifest, loadLastManifest, saveLastManifest, moveToTrash } from './manifest';
 import {
   listKbs,
@@ -23,6 +25,41 @@ import type { ImageHostTarget } from '$lib/services/image-hosting/types';
 import type { KnowledgeBase } from '$lib/stores/files-store';
 
 export { listKbs, createKb, picoraApiBase };
+
+/** SHA-256 hex of a UTF-8 string — matches the Rust local hash
+ *  (`format!("{:x}", Sha256::digest(bytes))`) for UTF-8 files. */
+async function sha256Hex(content: string): Promise<string> {
+  const bytes = new TextEncoder().encode(content);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function utf8Len(s: string): number {
+  return new TextEncoder().encode(s).length;
+}
+
+/**
+ * Dot-prefixed top-level namespaces other than `.moraya` are AI-memory tool
+ * directories (`.claude/`, `.cursor/`, `.codex/`…). They are managed by the
+ * separate memory binding-sync engine (push from `~/.claude` → cloud namespace)
+ * and pulled only via explicit "restore" — never folder-synced into the KB's
+ * local path. So KB folder sync ignores them: an unbound tool's hidden data is
+ * neither downloaded into the folder nor uploaded from it. `.moraya` is the KB's
+ * own rules/memory and stays part of folder sync.
+ */
+export function isMemoryNamespacePath(relativePath: string): boolean {
+  const slash = relativePath.indexOf('/');
+  const top = slash === -1 ? relativePath : relativePath.slice(0, slash);
+  return top.startsWith('.') && top !== '.moraya';
+}
+
+function stripMemoryNamespaces<V>(m: Map<string, V>): Map<string, V> {
+  const out = new Map<string, V>();
+  for (const [k, v] of m) if (!isMemoryNamespacePath(k)) out.set(k, v);
+  return out;
+}
 
 // ── Sync state store ─────────────────────────────────────────────────
 
@@ -106,24 +143,48 @@ export async function runSync(
   const { getPicoraApiKey } = await import('$lib/services/picora/credentials');
   const apiKey = await getPicoraApiKey(target);
 
+  // Cloud-sync entitlement gate (hard, engine-level). An account with no active
+  // paid plan must not touch Picora KB-sync endpoints — the server-side gate
+  // would reject them and a wall of failing requests tanks perceived perf. Fall
+  // back to local-only: do nothing on the network, surface a clear reason. This
+  // one check covers every trigger (manual / on-save / interval / startup /
+  // close / conflict re-sync) since they all run through runSync.
+  const { getPicoraPlan, isKbSyncEntitled } = await import('$lib/services/picora/entitlement');
+  if (!isKbSyncEntitled(await getPicoraPlan(target))) {
+    if (dryRun) {
+      kbSyncStore.setState(localKbId, { status: 'idle' });
+    } else {
+      const { t } = await import('$lib/i18n');
+      kbSyncStore.setState(localKbId, { status: 'error', lastError: get(t)('kb_sync.gate.no_plan') });
+    }
+    return { uploaded: 0, downloaded: 0, deletedRemote: 0, deletedLocal: 0, skipped: 0, conflicts: [] };
+  }
+
   kbSyncStore.setState(localKbId, { status: 'syncing', lastError: null });
 
   try {
-    const [localManifest, lastManifest, remoteEntries] = await Promise.all([
+    const [localManifestRaw, lastManifestRaw, remoteEntries] = await Promise.all([
       buildLocalManifest(kb.path, strategy.scope, strategy.excludePatterns),
       loadLastManifest(localKbId),
       fetchManifest(apiBase, apiKey, picoraKbId),
     ]);
 
-    const remoteManifest: RemoteManifest = new Map(
-      remoteEntries.map(e => [e.relativePath, e])
+    // Exclude AI-memory tool namespaces (`.claude/`…) from folder sync in BOTH
+    // directions — they're handled by the memory binding engine, not folder sync.
+    const localManifest = stripMemoryNamespaces(localManifestRaw);
+    const lastManifest = stripMemoryNamespaces(lastManifestRaw);
+    const remoteManifest: RemoteManifest = stripMemoryNamespaces(
+      new Map(remoteEntries.map(e => [e.relativePath, e]))
     );
 
+    // First sync (no base): this machine is the initial authority — divergent
+    // both-exist files upload rather than conflict. See InitialAuthority.
     const diff = threeWayDiff(
       lastManifest,
       localManifest,
       remoteManifest,
       strategy.maxFileSizeBytes,
+      'local',
     );
 
     if (dryRun) {
@@ -149,12 +210,18 @@ export async function runSync(
       conflicts: diff.conflictPaths.length,
     };
 
-    // Build upload ops
+    // Running manifest of the last-agreed state; updated as each op succeeds.
+    const newLastManifest: RemoteManifest = new Map(lastManifest);
+    const PREVIEW_LIMIT = 2000;
+
+    // ── Uploads + remote deletes (batch) ──
+    const uploadContents = new Map<string, string>();
     const uploadOps = await Promise.all(
       diff.uploadPaths.map(async (relativePath) => {
         const content = await invoke<string>('read_file', {
           path: `${kb.path}/${relativePath}`,
         });
+        uploadContents.set(relativePath, content);
         const entry = localManifest.get(relativePath)!;
         const lastEntry = lastManifest.get(relativePath);
         return {
@@ -177,72 +244,135 @@ export async function runSync(
 
     if (allOps.length > 0) {
       const batchResult = await syncBatch(apiBase, apiKey, picoraKbId, allOps);
-      report.uploaded = batchResult.applied.filter(p =>
-        diff.uploadPaths.includes(p)
-      ).length;
-      report.deletedRemote = batchResult.applied.filter(p =>
-        diff.deleteRemotePaths.includes(p)
-      ).length;
+      const applied = new Set(batchResult.applied);
       batchConflicts = batchResult.conflicts;
+
+      for (const relativePath of diff.uploadPaths) {
+        if (!applied.has(relativePath)) continue;
+        report.uploaded++;
+        const local = localManifest.get(relativePath);
+        const content = uploadContents.get(relativePath);
+        if (content !== undefined) await saveBaseContent(localKbId, relativePath, content);
+        if (local) {
+          newLastManifest.set(relativePath, {
+            relativePath, sourceHash: local.sourceHash, sizeBytes: local.sizeBytes,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      }
+      for (const relativePath of diff.deleteRemotePaths) {
+        if (!applied.has(relativePath)) continue;
+        report.deletedRemote++;
+        newLastManifest.delete(relativePath);
+        await deleteBaseContent(localKbId, relativePath);
+      }
     }
 
-    // Download from remote
+    // ── Downloads ──
     for (const relativePath of diff.downloadPaths) {
-      const content = await fetchRaw(apiBase, apiKey, picoraKbId, relativePath);
-      await invoke('write_file', {
-        path: `${kb.path}/${relativePath}`,
-        content,
-      });
+      const content = (await fetchRaw(apiBase, apiKey, picoraKbId, relativePath)) ?? '';
+      await invoke('write_file', { path: `${kb.path}/${relativePath}`, content });
+      await saveBaseContent(localKbId, relativePath, content);
+      const entry = remoteManifest.get(relativePath);
+      if (entry) newLastManifest.set(relativePath, entry);
       report.downloaded++;
     }
 
-    // Delete local (move to trash)
+    // ── Local deletes (move to trash) ──
     for (const relativePath of diff.deleteLocalPaths) {
       await moveToTrash(kb.path, localKbId, relativePath);
+      newLastManifest.delete(relativePath);
+      await deleteBaseContent(localKbId, relativePath);
       report.deletedLocal++;
     }
 
-    // Build conflicts (locally detected + server-detected)
-    const localConflicts: ConflictEntry[] = diff.conflictPaths.map(relativePath => {
-      const local = localManifest.get(relativePath);
-      const remote = remoteManifest.get(relativePath);
-      return {
-        relativePath,
-        localUpdatedAt: local ? new Date(local.mtime).toISOString() : '',
-        remoteUpdatedAt: remote?.updatedAt ?? '',
-        localSizeBytes: local?.sizeBytes ?? 0,
-        remoteSizeBytes: remote?.sizeBytes ?? 0,
-        localPreview: '',
-        remotePreview: '',
-        localHash: local?.sourceHash ?? '',
-        remoteHash: remote?.sourceHash ?? '',
-      };
-    });
+    // ── Conflicts: 3-way auto-merge → conflictPolicy → leave pending ──
+    const pendingConflicts: ConflictEntry[] = [];
+    for (const relativePath of diff.conflictPaths) {
+      const localMeta = localManifest.get(relativePath);
+      const remoteMeta = remoteManifest.get(relativePath);
+      let localContent = '';
+      let remoteContent = '';
+      try { localContent = (await invoke<string>('read_file', { path: `${kb.path}/${relativePath}` })) ?? ''; } catch { /* best-effort */ }
+      try { remoteContent = (await fetchRaw(apiBase, apiKey, picoraKbId, relativePath)) ?? ''; } catch { /* best-effort */ }
+      const baseContent = await loadBaseContent(localKbId, relativePath);
 
-    const allConflicts = [...localConflicts, ...batchConflicts];
-    report.conflicts = allConflicts.length;
+      // 1) Clean 3-way auto-merge (non-overlapping edits) → write + upload, no prompt.
+      if (baseContent !== null) {
+        const merged = threeWayMergeLines(localContent, baseContent, remoteContent);
+        if (!merged.hasConflict && merged.mergedText !== null) {
+          const text = merged.mergedText;
+          const hash = await sha256Hex(text);
+          await invoke('write_file', { path: `${kb.path}/${relativePath}`, content: text });
+          await syncBatch(apiBase, apiKey, picoraKbId, [
+            { op: 'upsert', relativePath, content: text, sourceHash: hash, baseUpdatedAt: remoteMeta?.updatedAt },
+          ]);
+          await saveBaseContent(localKbId, relativePath, text);
+          newLastManifest.set(relativePath, { relativePath, sourceHash: hash, sizeBytes: utf8Len(text), updatedAt: new Date().toISOString() });
+          report.uploaded++;
+          continue;
+        }
+      }
 
-    // Update last manifest (only for successfully applied entries)
-    const newLastManifest: RemoteManifest = new Map(lastManifest);
-    for (const relativePath of diff.downloadPaths) {
-      const entry = remoteManifest.get(relativePath);
-      if (entry) newLastManifest.set(relativePath, entry);
-    }
-    for (const relativePath of diff.uploadPaths) {
-      const local = localManifest.get(relativePath);
-      if (local) {
-        const entry: ManifestEntry = {
-          relativePath,
-          sourceHash: local.sourceHash,
-          sizeBytes: local.sizeBytes,
-          updatedAt: new Date().toISOString(),
+      // 2) Auto-resolve per conflictPolicy (skip prompting).
+      if (strategy.conflictPolicy === 'prefer-local') {
+        const hash = localMeta?.sourceHash ?? await sha256Hex(localContent);
+        await syncBatch(apiBase, apiKey, picoraKbId, [
+          { op: 'upsert', relativePath, content: localContent, sourceHash: hash, baseUpdatedAt: remoteMeta?.updatedAt },
+        ]);
+        await saveBaseContent(localKbId, relativePath, localContent);
+        newLastManifest.set(relativePath, { relativePath, sourceHash: hash, sizeBytes: localMeta?.sizeBytes ?? utf8Len(localContent), updatedAt: new Date().toISOString() });
+        report.uploaded++;
+        continue;
+      }
+      if (strategy.conflictPolicy === 'prefer-remote') {
+        await invoke('write_file', { path: `${kb.path}/${relativePath}`, content: remoteContent });
+        await saveBaseContent(localKbId, relativePath, remoteContent);
+        const entry: ManifestEntry = remoteMeta ?? {
+          relativePath, sourceHash: await sha256Hex(remoteContent), sizeBytes: utf8Len(remoteContent), updatedAt: new Date().toISOString(),
         };
         newLastManifest.set(relativePath, entry);
+        report.downloaded++;
+        continue;
       }
+
+      // 3) prompt → surface with full content + base for the line-level UI.
+      pendingConflicts.push({
+        relativePath,
+        localUpdatedAt: localMeta ? new Date(localMeta.mtime).toISOString() : '',
+        remoteUpdatedAt: remoteMeta?.updatedAt ?? '',
+        localSizeBytes: localMeta?.sizeBytes ?? 0,
+        remoteSizeBytes: remoteMeta?.sizeBytes ?? 0,
+        localPreview: localContent.slice(0, PREVIEW_LIMIT),
+        remotePreview: remoteContent.slice(0, PREVIEW_LIMIT),
+        localHash: localMeta?.sourceHash ?? '',
+        remoteHash: remoteMeta?.sourceHash ?? '',
+        localContent,
+        remoteContent,
+        baseContent,
+      });
     }
-    for (const relativePath of [...diff.deleteRemotePaths, ...diff.deleteLocalPaths]) {
-      newLastManifest.delete(relativePath);
+
+    // Server-detected conflicts arrive without content — enrich for the UI.
+    const enrichedBatchConflicts: ConflictEntry[] = [];
+    for (const c of batchConflicts) {
+      let localContent = '';
+      let remoteContent = '';
+      try { localContent = (await invoke<string>('read_file', { path: `${kb.path}/${c.relativePath}` })) ?? ''; } catch { /* best-effort */ }
+      try { remoteContent = (await fetchRaw(apiBase, apiKey, picoraKbId, c.relativePath)) ?? ''; } catch { /* best-effort */ }
+      const baseContent = await loadBaseContent(localKbId, c.relativePath);
+      enrichedBatchConflicts.push({
+        ...c,
+        localContent,
+        remoteContent,
+        baseContent,
+        localPreview: localContent.slice(0, PREVIEW_LIMIT),
+        remotePreview: remoteContent.slice(0, PREVIEW_LIMIT),
+      });
     }
+
+    const allConflicts = [...pendingConflicts, ...enrichedBatchConflicts];
+    report.conflicts = allConflicts.length;
 
     await saveLastManifest(localKbId, newLastManifest);
 
@@ -268,4 +398,44 @@ export async function dryRunSync(
   target: ImageHostTarget,
 ) {
   return runSync(binding, kb, target, true);
+}
+
+/**
+ * Apply a user-resolved merged content for a single conflicting file: write it
+ * locally, upload to Picora, and record the merged content as the new base +
+ * manifest entry so the next sync sees it aligned (no re-conflict). Used by the
+ * line-level conflict resolution panel.
+ */
+export async function applyResolvedContent(
+  binding: KbBinding,
+  kb: KnowledgeBase,
+  target: ImageHostTarget,
+  relativePath: string,
+  mergedText: string,
+): Promise<void> {
+  const { localKbId, picoraKbId } = binding;
+  const apiBase = picoraApiBase(target.picoraApiUrl);
+  const { getPicoraApiKey } = await import('$lib/services/picora/credentials');
+  const apiKey = await getPicoraApiKey(target);
+
+  const hash = await sha256Hex(mergedText);
+  // Always persist the resolved merge to the local file (local-first).
+  await invoke('write_file', { path: `${kb.path}/${relativePath}`, content: mergedText });
+
+  // Cloud-sync entitlement gate: without an active paid plan, keep the local
+  // write but skip the Picora upload + manifest advance. (Defensive — an
+  // unentitled account can't reach a conflict since runSync is gated upstream.)
+  const { getPicoraPlan, isKbSyncEntitled } = await import('$lib/services/picora/entitlement');
+  if (!isKbSyncEntitled(await getPicoraPlan(target))) return;
+
+  await syncBatch(apiBase, apiKey, picoraKbId, [
+    { op: 'upsert', relativePath, content: mergedText, sourceHash: hash },
+  ]);
+  await saveBaseContent(localKbId, relativePath, mergedText);
+
+  const manifest = await loadLastManifest(localKbId);
+  manifest.set(relativePath, {
+    relativePath, sourceHash: hash, sizeBytes: utf8Len(mergedText), updatedAt: new Date().toISOString(),
+  });
+  await saveLastManifest(localKbId, manifest);
 }

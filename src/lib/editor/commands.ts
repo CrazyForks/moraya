@@ -158,6 +158,20 @@ export function insertImageAt(attrs: { src: string; alt?: string; title?: string
 }
 
 /**
+ * Insert plain text at the current selection (used to drop a recalled prompt
+ * asset into the document). Multi-line text is inserted verbatim; ProseMirror
+ * splits on newlines into paragraphs.
+ */
+export function insertTextAtCursor(text: string): Command {
+  return (state, dispatch) => {
+    if (!text) return false;
+    if (!dispatch) return true;
+    dispatch(state.tr.insertText(text).scrollIntoView());
+    return true;
+  };
+}
+
+/**
  * Insert an HTML5 `<audio>` block at `pos` (defaults to current selection).
  * Audio/video are inserted as html_inline inside a paragraph; ensure surrounding
  * paragraphs exist so the user can continue typing.

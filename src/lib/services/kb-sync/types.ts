@@ -1,3 +1,41 @@
+// The generalized sync data contracts (manifest entries, diff result, line-
+// merge shapes, conflict entry) now live in @moraya/core/sync (extracted in
+// core v0.8.0 so PC / Web / Mobile share one contract). They are re-exported
+// here so every existing `./types` import keeps working unchanged. The
+// PC-specific orchestration types below (sync mode, KB bindings, sync reports,
+// batch protocol) stay local — they describe the desktop runSync engine, not
+// the shared merge core. `InitialAuthority` is intentionally re-exported from
+// `./diff` (not here) to preserve the original module layout.
+import type { ConflictEntry } from '@moraya/core/sync';
+
+export type {
+  ManifestEntry,
+  LocalManifestEntry,
+  LocalManifest,
+  RemoteManifest,
+  DiffAction,
+  DiffResult,
+  MergeChunk,
+  MergeResult,
+  ChunkPick,
+  ConflictEntry,
+  ConflictResolution,
+} from '@moraya/core/sync';
+
+// ── PC-specific orchestration types (desktop runSync engine) ─────────────────
+
+/**
+ * v1.22.0: the server manifest has always carried each entry's server-side
+ * document id (`docId`) — the key into the doc-revisions API. Core's
+ * ManifestEntry contract stays at 4 fields; PC extends it locally. Entries
+ * flowing remote manifest → lastManifest carry it through persistence
+ * (`~/.moraya/kb-sync/{kbId}.manifest.json`), giving relativePath → docId
+ * for any KB that has synced at least once.
+ */
+export type ManifestEntryWithDocId = import('@moraya/core/sync').ManifestEntry & {
+  docId?: string;
+};
+
 export type SyncMode = 'manual' | 'on-save' | 'interval' | 'on-startup-and-close';
 export type SyncScope = 'markdown-only' | 'markdown-plus-rules' | 'all-including-hidden';
 export type ConflictPolicy = 'prompt' | 'prefer-local' | 'prefer-remote';
@@ -12,9 +50,9 @@ export interface SyncStrategy {
 }
 
 export const DEFAULT_SYNC_STRATEGY: SyncStrategy = {
-  mode: 'interval',
+  mode: 'on-save',
   intervalSecs: 300,
-  scope: 'markdown-plus-rules',
+  scope: 'all-including-hidden',
   excludePatterns: ['node_modules/**', '.git/**', '.DS_Store', '*.tmp', '.env*', '*.key', '*.pem'],
   conflictPolicy: 'prompt',
   maxFileSizeBytes: 2 * 1024 * 1024,
@@ -53,13 +91,6 @@ export interface PicoraKb {
   updatedAt: string;
 }
 
-export interface ManifestEntry {
-  relativePath: string;
-  sourceHash: string;
-  sizeBytes: number;
-  updatedAt: string;
-}
-
 export type SyncOpType = 'upsert' | 'delete';
 
 export interface SyncOp {
@@ -73,53 +104,6 @@ export interface SyncOp {
 export interface SyncBatchResult {
   applied: string[];
   conflicts: ConflictEntry[];
-}
-
-export interface ConflictEntry {
-  relativePath: string;
-  localUpdatedAt: string;
-  remoteUpdatedAt: string;
-  localSizeBytes: number;
-  remoteSizeBytes: number;
-  localPreview: string;
-  remotePreview: string;
-  localHash: string;
-  remoteHash: string;
-}
-
-export type ConflictResolution = 'prefer-local' | 'prefer-remote' | 'keep-both';
-
-// Local manifest for three-way diff
-
-export interface LocalManifestEntry {
-  relativePath: string;
-  sourceHash: string;
-  sizeBytes: number;
-  mtime: number;
-}
-
-export type LocalManifest = Map<string, LocalManifestEntry>;
-export type RemoteManifest = Map<string, ManifestEntry>;
-
-// Diff result
-
-export type DiffAction =
-  | { kind: 'upload'; relativePath: string }
-  | { kind: 'download'; relativePath: string }
-  | { kind: 'delete-remote'; relativePath: string }
-  | { kind: 'delete-local'; relativePath: string }
-  | { kind: 'conflict'; relativePath: string }
-  | { kind: 'skip-large'; relativePath: string; sizeBytes: number }
-  | { kind: 'aligned' };
-
-export interface DiffResult {
-  actions: DiffAction[];
-  uploadPaths: string[];
-  downloadPaths: string[];
-  deleteRemotePaths: string[];
-  deleteLocalPaths: string[];
-  conflictPaths: string[];
-  skippedLarge: Array<{ relativePath: string; sizeBytes: number }>;
 }
 
 // Sync state per KB (for UI reactivity)

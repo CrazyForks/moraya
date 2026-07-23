@@ -23,10 +23,26 @@ vi.mock('./picora-kb-client', () => ({
   fetchRaw: vi.fn(),
 }));
 
+// Cloud-sync entitlement gate — default to an entitled ('pro') account so the
+// existing behavior tests exercise real sync; individual tests override
+// getPicoraPlan to 'none' to assert the gate blocks.
+vi.mock('$lib/services/picora/entitlement', () => ({
+  getPicoraPlan: vi.fn().mockResolvedValue('pro'),
+  isKbSyncEntitled: vi.fn((plan: string | null | undefined) => !!plan && plan !== 'none'),
+}));
+
+// The gate resolves its user-facing reason via the i18n store; stub it so the
+// dynamic import doesn't drag the locale JSON loader into the test env.
+vi.mock('$lib/i18n', async () => {
+  const { readable } = await import('svelte/store');
+  return { t: readable((k: string) => k) };
+});
+
 import { invoke } from '@tauri-apps/api/core';
 import { buildLocalManifest, loadLastManifest, saveLastManifest, moveToTrash } from './manifest';
 import { fetchManifest, syncBatch, fetchRaw } from './picora-kb-client';
-import { kbSyncStore, runSync, dryRunSync, clearAllIntervals } from './sync-service';
+import { getPicoraPlan } from '$lib/services/picora/entitlement';
+import { kbSyncStore, runSync, dryRunSync, clearAllIntervals, isMemoryNamespacePath } from './sync-service';
 import type { KbBinding, LocalManifestEntry, ManifestEntry, ConflictEntry } from './types';
 import type { KnowledgeBase } from '$lib/stores/files-store';
 import type { ImageHostTarget } from '$lib/services/image-hosting/types';
@@ -227,12 +243,78 @@ describe('runSync — success path', () => {
     vi.mocked(fetchManifest).mockResolvedValue(remoteEntries);
     vi.mocked(syncBatch).mockResolvedValue({ applied: [], conflicts: [] });
 
+    vi.mocked(invoke).mockResolvedValue('# local'); // read_file
+    vi.mocked(fetchRaw).mockResolvedValue('# remote');
+
     const report = await runSync(makeBinding(), makeKb(), makeTarget(), false);
 
     expect((report.conflicts as ConflictEntry[]).length).toBeGreaterThan(0);
     const state = kbSyncStore.getState('kb-1');
     expect(state.status).toBe('conflict');
     expect(state.conflictCount).toBeGreaterThan(0);
+    // Conflict entries carry full content for the line-level resolution UI.
+    expect(state.pendingConflicts[0].localContent).toBe('# local');
+    expect(state.pendingConflicts[0].remoteContent).toBe('# remote');
+  });
+
+  it('conflictPolicy prefer-local auto-uploads the local version (no prompt)', async () => {
+    const last = new Map<string, ManifestEntry>([
+      ['c.md', { relativePath: 'c.md', sourceHash: 'aaa', sizeBytes: 50, updatedAt: '' }],
+    ]);
+    const local = new Map([['c.md', localEntry('bbb')]]);
+    const remoteEntries: ManifestEntry[] = [{
+      relativePath: 'c.md', sourceHash: 'ccc', sizeBytes: 50, updatedAt: new Date().toISOString(),
+    }];
+
+    vi.mocked(buildLocalManifest).mockResolvedValue(local);
+    vi.mocked(loadLastManifest).mockResolvedValue(last);
+    vi.mocked(fetchManifest).mockResolvedValue(remoteEntries);
+    vi.mocked(invoke).mockResolvedValue('# local content'); // read_file
+    vi.mocked(fetchRaw).mockResolvedValue('# remote content');
+    vi.mocked(syncBatch).mockResolvedValue({ applied: ['c.md'], conflicts: [] });
+
+    const binding = makeBinding({
+      strategy: { ...makeBinding().strategy, conflictPolicy: 'prefer-local' },
+    });
+    const report = await runSync(binding, makeKb(), makeTarget(), false);
+
+    expect(report.uploaded).toBeGreaterThan(0);
+    expect((report.conflicts as ConflictEntry[]).length).toBe(0);
+    expect(kbSyncStore.getState('kb-1').status).toBe('idle');
+    expect(syncBatch).toHaveBeenCalledWith(
+      expect.any(String), expect.any(String), 'remote-kb-1',
+      expect.arrayContaining([
+        expect.objectContaining({ op: 'upsert', relativePath: 'c.md', content: '# local content' }),
+      ]),
+    );
+  });
+
+  it('conflictPolicy prefer-remote downloads the remote version', async () => {
+    const last = new Map<string, ManifestEntry>([
+      ['c.md', { relativePath: 'c.md', sourceHash: 'aaa', sizeBytes: 50, updatedAt: '' }],
+    ]);
+    const local = new Map([['c.md', localEntry('bbb')]]);
+    const remoteEntries: ManifestEntry[] = [{
+      relativePath: 'c.md', sourceHash: 'ccc', sizeBytes: 50, updatedAt: new Date().toISOString(),
+    }];
+
+    vi.mocked(buildLocalManifest).mockResolvedValue(local);
+    vi.mocked(loadLastManifest).mockResolvedValue(last);
+    vi.mocked(fetchManifest).mockResolvedValue(remoteEntries);
+    vi.mocked(invoke).mockResolvedValue(undefined); // read_file / write_file
+    vi.mocked(fetchRaw).mockResolvedValue('# remote content');
+
+    const binding = makeBinding({
+      strategy: { ...makeBinding().strategy, conflictPolicy: 'prefer-remote' },
+    });
+    const report = await runSync(binding, makeKb(), makeTarget(), false);
+
+    expect(report.downloaded).toBeGreaterThan(0);
+    expect((report.conflicts as ConflictEntry[]).length).toBe(0);
+    expect(kbSyncStore.getState('kb-1').status).toBe('idle');
+    expect(invoke).toHaveBeenCalledWith('write_file', expect.objectContaining({
+      content: '# remote content',
+    }));
   });
 
   it('calls onComplete callback with the sync report', async () => {
@@ -245,6 +327,48 @@ describe('runSync — success path', () => {
 
     expect(onComplete).toHaveBeenCalledOnce();
     expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({ uploaded: 0 }));
+  });
+});
+
+describe('runSync — cloud-sync entitlement gate', () => {
+  it('blocks sync with no active plan: no network, error state carries the reason', async () => {
+    vi.mocked(getPicoraPlan).mockResolvedValueOnce('none');
+
+    const report = await runSync(makeBinding(), makeKb(), makeTarget(), false);
+
+    // Early return with a zeroed report — and crucially, no KB-sync request.
+    expect(report.uploaded).toBe(0);
+    expect(report.conflicts).toHaveLength(0);
+    expect(fetchManifest).not.toHaveBeenCalled();
+    expect(syncBatch).not.toHaveBeenCalled();
+    expect(buildLocalManifest).not.toHaveBeenCalled();
+    const state = kbSyncStore.getState('kb-1');
+    expect(state.status).toBe('error');
+    expect(state.lastError).toBe('kb_sync.gate.no_plan');
+  });
+
+  it('dry-run with no plan returns zeros in idle state, no manifest fetch', async () => {
+    vi.mocked(getPicoraPlan).mockResolvedValueOnce('none');
+
+    const report = await runSync(makeBinding(), makeKb(), makeTarget(), true);
+
+    expect(report.uploaded).toBe(0);
+    expect(fetchManifest).not.toHaveBeenCalled();
+    expect(kbSyncStore.getState('kb-1').status).toBe('idle');
+  });
+
+  it('allows sync for a trial/pro/pro_plus plan', async () => {
+    vi.mocked(getPicoraPlan).mockResolvedValueOnce('trial');
+    vi.mocked(buildLocalManifest).mockResolvedValue(new Map([['note.md', localEntry('aaa')]]));
+    vi.mocked(loadLastManifest).mockResolvedValue(new Map());
+    vi.mocked(fetchManifest).mockResolvedValue([]);
+    vi.mocked(invoke).mockResolvedValue('# Hello');
+    vi.mocked(syncBatch).mockResolvedValue({ applied: ['note.md'], conflicts: [] });
+
+    const report = await runSync(makeBinding(), makeKb(), makeTarget(), false);
+
+    expect(report.uploaded).toBe(1);
+    expect(fetchManifest).toHaveBeenCalledOnce();
   });
 });
 
@@ -267,5 +391,42 @@ describe('runSync — error path', () => {
     );
 
     expect(kbSyncStore.getState('kb-1').lastError).toBe('invoke failed: permission denied');
+  });
+
+  it('ignores non-.moraya AI-memory dot-namespaces (no download into KB folder)', async () => {
+    // Remote has a regular file, a .moraya file, and a .claude/ memory-namespace file.
+    const remoteEntries: ManifestEntry[] = [
+      { relativePath: 'note.md', sourceHash: 'aaa', sizeBytes: 10, updatedAt: new Date().toISOString() },
+      { relativePath: '.moraya/memories/m.md', sourceHash: 'bbb', sizeBytes: 10, updatedAt: new Date().toISOString() },
+      { relativePath: '.claude/CLAUDE.md', sourceHash: 'ccc', sizeBytes: 10, updatedAt: new Date().toISOString() },
+    ];
+    vi.mocked(buildLocalManifest).mockResolvedValue(new Map());
+    vi.mocked(loadLastManifest).mockResolvedValue(new Map());
+    vi.mocked(fetchManifest).mockResolvedValue(remoteEntries);
+    vi.mocked(fetchRaw).mockResolvedValue('# content');
+    vi.mocked(invoke).mockResolvedValue(undefined);
+
+    const report = await runSync(makeBinding(), makeKb(), makeTarget(), false);
+
+    // note.md + .moraya/... download; .claude/... is skipped.
+    expect(report.downloaded).toBe(2);
+    const downloadedPaths = vi.mocked(fetchRaw).mock.calls.map((c) => c[3]);
+    expect(downloadedPaths).toContain('note.md');
+    expect(downloadedPaths).toContain('.moraya/memories/m.md');
+    expect(downloadedPaths).not.toContain('.claude/CLAUDE.md');
+  });
+});
+
+describe('isMemoryNamespacePath', () => {
+  it('flags non-.moraya dot-namespaces', () => {
+    expect(isMemoryNamespacePath('.claude/CLAUDE.md')).toBe(true);
+    expect(isMemoryNamespacePath('.cursor/rules')).toBe(true);
+    expect(isMemoryNamespacePath('.codex/AGENTS.md')).toBe(true);
+  });
+  it('does not flag .moraya or regular paths', () => {
+    expect(isMemoryNamespacePath('.moraya/memories/m.md')).toBe(false);
+    expect(isMemoryNamespacePath('note.md')).toBe(false);
+    expect(isMemoryNamespacePath('prompts/p.md')).toBe(false);
+    expect(isMemoryNamespacePath('docs/.hidden.md')).toBe(false);
   });
 });

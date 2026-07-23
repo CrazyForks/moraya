@@ -15,9 +15,17 @@
  * the (varying, unreliable) HTML flavor entirely.
  *
  * Safety:
- *  - Gated on `looksLikeMarkdownSource(plain)` — rendered content's text/plain
- *    never carries markdown markers (#, `- `, ``` , $$, …), so this only fires
- *    for actual source.
+ *  - Skips when the clipboard carries GENUINE rich-text HTML (headings, bold,
+ *    lists, links, tables…). That means the source is RENDERED content copied
+ *    from a web page / rich editor, so we trust the HTML and let core parse it
+ *    into structure (matches Moraya Web, which has no source-paste plugin).
+ *    The earlier assumption that "rendered content's text/plain never carries
+ *    markdown markers" was wrong — GitHub, many CMSes and rich editors DO keep
+ *    `- `, `> `, `1. ` etc. in text/plain, which made this plugin hijack the
+ *    paste and drop the authoritative HTML, losing formatting.
+ *  - Only when HTML is absent or a bare code-editor wrapper (span/pre only) is
+ *    the plain text treated as Markdown source, gated on
+ *    `looksLikeMarkdownSource(plain)`.
  *  - Skips Shift+paste ("paste as plain text") and pastes inside code blocks.
  *  - Tables / images are already intercepted upstream in Editor.svelte's
  *    capture-phase paste handler, so they never reach here.
@@ -107,6 +115,29 @@ export function looksLikeMarkdownSource(text: string): boolean {
 }
 
 /**
+ * Does the clipboard HTML represent genuine RENDERED rich text (as opposed to
+ * a code editor's syntax-highlight markup, which is only <span>/<pre>/<div>)?
+ *
+ * We look for semantic formatting/structure elements that appear when copying
+ * rendered content from a web page or rich editor — headings, bold/italic,
+ * lists, blockquotes, links, tables, images, rules. These never appear in a
+ * VS Code / highlight.js copy (pure <span style> inside <pre>), so markdown
+ * *source* copied from a code editor still falls through to source rendering.
+ */
+export function isRichHtml(html: string): boolean {
+  if (!html || !html.trim()) return false;
+  let doc: Document;
+  try {
+    doc = new DOMParser().parseFromString(html, 'text/html');
+  } catch {
+    return false;
+  }
+  return !!doc.body.querySelector(
+    'h1,h2,h3,h4,h5,h6,strong,b,em,i,u,s,del,ins,mark,ul,ol,li,blockquote,a[href],table,thead,tbody,tr,td,th,img,hr',
+  );
+}
+
+/**
  * Build the Slice to insert from a parsed markdown doc. A single wrapping
  * paragraph is unwrapped so inline content merges into the current line;
  * multi-block / atom-block content is inserted as blocks.
@@ -142,6 +173,11 @@ export function createMarkdownSourcePastePlugin(): Plugin {
         const isPlainPaste = !!(view as unknown as { input?: { shiftKey?: boolean } }).input?.shiftKey;
         if (isPlainPaste) return false;
         if (view.state.selection.$from.parent.type.spec.code === true) return false;
+
+        // Rendered rich text (web page / rich editor) → let core parse the HTML
+        // into structure instead of re-parsing the lossy text/plain as source.
+        const html = event.clipboardData?.getData('text/html') ?? '';
+        if (isRichHtml(html)) return false;
 
         if (!looksLikeMarkdownSource(plain.trim())) return false;
 

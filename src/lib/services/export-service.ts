@@ -5,6 +5,9 @@ import { t } from '$lib/i18n';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import katex from 'katex';
+// Side-effect: register \ce/\pu (mhchem) so exported chemistry formulas
+// render instead of erroring. Idempotent with @moraya/core's registration.
+import 'katex/contrib/mhchem';
 import { settingsStore } from '$lib/stores/settings-store';
 import { exportProgressStore } from '$lib/stores/export-progress-store';
 import {

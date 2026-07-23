@@ -1,12 +1,10 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import { invoke } from '@tauri-apps/api/core';
   import type { KnowledgeBase } from '$lib/stores/files-store';
-  import { filesStore } from '$lib/stores/files-store';
-  import { kbSyncStore } from '$lib/services/kb-sync/sync-service';
-  import { picoraApiBase, fetchRaw } from '$lib/services/kb-sync/picora-kb-client';
+  import { kbSyncStore, applyResolvedContent } from '$lib/services/kb-sync/sync-service';
+  import { threeWayMergeLines, twoWayMergeLines, assembleMerged } from '$lib/services/kb-sync/merge';
   import { settingsStore } from '$lib/stores/settings-store';
-  import type { KbBinding, ConflictEntry, ConflictResolution } from '$lib/services/kb-sync/types';
+  import type { KbBinding, ConflictEntry, MergeResult, ChunkPick } from '$lib/services/kb-sync/types';
 
   let { kb, binding, conflicts, onClose }: {
     kb: KnowledgeBase;
@@ -16,98 +14,95 @@
   } = $props();
 
   let currentIndex = $state(0);
-  let resolutions = $state<Map<string, ConflictResolution>>(new Map());
   let applying = $state(false);
   let error = $state('');
 
-  let current = $derived(conflicts[currentIndex]);
+  // Per-file, per-conflict-chunk pick: Map<relativePath, Map<chunkIdx, ChunkPick>>
+  let picks = $state<Map<string, Map<number, ChunkPick>>>(new Map());
 
-  function setResolution(res: ConflictResolution) {
-    if (!current) return;
-    const next = new Map(resolutions);
-    next.set(current.relativePath, res);
-    resolutions = next;
+  let current = $derived(conflicts[currentIndex] as ConflictEntry | undefined);
+
+  // Compute the line-level merge for the current file. 3-way when a base exists,
+  // else a 2-way local-vs-remote diff.
+  let mergeResult = $derived.by<MergeResult | null>(() => {
+    if (!current) return null;
+    if (current.baseContent !== null && current.baseContent !== undefined) {
+      return threeWayMergeLines(current.localContent, current.baseContent, current.remoteContent);
+    }
+    return twoWayMergeLines(current.localContent, current.remoteContent);
+  });
+
+  // Indices (within chunks[]) of the conflict chunks, for numbering.
+  let conflictChunkIndices = $derived.by(() => {
+    const out: number[] = [];
+    mergeResult?.chunks.forEach((c, i) => { if (c.type === 'conflict') out.push(i); });
+    return out;
+  });
+
+  function pickFor(chunkIdx: number): ChunkPick | undefined {
+    return current ? picks.get(current.relativePath)?.get(chunkIdx) : undefined;
   }
 
-  function getResolution(): ConflictResolution | undefined {
-    return current ? resolutions.get(current.relativePath) : undefined;
+  function setPick(chunkIdx: number, pick: ChunkPick) {
+    if (!current) return;
+    const next = new Map(picks);
+    const fileMap = new Map(next.get(current.relativePath) ?? []);
+    fileMap.set(chunkIdx, pick);
+    next.set(current.relativePath, fileMap);
+    picks = next;
   }
 
-  async function applyOne() {
-    if (!current) return;
-    const resolution = getResolution();
-    if (!resolution) return;
+  function setAll(pick: ChunkPick) {
+    if (!current || !mergeResult) return;
+    const next = new Map(picks);
+    const fileMap = new Map(next.get(current.relativePath) ?? []);
+    mergeResult.chunks.forEach((c, i) => { if (c.type === 'conflict') fileMap.set(i, pick); });
+    next.set(current.relativePath, fileMap);
+    picks = next;
+  }
+
+  let unresolvedCount = $derived.by(() => {
+    if (!mergeResult) return 0;
+    const fileMap = current ? picks.get(current.relativePath) : undefined;
+    let n = 0;
+    mergeResult.chunks.forEach((c, i) => { if (c.type === 'conflict' && !fileMap?.has(i)) n++; });
+    return n;
+  });
+
+  // Live merged text using current picks (unresolved default to local).
+  let mergedPreview = $derived.by(() => {
+    if (!mergeResult || !current) return '';
+    return assembleMerged(mergeResult, picks.get(current.relativePath) ?? new Map(), 'local');
+  });
+
+  async function applyCurrent() {
+    if (!current || !mergeResult || unresolvedCount > 0) return;
     applying = true;
     error = '';
     try {
-      await applySingle(current, resolution);
-      // Remove from conflicts
-      const newMap = new Map(resolutions);
-      newMap.delete(current.relativePath);
-      resolutions = newMap;
-      kbSyncStore.setState(kb.id, {
-        pendingConflicts: conflicts.filter(c => c.relativePath !== current.relativePath),
-        conflictCount: Math.max(0, kbSyncStore.getState(kb.id).conflictCount - 1),
-      });
-      if (currentIndex >= conflicts.length - 1) {
-        currentIndex = Math.max(0, conflicts.length - 2);
-      }
+      const target = settingsStore.getState().imageHostTargets.find(tg => tg.id === binding.picoraTargetId);
+      if (!target) throw new Error('Picora target not found');
+      const merged = assembleMerged(mergeResult, picks.get(current.relativePath) ?? new Map(), 'local');
+      await applyResolvedContent(binding, kb, target, current.relativePath, merged);
+      removeCurrentFromStore();
     } catch (e) {
-      error = typeof e === 'string' ? e : 'Failed to apply resolution';
+      error = typeof e === 'string' ? e : (e instanceof Error ? e.message : 'Failed to apply');
     } finally {
       applying = false;
     }
   }
 
-  async function applyAll() {
-    applying = true;
-    error = '';
-    try {
-      for (const conflict of conflicts) {
-        const resolution = resolutions.get(conflict.relativePath);
-        if (!resolution) continue;
-        await applySingle(conflict, resolution);
-      }
-      kbSyncStore.setState(kb.id, { pendingConflicts: [], conflictCount: 0, status: 'idle' });
-      onClose();
-    } catch (e) {
-      error = typeof e === 'string' ? e : 'Failed to apply resolutions';
-    } finally {
-      applying = false;
-    }
-  }
-
-  async function applySingle(conflict: ConflictEntry, resolution: ConflictResolution) {
-    const target = settingsStore.getState().imageHostTargets.find(t => t.id === binding.picoraTargetId);
-    if (!target) throw new Error('Picora target not found');
-    const apiBase = picoraApiBase(target.picoraApiUrl);
-    const { getPicoraApiKey } = await import('$lib/services/picora/credentials');
-    const apiKey = await getPicoraApiKey(target);
-
-    if (resolution === 'prefer-local') {
-      // Upload local → overwrite remote
-      const content = await invoke<string>('read_file', { path: `${kb.path}/${conflict.relativePath}` });
-      await invoke('picora_kb_sync_batch', {
-        apiBase,
-        apiKey,
-        kbId: binding.picoraKbId,
-        ops: [{ op: 'upsert', relativePath: conflict.relativePath, content, sourceHash: conflict.localHash }],
-      });
-    } else if (resolution === 'prefer-remote') {
-      // Download remote → overwrite local
-      const content = await fetchRaw(apiBase, apiKey, binding.picoraKbId, conflict.relativePath);
-      await invoke('write_file', { path: `${kb.path}/${conflict.relativePath}`, content });
-    } else if (resolution === 'keep-both') {
-      // Download remote to a .conflict.md copy, keep local as-is
-      const content = await fetchRaw(apiBase, apiKey, binding.picoraKbId, conflict.relativePath);
-      const conflictPath = conflict.relativePath.replace(/(\.[^.]+)$/, `.conflict-${Date.now()}$1`);
-      await invoke('write_file', { path: `${kb.path}/${conflictPath}`, content });
-    }
-  }
-
-  function formatDate(iso: string): string {
-    if (!iso) return '—';
-    return new Date(iso).toLocaleString();
+  function removeCurrentFromStore() {
+    if (!current) return;
+    const path = current.relativePath;
+    const remaining = conflicts.filter(c => c.relativePath !== path);
+    kbSyncStore.setState(kb.id, {
+      pendingConflicts: remaining,
+      conflictCount: remaining.length,
+      status: remaining.length === 0 ? 'idle' : 'conflict',
+    });
+    if (currentIndex >= remaining.length) currentIndex = Math.max(0, remaining.length - 1);
+    if (remaining.length === 0) onClose();
   }
 
   function formatBytes(bytes: number): string {
@@ -127,53 +122,70 @@
       <button class="close-btn" onclick={onClose}>&times;</button>
     </div>
 
-    {#if conflicts.length === 0}
+    {#if conflicts.length === 0 || !current}
       <div class="dialog-body">
         <p class="empty-hint">{$t('kb_sync.conflict.no_conflicts')}</p>
       </div>
-    {:else if current}
+    {:else}
       <div class="nav-bar">
         <button class="nav-btn" disabled={currentIndex === 0} onclick={() => { currentIndex--; }}>‹</button>
-        <span class="nav-label">{current.relativePath} ({currentIndex + 1}/{conflicts.length})</span>
+        <span class="nav-label" title={current.relativePath}>{current.relativePath} ({currentIndex + 1}/{conflicts.length})</span>
         <button class="nav-btn" disabled={currentIndex >= conflicts.length - 1} onclick={() => { currentIndex++; }}>›</button>
       </div>
 
-      <div class="diff-row">
-        <div class="diff-side">
-          <div class="diff-header">
-            {$t('kb_sync.conflict.local')}
-            <span class="diff-meta">{formatDate(current.localUpdatedAt)} · {formatBytes(current.localSizeBytes)}</span>
-          </div>
-          <div class="diff-preview">{current.localPreview || $t('kb_sync.conflict.no_preview')}</div>
+      <div class="toolbar">
+        <div class="meta">
+          <span class="side-tag local">{$t('kb_sync.conflict.local')}</span>
+          <span class="dim">{formatBytes(current.localSizeBytes)}</span>
+          <span class="side-tag remote">{$t('kb_sync.conflict.remote')}</span>
+          <span class="dim">{formatBytes(current.remoteSizeBytes)}</span>
+          {#if unresolvedCount > 0}
+            <span class="unresolved">{$t('kb_sync.conflict.unresolved').replace('{n}', String(unresolvedCount))}</span>
+          {/if}
         </div>
-        <div class="diff-side">
-          <div class="diff-header">
-            {$t('kb_sync.conflict.remote')}
-            <span class="diff-meta">{formatDate(current.remoteUpdatedAt)} · {formatBytes(current.remoteSizeBytes)}</span>
-          </div>
-          <div class="diff-preview">{current.remotePreview || $t('kb_sync.conflict.no_preview')}</div>
+        <div class="bulk">
+          <button class="mini" onclick={() => setAll('local')}>{$t('kb_sync.conflict.take_local')}</button>
+          <button class="mini" onclick={() => setAll('remote')}>{$t('kb_sync.conflict.take_remote')}</button>
         </div>
       </div>
 
-      <div class="resolution-area">
-        {#each [
-          { value: 'prefer-local', label: $t('kb_sync.conflict.keep_local') },
-          { value: 'prefer-remote', label: $t('kb_sync.conflict.keep_remote') },
-          { value: 'keep-both', label: $t('kb_sync.conflict.keep_both') },
-        ] as opt}
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <label class="resolution-option" class:selected={getResolution() === opt.value}>
-            <input
-              type="radio"
-              name="resolution"
-              value={opt.value}
-              checked={getResolution() === opt.value}
-              onchange={() => setResolution(opt.value as ConflictResolution)}
-            />
-            {opt.label}
-          </label>
-        {/each}
+      <div class="merge-view">
+        {#if mergeResult}
+          {#each mergeResult.chunks as chunk, i (i)}
+            {#if chunk.type === 'stable'}
+              {#each chunk.lines ?? [] as line}
+                <div class="line context">{line || ' '}</div>
+              {/each}
+            {:else}
+              {@const pick = pickFor(i)}
+              <div class="conflict-block" class:resolved={pick !== undefined}>
+                <div class="conflict-actions">
+                  <button class="chip" class:on={pick === 'local'} onclick={() => setPick(i, 'local')}>{$t('kb_sync.conflict.take_local')}</button>
+                  <button class="chip" class:on={pick === 'remote'} onclick={() => setPick(i, 'remote')}>{$t('kb_sync.conflict.take_remote')}</button>
+                  <button class="chip" class:on={pick === 'both-local-first'} onclick={() => setPick(i, 'both-local-first')}>{$t('kb_sync.conflict.take_both')}</button>
+                </div>
+                <div class="side local" class:muted={pick === 'remote'}>
+                  {#each chunk.local ?? [] as line}
+                    <div class="line add">{line || ' '}</div>
+                  {/each}
+                  {#if (chunk.local ?? []).length === 0}<div class="line empty">∅</div>{/if}
+                </div>
+                <div class="side remote" class:muted={pick === 'local'}>
+                  {#each chunk.remote ?? [] as line}
+                    <div class="line del">{line || ' '}</div>
+                  {/each}
+                  {#if (chunk.remote ?? []).length === 0}<div class="line empty">∅</div>{/if}
+                </div>
+              </div>
+            {/if}
+          {/each}
+        {/if}
       </div>
+
+      <details class="preview-wrap">
+        <summary>{$t('kb_sync.conflict.merge_preview')}</summary>
+        <pre class="merged-preview">{mergedPreview}</pre>
+      </details>
 
       {#if error}
         <p class="error-text">{error}</p>
@@ -182,27 +194,20 @@
 
     <div class="dialog-footer">
       <button class="btn btn-ghost" onclick={onClose}>{$t('common.close')}</button>
-      {#if conflicts.length > 0}
+      {#if current}
         <button
           class="btn btn-ghost"
-          disabled={!getResolution() || applying}
-          onclick={() => { if (currentIndex < conflicts.length - 1) currentIndex++; }}
+          disabled={currentIndex >= conflicts.length - 1}
+          onclick={() => { currentIndex++; }}
         >
           {$t('kb_sync.conflict.skip')}
         </button>
         <button
           class="btn btn-primary"
-          disabled={!getResolution() || applying}
-          onclick={applyOne}
+          disabled={unresolvedCount > 0 || applying}
+          onclick={applyCurrent}
         >
-          {$t('kb_sync.conflict.apply_one')}
-        </button>
-        <button
-          class="btn btn-primary"
-          disabled={resolutions.size === 0 || applying}
-          onclick={applyAll}
-        >
-          {$t('kb_sync.conflict.apply_all').replace('{n}', String(resolutions.size))}
+          {$t('kb_sync.conflict.apply_upload')}
         </button>
       {/if}
     </div>
@@ -224,7 +229,8 @@
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: 10px;
-    width: 720px;
+    width: 760px;
+    max-width: 92vw;
     max-height: 85vh;
     display: flex;
     flex-direction: column;
@@ -276,83 +282,102 @@
     color: var(--text-secondary);
     padding: 0 0.25rem;
   }
-
   .nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
   .nav-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .diff-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0;
-    flex: 1;
-    overflow: hidden;
-    min-height: 200px;
-  }
-
-  .diff-side {
-    display: flex;
-    flex-direction: column;
-    border-right: 1px solid var(--border-light);
-    overflow: hidden;
-  }
-
-  .diff-side:last-child { border-right: none; }
-
-  .diff-header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    padding: 0.4rem 0.75rem;
-    background: var(--bg-secondary);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    color: var(--text-secondary);
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .diff-meta { font-weight: 400; color: var(--text-muted); }
-
-  .diff-preview {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0.5rem 0.75rem;
-    font-family: monospace;
-    font-size: var(--font-size-xs);
-    color: var(--text-secondary);
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .resolution-area {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-    padding: 0.75rem 1rem;
-    border-top: 1px solid var(--border-light);
-  }
-
-  .resolution-option {
+  .toolbar {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.5rem;
-    padding: 0.3rem 0.5rem;
+    padding: 0.4rem 1rem;
+    border-bottom: 1px solid var(--border-light);
+    font-size: var(--font-size-xs);
+  }
+  .meta { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+  .side-tag { padding: 0.05rem 0.35rem; border-radius: 3px; font-weight: 600; }
+  .side-tag.local { background: color-mix(in srgb, var(--accent-color) 16%, transparent); color: var(--accent-color); }
+  .side-tag.remote { background: color-mix(in srgb, #38a169 16%, transparent); color: var(--color-success, #38a169); }
+  .dim { color: var(--text-muted); }
+  .unresolved { color: var(--warning-color, #e8a838); font-weight: 600; }
+  .bulk { display: flex; gap: 0.35rem; }
+  .mini {
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
     border-radius: 4px;
+    padding: 0.1rem 0.5rem;
+    font-size: var(--font-size-xs);
     cursor: pointer;
-    font-size: var(--font-size-sm);
-    color: var(--text-primary);
-    transition: background 0.1s;
+  }
+  .mini:hover { background: var(--bg-hover); }
+
+  .merge-view {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem 0;
+    font-family: monospace;
+    font-size: var(--font-size-xs);
+    min-height: 220px;
+    background: var(--bg-primary);
   }
 
-  .resolution-option.selected { background: color-mix(in srgb, var(--accent-color) 10%, transparent); }
-  .resolution-option:hover { background: var(--bg-hover); }
+  .line {
+    padding: 0 1rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+  }
+  .line.context { color: var(--text-secondary); }
+  .line.add { background: color-mix(in srgb, var(--accent-color) 12%, transparent); color: var(--text-primary); }
+  .line.del { background: color-mix(in srgb, #38a169 12%, transparent); color: var(--text-primary); }
+  .line.empty { color: var(--text-muted); font-style: italic; }
+
+  .conflict-block {
+    border-left: 3px solid var(--warning-color, #e8a838);
+    margin: 0.35rem 0;
+    background: color-mix(in srgb, var(--warning-color, #e8a838) 6%, transparent);
+  }
+  .conflict-block.resolved { border-left-color: var(--color-success, #38a169); }
+  .conflict-actions { display: flex; gap: 0.35rem; padding: 0.3rem 1rem; }
+  .chip {
+    border: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    border-radius: 4px;
+    padding: 0.1rem 0.5rem;
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+  }
+  .chip:hover { background: var(--bg-hover); }
+  .chip.on { background: var(--accent-color); color: #fff; border-color: var(--accent-color); }
+  .side.muted { opacity: 0.4; }
+
+  .preview-wrap {
+    border-top: 1px solid var(--border-light);
+    padding: 0.4rem 1rem;
+    font-size: var(--font-size-xs);
+  }
+  .preview-wrap summary { cursor: pointer; color: var(--text-secondary); }
+  .merged-preview {
+    margin: 0.4rem 0 0;
+    max-height: 160px;
+    overflow: auto;
+    padding: 0.5rem;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: var(--font-size-xs);
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text-secondary);
+  }
 
   .error-text {
     padding: 0 1rem;
     font-size: var(--font-size-sm);
     color: var(--color-error, #e53e3e);
   }
-
   .empty-hint {
     padding: 2rem;
     text-align: center;
@@ -367,7 +392,6 @@
     padding: 0.75rem 1rem;
     border-top: 1px solid var(--border-light);
   }
-
   .btn {
     padding: 0.35rem 0.9rem;
     border-radius: 5px;
@@ -375,7 +399,6 @@
     cursor: pointer;
     border: 1px solid transparent;
   }
-
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-ghost { background: transparent; border-color: var(--border-color); color: var(--text-secondary); }
   .btn-primary { background: var(--accent-color); color: white; }

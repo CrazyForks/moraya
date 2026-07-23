@@ -3,7 +3,16 @@
  * Supports multiple LLM providers: Claude, OpenAI, Gemini, DeepSeek, local models
  */
 
-export type AIProvider = 'claude' | 'openai' | 'gemini' | 'deepseek' | 'ollama' | 'grok' | 'mistral' | 'glm' | 'minimax' | 'doubao' | 'custom';
+// LLM provider catalog is sourced from the shared @moraya/core/ai package —
+// the single source of truth (no local fork). resolveCatalog({platform:'desktop'})
+// surfaces cloud providers only; on-device (local-mlx/local-llama) are filtered
+// out by core's capability metadata.
+import { resolveCatalog } from '@moraya/core/ai';
+import type { AIProvider } from '@moraya/core/ai';
+export type { AIProvider };
+
+/** Cloud chat providers surfaced on desktop, in catalog order (excludes on-device). */
+export const CHAT_PROVIDERS: AIProvider[] = resolveCatalog({ platform: 'desktop' }).map((p) => p.id);
 
 export interface AIProviderConfig {
   id: string;
@@ -20,35 +29,13 @@ export interface AIProviderConfig {
 export type { RealtimeVoiceProvider, RealtimeVoiceAIConfig } from '@moraya/core/ai/voice';
 import type { RealtimeVoiceProvider } from '@moraya/core/ai/voice';
 
-export const DEFAULT_MODELS: Record<AIProvider, string[]> = {
-  claude:  ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'],
-  openai:  ['gpt-5.2', 'gpt-5.2-pro', 'gpt-5', 'gpt-5-mini', 'o4-mini', 'gpt-4o', 'gpt-4o-mini', 'o3', 'o3-mini'],
-  gemini:  ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-pro-exp'],
-  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
-  ollama:  ['llama3.3', 'llama3.2', 'qwen2.5', 'qwen2.5-coder', 'phi4', 'gemma3', 'deepseek-r1', 'mistral', 'codellama'],
-  grok:    ['grok-4', 'grok-4-1-fast-reasoning', 'grok-4-1-fast-non-reasoning', 'grok-code-fast-1', 'grok-3'],
-  mistral: ['mistral-large-latest', 'mistral-small-latest', 'magistral-medium-latest', 'magistral-small-latest', 'codestral-latest', 'devstral-latest'],
-  glm:     ['glm-5', 'glm-4-plus', 'glm-4-air', 'glm-4-flash', 'glm-z1-flash', 'glm-z1-air'],
-  minimax: ['MiniMax-M2.5', 'MiniMax-M2.5-highspeed', 'MiniMax-Text-01'],
-  doubao:  [],
-  custom:  [],
-};
+// Cloud provider model lists — re-exported from @moraya/core/ai (authoritative).
+export { DEFAULT_MODELS } from '@moraya/core/ai';
 
 export { REALTIME_VOICE_DEFAULT_MODELS } from '@moraya/core/ai/voice';
 
-export const PROVIDER_BASE_URLS: Record<AIProvider, string> = {
-  claude:   'https://api.anthropic.com',
-  openai:   'https://api.openai.com',
-  gemini:   'https://generativelanguage.googleapis.com',
-  deepseek: 'https://api.deepseek.com',
-  ollama:   'http://localhost:11434',
-  grok:     'https://api.x.ai',
-  mistral:  'https://api.mistral.ai',
-  glm:      'https://open.bigmodel.cn/api/paas/v4',
-  minimax:  'https://api.minimax.io/v1',
-  doubao:   'https://ark.cn-beijing.volces.com/api/v3',
-  custom:   '',
-};
+// Cloud provider base URLs — re-exported from @moraya/core/ai (authoritative).
+export { PROVIDER_BASE_URLS } from '@moraya/core/ai';
 
 export { REALTIME_VOICE_BASE_URLS, REALTIME_VOICE_PROVIDER_NAMES } from '@moraya/core/ai/voice';
 
@@ -149,20 +136,18 @@ export interface AICommandOption {
 }
 
 // --- Image Generation (AIGC) Types ---
+// Image provider catalog is sourced from @moraya/core/ai/image (single source of
+// truth). Base URLs / model lists / size maps are no longer forked here.
+import { IMAGE_DEFAULT_MODELS, IMAGE_BASE_URLS } from '@moraya/core/ai/image';
+import type { ImageProvider, ImageAspectRatio, ImageSizeLevel } from '@moraya/core/ai/image';
 
-export type ImageProvider = 'openai' | 'grok' | 'gemini' | 'qwen' | 'doubao' | 'custom';
-
-export const DEFAULT_IMAGE_MODELS: Record<ImageProvider, string[]> = {
-  openai: ['dall-e-3', 'dall-e-2', 'gpt-image-1'],
-  grok:   ['aurora'],
-  gemini: ['imagen-3.0-generate-002', 'imagen-3.0-fast-generate-001'],
-  qwen:   ['wanx2.1-t2i-turbo', 'wanx2.1-t2i-plus', 'wan2.6-t2i', 'flux-schnell', 'flux-dev', 'wanx-v1'],
-  doubao: ['doubao-seedream-5-0-260128', 'doubao-seedream-3-0-t2i-250415'],
-  custom: [],
-};
-
-export type ImageAspectRatio = '16:9' | '4:3' | '3:2' | '1:1' | '2:3' | '3:4' | '9:16';
-export type ImageSizeLevel = 'large' | 'medium' | 'small';
+export type { ImageProvider, ImageAspectRatio, ImageSizeLevel };
+export {
+  IMAGE_DEFAULT_MODELS as DEFAULT_IMAGE_MODELS,
+  IMAGE_SIZE_MAP,
+  DOUBAO_SIZE_MAP,
+  resolveImageSize,
+} from '@moraya/core/ai/image';
 
 export interface ImageProviderConfig {
   id: string;
@@ -176,51 +161,20 @@ export interface ImageProviderConfig {
   defaultSize?: string;
 }
 
-/** Resolution map: ratio → sizeLevel → "WxH" */
-export const IMAGE_SIZE_MAP: Record<ImageAspectRatio, Record<ImageSizeLevel, string>> = {
-  '16:9': { large: '1920x1080', medium: '1280x720',  small: '960x540'  },
-  '4:3':  { large: '1600x1200', medium: '1024x768',  small: '800x600'  },
-  '3:2':  { large: '1536x1024', medium: '1200x800',  small: '768x512'  },
-  '1:1':  { large: '1536x1536', medium: '1024x1024', small: '512x512'  },
-  '2:3':  { large: '1024x1536', medium: '800x1200',  small: '512x768'  },
-  '3:4':  { large: '1200x1600', medium: '768x1024',  small: '600x800'  },
-  '9:16': { large: '1080x1920', medium: '720x1280',  small: '540x960'  },
-};
-
-export function resolveImageSize(ratio: ImageAspectRatio, level: ImageSizeLevel): string {
-  return IMAGE_SIZE_MAP[ratio]?.[level] ?? '1024x1024';
-}
-
-/**
- * Doubao (VolcEngine SeedDream) requires minimum 3,686,400 pixels (1920×1920).
- * All sizes here satisfy this constraint. 16:9/9:16 small=medium because
- * 2560×1440 / 1440×2560 is already the minimum valid size for those ratios.
- * Similarly 3:2/2:3 minimum rounds to 2400×1600 / 1600×2400.
- */
-export const DOUBAO_SIZE_MAP: Record<ImageAspectRatio, Record<ImageSizeLevel, string>> = {
-  '16:9': { large: '3840x2160', medium: '2560x1440', small: '2560x1440' },
-  '4:3':  { large: '3200x2400', medium: '2560x1920', small: '2240x1680' },
-  '3:2':  { large: '3000x2000', medium: '2400x1600', small: '2400x1600' },
-  '1:1':  { large: '2560x2560', medium: '2048x2048', small: '1920x1920' },
-  '2:3':  { large: '2000x3000', medium: '1600x2400', small: '1600x2400' },
-  '3:4':  { large: '2400x3200', medium: '1920x2560', small: '1680x2240' },
-  '9:16': { large: '2160x3840', medium: '1440x2560', small: '1440x2560' },
-};
-
-export const IMAGE_PROVIDER_PRESETS: Record<ImageProvider, { baseURL: string; model: string }> = {
-  openai:  { baseURL: 'https://api.openai.com/v1',                          model: 'dall-e-3' },
-  grok:    { baseURL: 'https://api.x.ai/v1',                                model: 'aurora' },
-  gemini:  { baseURL: 'https://generativelanguage.googleapis.com',           model: 'imagen-3.0-generate-002' },
-  qwen:    { baseURL: 'https://dashscope.aliyuncs.com',                      model: 'wanx2.1-t2i-turbo' },
-  doubao:  { baseURL: 'https://ark.cn-beijing.volces.com/api/v3',            model: 'doubao-seedream-5-0-260128' },
-  custom:  { baseURL: '', model: '' },
-};
+/** {baseURL, model} per provider — derived from the core image catalog. */
+export const IMAGE_PROVIDER_PRESETS: Record<ImageProvider, { baseURL: string; model: string }> =
+  Object.fromEntries(
+    (Object.keys(IMAGE_BASE_URLS) as ImageProvider[]).map((p) => [
+      p,
+      { baseURL: IMAGE_BASE_URLS[p], model: IMAGE_DEFAULT_MODELS[p][0] ?? '' },
+    ]),
+  ) as Record<ImageProvider, { baseURL: string; model: string }>;
 
 export const DEFAULT_IMAGE_PROVIDER_CONFIG: Omit<ImageProviderConfig, 'id'> = {
   provider: 'openai',
-  baseURL: 'https://api.openai.com/v1',
+  baseURL: IMAGE_BASE_URLS.openai,
   apiKey: '',
-  model: 'dall-e-3',
+  model: IMAGE_DEFAULT_MODELS.openai[0],
   defaultRatio: '16:9',
   defaultSizeLevel: 'medium',
 };
@@ -320,25 +274,12 @@ export const AI_COMMANDS: AICommandOption[] = [
 
 // --- Speech STT Types ---
 
-export type SpeechProvider =
-  | 'deepgram'
-  | 'gladia'
-  | 'assemblyai'
-  | 'azure-speech'
-  | 'aws-transcribe'
-  | 'custom';
-
-export interface SpeechProviderConfig {
-  id: string;
-  provider: SpeechProvider;
-  apiKey: string;        // keychain: 'speech-key:{id}', disk: '***'
-  baseUrl?: string;      // custom WebSocket endpoint
-  model: string;
-  language: string;      // 'zh', 'en', 'auto', 'multi'
-  region?: string;       // Azure/AWS region
-  awsAccessKey?: string; // keychain: 'speech-aws-ak:{id}', disk: '***'
-  awsSecretKey?: string; // keychain: 'speech-aws-sk:{id}', disk: '***'
-}
+// SpeechProvider + SpeechProviderConfig are sourced from @moraya/core/ai/voice
+// (shared, identical shape — no local fork). Desktop keychain key scheme:
+// apiKey → 'speech-key:{id}', awsAccessKey → 'speech-aws-ak:{id}',
+// awsSecretKey → 'speech-aws-sk:{id}' (disk placeholder: '***').
+import type { SpeechProvider, SpeechProviderConfig } from '@moraya/core/ai/voice';
+export type { SpeechProvider, SpeechProviderConfig };
 
 export const SPEECH_PROVIDER_MODELS: Record<SpeechProvider, string[]> = {
   deepgram:         ['nova-3', 'nova-2', 'nova', 'enhanced', 'base'],

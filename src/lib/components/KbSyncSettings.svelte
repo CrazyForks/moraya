@@ -11,6 +11,7 @@
   import KbPicoraBindDialog from './KbPicoraBindDialog.svelte';
   import KbSyncConflictPanel from './KbSyncConflictPanel.svelte';
   import KbSyncTrashPanel from './KbSyncTrashPanel.svelte';
+  import KbMemoryAssetPanel from './KbMemoryAssetPanel.svelte';
   import { ask } from '@tauri-apps/plugin-dialog';
 
   let knowledgeBases = $state<KnowledgeBase[]>([]);
@@ -19,6 +20,7 @@
   let bindingKb = $state<KnowledgeBase | null>(null);
   let conflictKbId = $state<string | null>(null);
   let expandedKbId = $state<string | null>(null);
+  let memoryKbId = $state<string | null>(null);
   let showTrash = $state(false);
 
   const unsub1 = filesStore.subscribe(state => { knowledgeBases = state.knowledgeBases; });
@@ -143,7 +145,12 @@
 
 <div class="kb-sync-settings gx-tab">
   <section class="gx-section">
-    <h3 class="gx-section-title">{$t('kb_sync.settings.global_switch')}</h3>
+    <div class="section-title-row">
+      <h3 class="gx-section-title">{$t('kb_sync.settings.global_switch')}</h3>
+      <button class="gx-btn gx-btn-sm trash-link" onclick={() => { showTrash = true; }} type="button">
+        🗑 {$t('kb_sync.trash.title')}
+      </button>
+    </div>
     <div class="gx-card">
       <div class="gx-row gx-row-check">
         <label class="gx-check">
@@ -155,11 +162,6 @@
           <span>{$t('kb_sync.settings.global_switch')}</span>
         </label>
         <p class="gx-hint gx-hint-indent">{$t('kb_sync.settings.global_switch_hint')}</p>
-      </div>
-      <div class="gx-row gx-row-check">
-        <button class="gx-btn gx-btn-sm trash-link" onclick={() => { showTrash = true; }} type="button">
-          🗑 {$t('kb_sync.trash.title')}
-        </button>
       </div>
     </div>
   </section>
@@ -174,7 +176,8 @@
             <span class="kb-name">{kb.name}</span>
             {#if kb.picoraBinding}
               <span class="kb-sync-status {statusClass(kb)}">
-                ☁ {kb.picoraBinding.picoraKbName} {statusIcon(kb)}
+                <svg class="picora-p" width="12" height="12" viewBox="8 6 16 20" fill="none" aria-hidden="true"><path d="M9.5 7.5v17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="14" r="6.5" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="14" r="2.4" fill="currentColor"/></svg>
+                {kb.picoraBinding.picoraKbName} {statusIcon(kb)}
               </span>
               <span class="kb-last-sync">
                 {$t('kb_sync.settings.last_sync')}: {formatDate(kb.picoraBinding.lastSyncAt)}
@@ -207,6 +210,9 @@
               </button>
               <button class="action-btn" onclick={() => { expandedKbId = expandedKbId === kb.id ? null : kb.id; }}>
                 {$t('kb_sync.settings.edit_strategy')} {expandedKbId === kb.id ? '▲' : '▼'}
+              </button>
+              <button class="action-btn" onclick={() => { memoryKbId = memoryKbId === kb.id ? null : kb.id; }}>
+                {$t('kb_sync.settings.memory_asset')} {memoryKbId === kb.id ? '▲' : '▼'}
               </button>
               <button class="action-btn danger" onclick={() => unbind(kb)}>{$t('kb_sync.settings.unbind')}</button>
             {:else}
@@ -257,6 +263,10 @@
             </div>
           </div>
         {/if}
+
+        {#if kb.picoraBinding && memoryKbId === kb.id}
+          <KbMemoryAssetPanel {kb} />
+        {/if}
       </div>
     {/each}
     {#if knowledgeBases.length === 0}
@@ -296,8 +306,22 @@
   /* Layout — outer .gx-tab + .gx-section provided by settings.css.
      This file only defines visuals unique to KB sync (knowledge-base
      item rows, strategy editor). */
+  /* Section heading with the trash button pinned to its right. */
+  .section-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  .section-title-row .gx-section-title {
+    margin-bottom: 0;
+  }
   .trash-link {
-    align-self: flex-start;
+    flex-shrink: 0;
+  }
+  .picora-p {
+    vertical-align: -1px;
+    display: inline-block;
   }
   .kb-list {
     display: flex;

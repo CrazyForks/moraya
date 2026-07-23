@@ -925,6 +925,8 @@ pub fn run() {
         .manage(DockDocumentTracker(Mutex::new(HashMap::new())))
         .invoke_handler(tauri::generate_handler![
             commands::file::read_file,
+            commands::claude_transcripts::list_claude_transcripts,
+            commands::claude_transcripts::read_claude_transcript,
             commands::file::read_file_binary,
             commands::file::read_resource_file,
             commands::file::write_file,
@@ -933,6 +935,7 @@ pub fn run() {
             commands::pdf_export::export_pdf_native,
             commands::pdf_export::export_print_ready,
             commands::file::read_dir_recursive,
+            commands::file::list_hidden_dirs,
             commands::file::migrate_voice_profiles_dir,
             commands::file::create_markdown_file,
             commands::file::create_dir,
@@ -1029,6 +1032,10 @@ pub fn run() {
             commands::picora_media::picora_server_caps,
             commands::picora_account::picora_get_quota,
             commands::picora_account::picora_media_delete,
+            commands::picora_doc_revisions::picora_doc_revisions,
+            commands::picora_doc_revisions::picora_doc_revision_content,
+            commands::picora_doc_revisions::picora_clear_doc_revisions,
+            commands::picora_doc_revisions::picora_update_user_settings,
             commands::picora_oauth::picora_oauth_start_device_flow,
             commands::picora_oauth::picora_oauth_poll,
             commands::picora_oauth::picora_oauth_get_token,

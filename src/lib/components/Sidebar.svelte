@@ -10,10 +10,12 @@
   import { startWatching, stopWatching, refreshFileTree } from '$lib/services/file-watcher';
   import { load as loadStore } from '@tauri-apps/plugin-store';
   import FileContextMenu from './FileContextMenu.svelte';
+  import KbMemoryAssetDialog from './KbMemoryAssetDialog.svelte';
   import LockIndicator from './LockIndicator.svelte';
   import type { Lock } from '$lib/services/review/types';
   import { kbSyncStore, runSync } from '$lib/services/kb-sync/sync-service';
   import type { KbSyncState } from '$lib/services/kb-sync/types';
+  import { renameVersionsDir } from '$lib/services/version-history';
 
   let {
     onFileSelect,
@@ -72,7 +74,7 @@
 
   // Inline input dialog state (replaces window.prompt which doesn't work in WKWebView)
   let inputDialog = $state<{
-    mode: 'new-file' | 'new-folder' | 'rename';
+    mode: 'new-folder' | 'new-file' | 'rename';
     value: string;
     targetPath: string; // new-file/new-folder: parent dir; rename: original file/dir path
   } | null>(null);
@@ -83,6 +85,8 @@
   let activeKBId = $state<string | null>(null);
   let showKBDropdown = $state(false);
   let showSaveAsKBHint = $state(false);
+  // KB whose memory-directory assets dialog is open (Picora-bound KBs only).
+  let memoryPanelKb = $state<KnowledgeBase | null>(null);
 
   // Top-level store subscription — do NOT wrap in $effect().
   // Svelte 5 $effect tracks reads in subscribe callbacks, causing infinite loops.
@@ -596,6 +600,13 @@
     contextMenu = { ...contextMenu, show: false };
   }
 
+  /**
+   * Open an inline "New File" input at the target folder — nothing is
+   * created on disk until the user submits a non-empty name (Enter);
+   * Escape/blur cancels with zero side effects. Mirrors `handleNewFolder()`.
+   * Does NOT auto-open the created file in the editor — the user clicks the
+   * new sidebar entry to open it, same as any other file.
+   */
   function handleNewFile() {
     const dirPath = contextMenu.targetType === 'folder'
       ? contextMenu.targetPath
@@ -690,35 +701,20 @@
     }, 50);
   }
 
+  /** Close the inline input without applying an edit — nothing was created/renamed. */
+  function cancelInputDialog() {
+    inputDialog = null;
+  }
+
   async function submitInputDialog() {
     if (!inputDialog) return;
     const value = inputDialog.value.trim();
     if (!value) {
-      inputDialog = null;
+      cancelInputDialog();
       return;
     }
 
-    if (inputDialog.mode === 'new-file') {
-      try {
-        let newPath: string;
-        if (viewMode === 'tree') {
-          // Tree mode: user types the full filename — create as-is, no .md auto-append
-          const fullPath = `${inputDialog.targetPath}/${value}`;
-          await invoke('write_file', { path: fullPath, content: '' });
-          newPath = fullPath;
-        } else {
-          // List mode: auto-append .md via dedicated command
-          newPath = await invoke<string>('create_markdown_file', {
-            dirPath: inputDialog.targetPath,
-            fileName: value,
-          });
-        }
-        if (folderPath) await refreshFileTree(folderPath);
-        onFileSelect(newPath);
-      } catch (e) {
-        console.warn('Failed to create file:', e);
-      }
-    } else if (inputDialog.mode === 'new-folder') {
+    if (inputDialog.mode === 'new-folder') {
       // Reject reserved directory name "images"
       if (value.toLowerCase() === 'images') {
         await message($t('sidebar.reserved_dir_name'), { title: $t('sidebar.reserved_dir_title'), kind: 'warning' });
@@ -734,7 +730,20 @@
       } catch (e) {
         console.warn('Failed to create folder:', e);
       }
+    } else if (inputDialog.mode === 'new-file') {
+      // create_markdown_file errors (rather than silently overwriting) on a
+      // name collision — left as a console warning + the input just closes,
+      // matching new-folder's existing error handling above.
+      try {
+        await invoke<string>('create_markdown_file', { dirPath: inputDialog.targetPath, fileName: value });
+        if (folderPath) await refreshFileTree(folderPath);
+      } catch (e) {
+        console.warn('Failed to create file:', e);
+      }
+      // Do NOT auto-open — the user clicks the new sidebar entry to open it,
+      // same as any other file.
     } else {
+      // mode === 'rename'
       const oldPath = inputDialog.targetPath;
       // In list mode, re-append .md since user edited without seeing the extension.
       // In tree mode, user sees the full name including extension — use as-is.
@@ -752,6 +761,9 @@
         const newPath = `${parentDir}/${finalValue}`;
         try {
           await invoke('rename_file', { oldPath, newPath });
+          // v1.21.0: keep local version history attached (best-effort; works
+          // for files and directories alike since .versions mirrors the tree)
+          renameVersionsDir(oldPath, newPath);
           if (folderPath) await refreshFileTree(folderPath);
           onRename?.(oldPath, newPath);
         } catch (e) {
@@ -768,7 +780,7 @@
       event.preventDefault();
       submitInputDialog();
     } else if (event.key === 'Escape') {
-      inputDialog = null;
+      cancelInputDialog();
     }
   }
 
@@ -924,6 +936,8 @@
         if (parentDir !== target) {
           try {
             await invoke('rename_file', { oldPath: filePath, newPath: `${target}/${fileName}` });
+            // v1.21.0: move the file's local version history along (best-effort)
+            renameVersionsDir(filePath, `${target}/${fileName}`);
             if (folderPath) await refreshFileTree(folderPath);
             expandedDirs = new Set([...expandedDirs, target]);
           } catch (err) {
@@ -1036,29 +1050,41 @@
     {/if}
     {#if showKBDropdown}
       <div class="kb-dropdown">
-        {#each [...knowledgeBases].sort((a, b) => b.lastAccessedAt - a.lastAccessedAt) as kb}
+        {#each knowledgeBases as kb (kb.id)}
           {@const status = kbSyncStatus(kb.id)}
-          <button
-            class="kb-dropdown-item"
-            class:active={kb.id === activeKBId}
-            onclick={() => switchKB(kb.id)}
-          >
-            {#if kb.id === activeKBId}
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
-            {:else}
-              <span class="kb-check-spacer"></span>
-            {/if}
-            <span class="kb-dropdown-name">{kb.name}</span>
+          <div class="kb-dropdown-row" class:active={kb.id === activeKBId}>
+            <button
+              class="kb-dropdown-item"
+              class:active={kb.id === activeKBId}
+              onclick={() => switchKB(kb.id)}
+            >
+              {#if kb.id === activeKBId}
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+              {:else}
+                <span class="kb-check-spacer"></span>
+              {/if}
+              <span class="kb-dropdown-name">{kb.name}</span>
+              {#if kb.picoraBinding}
+                <span
+                  class="kb-sync-badge"
+                  class:syncing={status === 'syncing'}
+                  class:error={status === 'error'}
+                  class:conflict={status === 'conflict'}
+                  title={$t('kb_sync.statusbar.tooltip')}
+                ><svg width="10" height="10" viewBox="8 6 16 20" fill="none" style="vertical-align:-1px;display:inline-block" aria-hidden="true"><path d="M9.5 7.5v17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="14" r="6.5" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="14" r="2.4" fill="currentColor"/></svg>{status === 'error' ? ' ✗' : status === 'conflict' ? ' ⚠' : ''}</span>
+              {/if}
+            </button>
             {#if kb.picoraBinding}
-              <span
-                class="kb-sync-badge"
-                class:syncing={status === 'syncing'}
-                class:error={status === 'error'}
-                class:conflict={status === 'conflict'}
-                title={$t('kb_sync.statusbar.tooltip')}
-              ><svg width="10" height="10" viewBox="8 6 16 20" fill="none" style="vertical-align:-1px;display:inline-block" aria-hidden="true"><path d="M9.5 7.5v17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="14" r="6.5" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="14" r="2.4" fill="currentColor"/></svg>{status === 'error' ? ' ✗' : status === 'conflict' ? ' ⚠' : ''}</span>
+              <button
+                class="kb-mem-btn"
+                title={$t('kb_sync.settings.memory_asset')}
+                aria-label={$t('kb_sync.settings.memory_asset')}
+                onclick={(e) => { e.stopPropagation(); showKBDropdown = false; memoryPanelKb = kb; }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>
+              </button>
             {/if}
-          </button>
+          </div>
         {/each}
         <div class="kb-dropdown-divider"></div>
         <button class="kb-dropdown-item kb-manage" onclick={() => { showKBDropdown = false; onOpenKBManager?.(); }}>
@@ -1095,11 +1121,6 @@
           {/if}
         </button>
       {/if}
-      <button class="sidebar-btn" onclick={() => onOpenKBManager?.()} title={$t('sidebar.kb_settings')}>
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 0a1 1 0 011 1v1.07a5.97 5.97 0 011.828.75l.757-.756a1 1 0 011.414 1.414l-.756.757c.357.567.62 1.187.75 1.828H14a1 1 0 110 2h-1.07a5.97 5.97 0 01-.75 1.828l.756.757a1 1 0 01-1.414 1.414l-.757-.756a5.97 5.97 0 01-1.828.75V14a1 1 0 11-2 0v-1.07a5.97 5.97 0 01-1.828-.75l-.757.756a1 1 0 01-1.414-1.414l.756-.757a5.97 5.97 0 01-.75-1.828H2a1 1 0 110-2h1.07a5.97 5.97 0 01.75-1.828l-.756-.757A1 1 0 014.478 2.93l.757.756A5.97 5.97 0 017 2.936V1a1 1 0 011-1zm0 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z"/>
-        </svg>
-      </button>
     </div>
   </div>
 
@@ -1157,6 +1178,22 @@
       <div class="sidebar-empty">
         <p>{$t('sidebar.empty_dir')}</p>
       </div>
+      {#if inputDialog && inputDialog.mode !== 'rename' && inputDialog.targetPath === folderPath}
+        <div class="inline-rename" style="padding-inline-start: {viewMode === 'list' ? '1.75rem' : '0.75rem'}">
+          <span class="tree-icon file-icon">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" opacity="0.5"><path d="M2 1h5l3 3v7H2V1zm5 0v3h3"/></svg>
+          </span>
+          <input
+            bind:this={inputDialogEl}
+            type="text"
+            class="inline-rename-input"
+            placeholder={inputDialog.mode === 'new-folder' ? $t('sidebar.new_folder_prompt') : $t('sidebar.untitled_file_name')}
+            bind:value={inputDialog.value}
+            onkeydown={handleInputDialogKeydown}
+            onblur={cancelInputDialog}
+          />
+        </div>
+      {/if}
     {:else if viewMode === 'list'}
       <!-- List View: hierarchical tree with folders and file previews -->
       <div class="list-view">
@@ -1172,10 +1209,10 @@
               bind:this={inputDialogEl}
               type="text"
               class="inline-rename-input"
-              placeholder={inputDialog.mode === 'new-file' ? $t('sidebar.new_file_prompt') : $t('sidebar.new_folder_prompt')}
+              placeholder={inputDialog.mode === 'new-folder' ? $t('sidebar.new_folder_prompt') : $t('sidebar.untitled_file_name')}
               bind:value={inputDialog.value}
               onkeydown={handleInputDialogKeydown}
-              onblur={() => { inputDialog = null; }}
+              onblur={cancelInputDialog}
             />
           </div>
         {/if}
@@ -1194,16 +1231,20 @@
             bind:this={inputDialogEl}
             type="text"
             class="inline-rename-input"
-            placeholder={inputDialog.mode === 'new-file' ? $t('sidebar.new_file_prompt') : $t('sidebar.new_folder_prompt')}
+            placeholder={inputDialog.mode === 'new-folder' ? $t('sidebar.new_folder_prompt') : $t('sidebar.untitled_file_name')}
             bind:value={inputDialog.value}
             onkeydown={handleInputDialogKeydown}
-            onblur={() => { inputDialog = null; }}
+            onblur={cancelInputDialog}
           />
         </div>
       {/if}
     {/if}
   </div>
 </div>
+
+{#if memoryPanelKb}
+  <KbMemoryAssetDialog kb={memoryPanelKb} onClose={() => (memoryPanelKb = null)} />
+{/if}
 
 {#snippet fileTreeItem(entry: FileEntry, depth: number)}
   {#if inputDialog?.mode === 'rename' && inputDialog.targetPath === entry.path}
@@ -1223,7 +1264,7 @@
         class="inline-rename-input"
         bind:value={inputDialog.value}
         onkeydown={handleInputDialogKeydown}
-        onblur={() => { inputDialog = null; }}
+        onblur={cancelInputDialog}
       />
     </div>
   {:else}
@@ -1289,10 +1330,10 @@
           bind:this={inputDialogEl}
           type="text"
           class="inline-rename-input"
-          placeholder={inputDialog.mode === 'new-file' ? $t('sidebar.new_file_prompt') : $t('sidebar.new_folder_prompt')}
+          placeholder={inputDialog.mode === 'new-folder' ? $t('sidebar.new_folder_prompt') : $t('sidebar.untitled_file_name')}
           bind:value={inputDialog.value}
           onkeydown={handleInputDialogKeydown}
-          onblur={() => { inputDialog = null; }}
+          onblur={cancelInputDialog}
         />
       </div>
     {/if}
@@ -1312,7 +1353,7 @@
           class="inline-rename-input"
           bind:value={inputDialog.value}
           onkeydown={handleInputDialogKeydown}
-          onblur={() => { inputDialog = null; }}
+          onblur={cancelInputDialog}
         />
       </div>
     {:else}
@@ -1346,10 +1387,10 @@
             bind:this={inputDialogEl}
             type="text"
             class="inline-rename-input"
-            placeholder={inputDialog.mode === 'new-file' ? $t('sidebar.new_file_prompt') : $t('sidebar.new_folder_prompt')}
+            placeholder={inputDialog.mode === 'new-folder' ? $t('sidebar.new_folder_prompt') : $t('sidebar.untitled_file_name')}
             bind:value={inputDialog.value}
             onkeydown={handleInputDialogKeydown}
-            onblur={() => { inputDialog = null; }}
+            onblur={cancelInputDialog}
           />
         </div>
       {/if}
@@ -1366,7 +1407,7 @@
           class="inline-rename-input"
           bind:value={inputDialog.value}
           onkeydown={handleInputDialogKeydown}
-          onblur={() => { inputDialog = null; }}
+          onblur={cancelInputDialog}
         />
       </div>
     {:else}
@@ -1854,13 +1895,51 @@
     overflow-y: auto;
   }
 
+  .kb-dropdown-row {
+    display: flex;
+    align-items: center;
+  }
+  .kb-dropdown-row:hover {
+    background: var(--bg-hover);
+  }
+  .kb-dropdown-row .kb-dropdown-item:hover {
+    background: transparent;
+  }
+
+  .kb-mem-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 1.6rem;
+    height: 1.6rem;
+    margin-right: 0.35rem;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--transition-fast, 0.12s), background var(--transition-fast, 0.12s);
+  }
+  .kb-dropdown-row:hover .kb-mem-btn { opacity: 1; }
+  .kb-mem-btn:hover {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+  }
+
   .kb-dropdown-item {
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     padding: 0.4rem 0.5rem;
     border: none;
+    /* Kill the native macOS WKWebView push-button chrome (rounded grey box) —
+       without this the standalone "manage" button renders its native look. */
+    appearance: none;
+    -webkit-appearance: none;
     background: transparent;
     color: var(--text-primary);
     font-size: var(--font-size-sm);
@@ -1877,8 +1956,13 @@
   }
 
   .kb-dropdown-item.kb-manage {
+    width: 100%;
+    box-sizing: border-box;
     color: var(--text-secondary);
     font-size: var(--font-size-xs);
+  }
+  .kb-dropdown-item.kb-manage:hover {
+    background: var(--bg-hover);
   }
 
   .kb-check-spacer {
@@ -1890,7 +1974,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    flex: 1;
+    flex: 0 1 auto;
+    min-width: 0;
   }
 
   /* Sync badge in dropdown — shows ☁ icon next to KBs with Picora binding */

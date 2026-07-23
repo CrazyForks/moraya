@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
+  import { startMemoryAutoSync, stopMemoryAutoSync } from '$lib/services/memory';
   import type { MorayaEditor } from '$lib/editor/setup';
   import { AllSelection, TextSelection } from 'prosemirror-state';
   import {
@@ -22,6 +23,7 @@
     insertAudioAt,
     insertVideoAt,
     insertMathBlock as insertMathBlockCmd,
+    insertTextAtCursor,
   } from '$lib/editor/commands';
   import { undo, redo } from 'prosemirror-history';
   import Editor from '$lib/editor/Editor.svelte';
@@ -44,7 +46,10 @@
   import { initMCPStore, connectAllServers, mcpStore } from '$lib/services/mcp';
   import { reviewStore } from '$lib/services/review';
   import { initContainerManager } from '$lib/services/mcp/container-manager';
-  import { registerKbInterval, clearAllIntervals, runSync } from '$lib/services/kb-sync/sync-service';
+  import { registerKbInterval, clearAllIntervals, runSync, kbSyncStore } from '$lib/services/kb-sync/sync-service';
+  import type { KbSyncState } from '$lib/services/kb-sync/types';
+  import { snapshotVersion, isVersionedPath } from '$lib/services/version-history';
+  import { shouldAutoSave } from '$lib/utils/autosave';
   import { preloadEnhancementPlugins } from '$lib/editor/setup';
   import { openFile, saveFile, saveFileAs, loadFile, getFileNameFromPath, readImageAsBlobUrl, migrateTempImages, isImageFile } from '$lib/services/file-service';
   import { exportDocument, type ExportFormat } from '$lib/services/export-service';
@@ -214,6 +219,12 @@ ${tr('welcome.tip')}
   let showReviewPanel = $state(false);
   // v0.32.0: history panel + DiffView state
   let showHistoryPanel = $state(false);
+  // v1.21.0: local document version history (bottom sheet from the status bar)
+  let showVersionHistory = $state(false);
+  let versionHistoryAvailable = $state(false);
+  // v1.23.0: read-only version-preview tab — the active tab is a historical
+  // version snapshot; the editor is mounted non-editable.
+  let editorReadOnly = $state(false);
   let showBlame = $state(false);
   let blameData = $state<import('$lib/services/git').GitBlameEntry[]>([]);
   let diffViewState = $state<null | { leftHash: string | null; rightHash: string | null }>(null);
@@ -281,6 +292,7 @@ ${tr('welcome.tip')}
   let showUpdateDialog = $state(false);
   let showKBManager = $state(false);
   let showCommandPalette = $state(false);
+  let showPromptPalette = $state(false);
   let commandPaletteMode: 'files' | 'commands' = $state('files');
 
   // KB indexing progress
@@ -294,6 +306,11 @@ ${tr('welcome.tip')}
     const activeKb = state.knowledgeBases.find(k => k.id === state.activeKnowledgeBaseId);
     gitBound = !!activeKb?.git;
   });
+
+  // KB sync conflict panel — opened from the StatusBar sync-warning click.
+  let conflictKbId = $state<string | null>(null);
+  let kbSyncStates = $state<Map<string, KbSyncState>>(new Map());
+  const unsubKbSyncStates = kbSyncStore.subscribe((m) => { kbSyncStates = m; });
 
   async function handleGitSync() {
     const state = filesStore.getState();
@@ -514,7 +531,10 @@ ${tr('welcome.tip')}
     return `${name}.md`;
   }
 
-  async function handleSave(asNew = false): Promise<boolean> {
+  async function handleSave(asNew = false, opts?: { auto?: boolean }): Promise<boolean> {
+    // v1.23.0: read-only version-preview tab — never save or snapshot.
+    const activeTab = tabsStore.getState().tabs.find(t => t.id === tabsStore.getState().activeTabId);
+    if (activeTab?.readOnly) return false;
     const prevFilePath = editorStore.getState().currentFilePath;
     const latestContent = getCurrentContent();
 
@@ -528,6 +548,7 @@ ${tr('welcome.tip')}
     }
 
     if (saved) {
+      pendingEditsSince = 0; // autosave clock: no pending edits after a successful save
       const state = editorStore.getState();
       const newFilePath = state.currentFilePath;
 
@@ -547,6 +568,12 @@ ${tr('welcome.tip')}
 
       if (!asNew && newFilePath && getFileNameFromPath(newFilePath) === 'MORAYA.md') {
         createMorayaHistory(newFilePath, latestContent);
+      }
+
+      // Local version history: snapshot every successful save of a KB document
+      // (hash-deduped inside; best-effort, never blocks the save path)
+      if (newFilePath) {
+        snapshotVersion(newFilePath, latestContent, opts?.auto ? 'auto' : 'manual');
       }
 
       // on-save KB sync: trigger 3 seconds after save to batch rapid saves
@@ -591,6 +618,42 @@ ${tr('welcome.tip')}
     }
 
     return saved;
+  }
+
+  // ── Local version history (v1.21.0) ─────────────────────────────────
+
+  function toggleVersionHistory() {
+    // Re-check availability at click time (a KB may have been registered
+    // after this file was opened)
+    const fp = editorStore.getState().currentFilePath;
+    versionHistoryAvailable = isVersionedPath(fp);
+    if (!versionHistoryAvailable) return;
+    showVersionHistory = !showVersionHistory;
+  }
+
+  /** Reload the editor after a snapshot was restored to disk. */
+  function handleVersionRestored(restored: string) {
+    content = restored;
+    editorStore.setDirtyContent(false, restored);
+    syncVisualEditor(restored);
+    const fp = editorStore.getState().currentFilePath;
+    if (fp) {
+      // Refresh the tab mtime so the external-change watcher doesn't flag the restore
+      invoke('get_files_mtime', { paths: [fp] }).then((result: unknown) => {
+        const mtimes = result as [string, number][];
+        if (mtimes.length > 0) {
+          tabsStore.updateActiveFile(fp, getFileNameFromPath(fp), mtimes[0][1]);
+        }
+      }).catch(() => {});
+    }
+    showToast($t('version_history.restored'), 'success');
+  }
+
+  /** Open a historical version's content in a read-only preview tab. */
+  function handleOpenVersion(versionContent: string, label: string, previewKey: string) {
+    tabsStore.openReadOnlyTab(previewKey, label, versionContent);
+    // The tabs subscriber loads the content into the editor and sets
+    // editorReadOnly; nothing else to do here.
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -713,10 +776,20 @@ ${tr('welcome.tip')}
   // In Svelte 5, $effect tracks reads inside subscribe callbacks, causing
   // infinite re-subscription loops when callbacks compare/write $state vars.
   // This was the root cause of the AI panel freeze (introduced in v0.17.1).
+  let prevAutoSaveKey = '';
   const unsubSettings = settingsStore.subscribe(state => {
     showSidebar = state.showSidebar;
     showOutline = state.showOutline;
     if (state.outlineWidth !== outlineWidth) outlineWidth = state.outlineWidth;
+    // Rebuild the autosave ticker when its settings change (previously a
+    // toggle only took effect after an app restart). prev-value key guard
+    // keeps this hot subscriber a no-op on unrelated updates.
+    const autoSaveKey = `${state.autoSave}|${state.autoSaveMaxMinutes}|${state.autoSaveIdleMinutes}`;
+    if (autoSaveKey !== prevAutoSaveKey) {
+      const isFirstRun = prevAutoSaveKey === '';
+      prevAutoSaveKey = autoSaveKey;
+      if (!isFirstRun) setupAutoSave();
+    }
   });
 
   // Track previous values to skip redundant work in hot subscriber path.
@@ -726,7 +799,21 @@ ${tr('welcome.tip')}
   let prevFilePath: string | null | undefined = undefined;
   let prevEditorMode: EditorMode | null = null;
 
+  // Autosave activity tracking (plain vars, not $state — read by the ticker only).
+  // pendingEditsSince = when the first unsaved edit occurred (0 = none pending);
+  // lastEditAt = most recent edit. handleSave resets pendingEditsSince on success.
+  let pendingEditsSince = 0;
+  let lastEditAt = 0;
+  let prevAutosaveContent: string | null = null;
+
   const unsubEditor = editorStore.subscribe(state => {
+    // Autosave: record edit activity on dirty content changes. Unchanged
+    // content is usually the same string reference, so the !== check is cheap.
+    if (state.isDirty && state.content !== prevAutosaveContent) {
+      prevAutosaveContent = state.content;
+      lastEditAt = Date.now();
+      if (pendingEditsSince === 0) pendingEditsSince = lastEditAt;
+    }
     // Only recompute file name when path actually changes
     if (state.currentFilePath !== prevFilePath) {
       // v0.32.1 §F2: auto-exit DiffView on file switch
@@ -743,6 +830,11 @@ ${tr('welcome.tip')}
       currentFileName = state.currentFilePath
         ? getFileNameFromPath(state.currentFilePath)
         : $t('common.untitled');
+
+      // v1.21.0: version-history entry is only meaningful for KB documents;
+      // close a sheet left open for the previous file
+      versionHistoryAvailable = isVersionedPath(state.currentFilePath);
+      if (showVersionHistory) showVersionHistory = false;
 
       // Register with macOS Dock menu tracker
       if (isTauri && isMacOS) {
@@ -823,13 +915,16 @@ ${tr('welcome.tip')}
         activeImageTab = null;
         if (imagePreviewUrl) { URL.revokeObjectURL(imagePreviewUrl); imagePreviewUrl = null; }
 
+        // v1.23.0: read-only version-preview tab → mount editor non-editable
+        editorReadOnly = tab.readOnly ?? false;
+
         console.log('[TabsSub] activeTab changed, setting content length:', tab.content.length, 'preview:', JSON.stringify(tab.content.slice(0, 80)));
         content = tab.content;
         currentFileName = tab.fileName;
         replaceContentAndScrollToTop(tab.content);
 
-        // Refresh review anchors for the newly active tab (non-image, git-bound KB)
-        if (!tab.isImage && tab.filePath) {
+        // Refresh review anchors for the newly active tab (non-image, non-preview, git-bound KB)
+        if (!tab.isImage && !tab.readOnly && tab.filePath) {
           const kb2 = filesStore.getActiveKnowledgeBase?.();
           if (kb2?.git) {
             const rp = tab.filePath.startsWith(kb2.path + '/')
@@ -880,12 +975,14 @@ ${tr('welcome.tip')}
   });
 
   onDestroy(() => {
+    stopMemoryAutoSync();
     unsubAI();
     unsubSettings();
     unsubEditor();
     unsubTabs();
     unsubMCP();
     unsubGitKB();
+    unsubKbSyncStates();
     if (autoSyncTimer) clearInterval(autoSyncTimer);
     clearAllIntervals();
 
@@ -1061,22 +1158,31 @@ ${tr('welcome.tip')}
     if (isTauri) invoke('update_menu_labels', { labels });
   });
 
-  // Auto-save timer
+  // Auto-save (v1.21.0): dual-condition scheduler — force-save pending edits
+  // after autoSaveMaxMinutes, or once input pauses for autoSaveIdleMinutes.
+  // A coarse 15s ticker polls the pure shouldAutoSave() decision; edit
+  // timestamps are tracked in the editorStore subscriber above.
+  const AUTOSAVE_TICK_MS = 15_000;
   let autoSaveTimer: ReturnType<typeof setInterval> | null = null;
   // KB sync trash purge timer (v0.68.0) — purge entries older than 7 days
   let trashPurgeTimer: ReturnType<typeof setInterval> | null = null;
 
   function setupAutoSave() {
     if (autoSaveTimer) clearInterval(autoSaveTimer);
-    const settings = settingsStore.getState();
-    if (settings.autoSave) {
-      autoSaveTimer = setInterval(() => {
-        const editorState = editorStore.getState();
-        if (editorState.isDirty && editorState.currentFilePath) {
-          handleSave();
-        }
-      }, settings.autoSaveInterval);
-    }
+    if (!settingsStore.getState().autoSave) return;
+    autoSaveTimer = setInterval(() => {
+      const editorState = editorStore.getState();
+      if (!editorState.isDirty || !editorState.currentFilePath) return;
+      // Dirty without a tracked edit (e.g. dirty tab restored) — start the clock now
+      if (pendingEditsSince === 0) pendingEditsSince = Date.now();
+      const s = settingsStore.getState();
+      if (shouldAutoSave(Date.now(), pendingEditsSince, lastEditAt, {
+        maxMinutes: s.autoSaveMaxMinutes,
+        idleMinutes: s.autoSaveIdleMinutes,
+      })) {
+        handleSave(false, { auto: true });
+      }
+    }, AUTOSAVE_TICK_MS);
   }
 
   // ── MCP shortcut action handlers (v0.41.6) ─────────────────────────
@@ -1257,7 +1363,7 @@ ${tr('welcome.tip')}
   function handleKeydown(event: KeyboardEvent) {
     // When Command Palette is open, only allow Escape (handled by palette itself)
     // Skip all global shortcuts to prevent Cmd+O etc. from firing while typing
-    if (showCommandPalette) return;
+    if (showCommandPalette || showPromptPalette) return;
 
     // User-customized shortcut overrides take precedence over hardcoded
     // bindings. Only entries the user has explicitly remapped enter this
@@ -1422,6 +1528,13 @@ ${tr('welcome.tip')}
     if (!isTauri && mod && event.shiftKey && event.key === 'E') {
       event.preventDefault();
       exportDocument(getCurrentContent, 'html');
+      return;
+    }
+
+    // Prompt Palette (recall captured prompt assets): Cmd/Ctrl+Shift+A
+    if (mod && event.shiftKey && (event.key === 'a' || event.key === 'A')) {
+      event.preventDefault();
+      showPromptPalette = true;
       return;
     }
 
@@ -2780,6 +2893,9 @@ ${tr('welcome.tip')}
   });
 
   onMount(() => {
+    // Background memory auto-sync (focus + interval, debounced; no-op until
+    // cloud sync is configured).
+    startMemoryAutoSync();
     // Platform class is set above (before first render) for correct initial layout.
     // iPadOS + Tauri: track visual viewport height for virtual keyboard handling
     // (browser testing mode uses 100dvh fallback, no need for --app-height)
@@ -3228,7 +3344,19 @@ ${tr('welcome.tip')}
                 return;
               }
             }
-            view.dispatch(view.state.tr.setSelection(new AllSelection(view.state.doc)));
+            // Whole-doc AllSelection. On macOS the Cmd+A menu accelerator ALSO
+            // mutates the native DOM selection; ProseMirror's DOM observer can
+            // re-sync a tick later and COLLAPSE our AllSelection, so it never
+            // visibly selects. Flush pending DOM mutations, assert AllSelection,
+            // then re-assert on the next frame to win that race.
+            const selectWholeDoc = () => {
+              const v = morayaEditor?.view;
+              if (!v) return;
+              try { (v as unknown as { domObserver?: { flush?: () => void } }).domObserver?.flush?.(); } catch { /* internal API */ }
+              v.dispatch(v.state.tr.setSelection(new AllSelection(v.state.doc)));
+            };
+            selectWholeDoc();
+            requestAnimationFrame(selectWholeDoc);
           }
         },
         // Edit — search
@@ -3615,16 +3743,16 @@ ${tr('welcome.tip')}
           </div>
         </div>
       {:else if editorMode === 'visual'}
-        <Editor bind:this={visualEditorRef} bind:content {showOutline} {outlineWidth} onEditorReady={handleEditorReady} onNotify={showToast} onOutlineWidthChange={(w) => settingsStore.update({ outlineWidth: w })} onWorkflowSEO={handleWorkflowSEO} onWorkflowImageGen={handleWorkflowImageGen} onWorkflowPublish={handleWorkflowPublish} onForceShowAIPanel={() => { showAIPanel = true; }} onAddReview={handleAddReview} onInsertCloudImage={(pos) => { cloudPickerState = { kind: 'image', pos }; }} onInsertCloudAudio={(pos) => { cloudPickerState = { kind: 'audio', pos }; }} onInsertCloudVideo={(pos) => { cloudPickerState = { kind: 'video', pos }; }} />
+        <Editor bind:this={visualEditorRef} bind:content {showOutline} {outlineWidth} readOnly={editorReadOnly} onEditorReady={handleEditorReady} onNotify={showToast} onOutlineWidthChange={(w) => settingsStore.update({ outlineWidth: w })} onWorkflowSEO={handleWorkflowSEO} onWorkflowImageGen={handleWorkflowImageGen} onWorkflowPublish={handleWorkflowPublish} onForceShowAIPanel={() => { showAIPanel = true; }} onAddReview={handleAddReview} onInsertCloudImage={(pos) => { cloudPickerState = { kind: 'image', pos }; }} onInsertCloudAudio={(pos) => { cloudPickerState = { kind: 'audio', pos }; }} onInsertCloudVideo={(pos) => { cloudPickerState = { kind: 'video', pos }; }} />
       {:else if editorMode === 'source'}
-        <SourceEditor bind:this={sourceEditorRef} bind:content {showOutline} {outlineWidth} {showBlame} {blameData} onContentChange={handleContentChange} onOutlineWidthChange={(w) => settingsStore.update({ outlineWidth: w })} />
+        <SourceEditor bind:this={sourceEditorRef} bind:content {showOutline} {outlineWidth} {showBlame} {blameData} readOnly={editorReadOnly} onContentChange={handleContentChange} onOutlineWidthChange={(w) => settingsStore.update({ outlineWidth: w })} />
       {:else if editorMode === 'split'}
         <div class="split-container">
           <div class="split-source" bind:this={splitSourceEl}>
-            <SourceEditor bind:this={splitSourceRef} bind:content onContentChange={handleContentChange} hideScrollbar />
+            <SourceEditor bind:this={splitSourceRef} bind:content readOnly={editorReadOnly} onContentChange={handleContentChange} hideScrollbar />
           </div>
           <div class="split-visual" bind:this={splitVisualEl}>
-            <Editor bind:this={splitVisualRef} bind:content onEditorReady={handleEditorReady} onContentChange={handleContentChange} onNotify={showToast} onWorkflowSEO={handleWorkflowSEO} onWorkflowImageGen={handleWorkflowImageGen} onWorkflowPublish={handleWorkflowPublish} onCursorLineChange={(line) => splitSourceRef?.setHighlightLine(line)} onForceShowAIPanel={() => { showAIPanel = true; }} />
+            <Editor bind:this={splitVisualRef} bind:content readOnly={editorReadOnly} onEditorReady={handleEditorReady} onContentChange={handleContentChange} onNotify={showToast} onWorkflowSEO={handleWorkflowSEO} onWorkflowImageGen={handleWorkflowImageGen} onWorkflowPublish={handleWorkflowPublish} onCursorLineChange={(line) => splitSourceRef?.setHighlightLine(line)} onForceShowAIPanel={() => { showAIPanel = true; }} />
           </div>
         </div>
       {/if}
@@ -3763,6 +3891,9 @@ ${tr('welcome.tip')}
     onToggleAI={() => showAIPanel = !showAIPanel}
     onModeChange={(mode) => { editorMode = mode; editorStore.setEditorMode(mode); }}
     onGitSync={gitBound ? handleGitSync : undefined}
+    onShowConflicts={() => { conflictKbId = filesStore.getState().activeKnowledgeBaseId; }}
+    onToggleVersionHistory={toggleVersionHistory}
+    {versionHistoryAvailable}
     currentMode={editorMode}
     hideModeSwitcher={!!activeImageTab}
     aiPanelOpen={showAIPanel}
@@ -3783,6 +3914,35 @@ ${tr('welcome.tip')}
   {#await import('$lib/components/SettingsPanel.svelte') then { default: SettingsPanel }}
     <SettingsPanel initialTab={settingsInitialTab} onClose={() => { showSettings = false; settingsInitialTab = 'general'; }} />
   {/await}
+{/if}
+
+{#if conflictKbId}
+  {@const conflictKb = filesStore.getState().knowledgeBases.find(k => k.id === conflictKbId)}
+  {#if conflictKb?.picoraBinding}
+    {#await import('$lib/components/KbSyncConflictPanel.svelte') then { default: KbSyncConflictPanel }}
+      <KbSyncConflictPanel
+        kb={conflictKb}
+        binding={conflictKb.picoraBinding}
+        conflicts={kbSyncStates.get(conflictKbId)?.pendingConflicts ?? []}
+        onClose={() => { conflictKbId = null; }}
+      />
+    {/await}
+  {/if}
+{/if}
+
+{#if showVersionHistory}
+  {@const vhFilePath = editorStore.getState().currentFilePath}
+  {#if vhFilePath}
+    {#await import('$lib/components/VersionHistorySheet.svelte') then { default: VersionHistorySheet }}
+      <VersionHistorySheet
+        filePath={vhFilePath}
+        fileName={getFileNameFromPath(vhFilePath)}
+        onClose={() => { showVersionHistory = false; }}
+        onRestored={handleVersionRestored}
+        onOpenVersion={handleOpenVersion}
+      />
+    {/await}
+  {/if}
 {/if}
 
 {#if showImageDialog}
@@ -3874,6 +4034,17 @@ ${tr('welcome.tip')}
       onFileSelect={handleFileSelect}
       onCommand={handlePaletteCommand}
       onClose={() => showCommandPalette = false}
+    />
+  {/await}
+{/if}
+
+{#if showPromptPalette}
+  {#await import('$lib/components/PromptPalette.svelte') then { default: PromptPalette }}
+    <PromptPalette
+      onClose={() => showPromptPalette = false}
+      onInsertToEditor={(text) => runCmd(insertTextAtCursor(text))}
+      onToast={(msg) => showToast(msg, 'success')}
+      activeFilePath={editorStore.getState().currentFilePath}
     />
   {/await}
 {/if}

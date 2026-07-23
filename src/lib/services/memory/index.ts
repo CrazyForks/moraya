@@ -43,9 +43,40 @@ export type { WriteMemoryInput } from './runtime'
 export {
   memorySyncStatus,
   type MemorySyncStatusKind,
+  MEMORY_KB_SLUG,
   pushMemory,
   deleteRemoteMemory,
   clearRemoteMemories,
   syncNow,
   isConfigured,
+  resetMemoryKbCache,
 } from './cloud-sync'
+
+// Tool-memory bindings (P2)
+export {
+  TOOL_PROFILES,
+  EXTERNAL_TOOLS,
+  getToolProfile,
+  bindingFromProfile,
+  includedByProfile,
+  globToRegExp,
+  isSuggestableHiddenDir,
+  type ToolProfile,
+  type MemoryBinding,
+} from './tool-profiles'
+export { listBindings, addToolBinding, addCustomBinding, removeBinding, hasBinding } from './bindings'
+export {
+  syncBinding,
+  syncAllBindings,
+  restoreBinding,
+  toolDirPresent,
+  scanHomeMemoryDirs,
+  moveBindingToDedicatedKb,
+  routeBindingToKb,
+  listAvailableKbs,
+  listCloudNamespaces,
+  extractNamespaces,
+  deleteCloudNamespace,
+} from './binding-sync'
+export { createMemoryAutoSync, startMemoryAutoSync, stopMemoryAutoSync, type MemoryAutoSync } from './auto-sync'
+export { mergeMemoryFile, unionMergeLines, isIndexFile, type MemoryMergeOutcome } from './memory-merge'

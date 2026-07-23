@@ -8,11 +8,13 @@
  */
 import type { MemoryDoc, MemoryHalfLife } from './types'
 import { DEFAULT_HALF_LIFE } from './types'
+import type { MemoryBinding } from './tool-profiles'
 
 const MEMORY_STORE_FILE = 'memory.json'
 const KEY_MEMORIES = 'memories'
 const KEY_HALF_LIFE = 'halfLife'
 const KEY_CLOUD = 'cloud'
+const KEY_BINDINGS = 'bindings'
 
 export interface MemoryPersistence {
   read<T>(key: string): Promise<T | null>
@@ -113,13 +115,15 @@ export async function setHalfLife(value: MemoryHalfLife): Promise<void> {
 
 export interface MemoryCloudConfig {
   enabled: boolean
-  /** id of an `imageHostTargets` entry that is Picora-connected. */
+  /**
+   * id of an `imageHostTargets` entry that is Picora-connected. The KB itself
+   * is not stored here — memories always go to the account's shared "AI Memory"
+   * KB (slug='memory'), auto-discovered by the sync layer.
+   */
   targetId: string | null
-  /** Picora KB id memories are stored under. */
-  kbId: string | null
 }
 
-const DEFAULT_CLOUD_CONFIG: MemoryCloudConfig = { enabled: false, targetId: null, kbId: null }
+const DEFAULT_CLOUD_CONFIG: MemoryCloudConfig = { enabled: false, targetId: null }
 
 export async function getCloudConfig(): Promise<MemoryCloudConfig> {
   const v = await persistence.read<MemoryCloudConfig>(KEY_CLOUD)
@@ -128,6 +132,17 @@ export async function getCloudConfig(): Promise<MemoryCloudConfig> {
 
 export async function setCloudConfig(config: MemoryCloudConfig): Promise<void> {
   await persistence.write(KEY_CLOUD, config)
+}
+
+// ── Tool-memory binding table (client-local, contains machine paths) ────────
+
+export async function getBindings(): Promise<MemoryBinding[]> {
+  const v = await persistence.read<MemoryBinding[]>(KEY_BINDINGS)
+  return Array.isArray(v) ? v : []
+}
+
+export async function setBindings(bindings: MemoryBinding[]): Promise<void> {
+  await persistence.write(KEY_BINDINGS, bindings)
 }
 
 /** Test helper: drop the in-memory cache. */

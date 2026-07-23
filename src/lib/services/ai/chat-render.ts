@@ -18,6 +18,8 @@
 
 import { renderChatMarkdown as renderCore } from '@moraya/core/chat-markdown'
 import katex from 'katex'
+// Side-effect: register \ce/\pu (mhchem) for chemistry in chat bubbles.
+import 'katex/contrib/mhchem'
 import hljs from 'highlight.js'
 
 /**

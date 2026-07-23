@@ -5,6 +5,7 @@
   import type { ImageHostTarget } from '$lib/services/image-hosting';
   import PicoraAccountSection from './PicoraAccountSection.svelte';
   import PicoraKbSyncSection from './PicoraKbSyncSection.svelte';
+  import PicoraDocVersioningSection from './PicoraDocVersioningSection.svelte';
   import PicoraResourceBrowseSection from './PicoraResourceBrowseSection.svelte';
   import PicoraAdvancedSection from './PicoraAdvancedSection.svelte';
 
@@ -61,6 +62,8 @@
     <PicoraAccountSection onOpenImport={openImport} {onJumpToKbSync} />
     <hr class="divider" />
     <PicoraKbSyncSection onOpenKbSync={onJumpToKbSync} />
+    <hr class="divider" />
+    <PicoraDocVersioningSection />
     <hr class="divider" />
     <PicoraResourceBrowseSection />
     <hr class="divider" />

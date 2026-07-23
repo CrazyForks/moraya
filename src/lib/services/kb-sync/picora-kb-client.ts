@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { PicoraKb, ManifestEntry, SyncOp, SyncBatchResult } from './types';
+import type { PicoraKb, ManifestEntryWithDocId, SyncOp, SyncBatchResult } from './types';
 
 /** Derive the Picora API base URL from the image upload URL. */
 export function picoraApiBase(picoraApiUrl: string): string {
@@ -28,13 +28,20 @@ export async function createKb(
   return invoke<PicoraKb>('picora_kb_create', { apiBase, apiKey, name, slug: slug ?? null });
 }
 
-/** Fetch the full manifest (all active docs) for a KB. */
+/**
+ * Fetch the full manifest (all active docs) for a KB.
+ *
+ * Each entry carries the server-side `docId` (v1.22.0) — the key into the
+ * doc-revisions API. Look it up FRESH per use: the server assigns a NEW doc
+ * id on every content replacement (revisions re-attach automatically), so a
+ * persisted docId goes stale after any upload.
+ */
 export async function fetchManifest(
   apiBase: string,
   apiKey: string,
   kbId: string,
-): Promise<ManifestEntry[]> {
-  return invoke<ManifestEntry[]>('picora_kb_manifest', { apiBase, apiKey, kbId });
+): Promise<ManifestEntryWithDocId[]> {
+  return invoke<ManifestEntryWithDocId[]>('picora_kb_manifest', { apiBase, apiKey, kbId });
 }
 
 /** Batch upsert/delete docs in a KB. Returns applied paths + conflict entries. */

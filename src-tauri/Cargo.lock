@@ -2811,7 +2811,7 @@ dependencies = [
 
 [[package]]
 name = "moraya"
-version = "0.41.11"
+version = "0.43.1"
 dependencies = [
  "anndists",
  "base64 0.22.1",
@@ -2836,6 +2836,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation",
  "open",
+ "picora-sdk",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -3554,6 +3555,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
 dependencies = [
  "siphasher 1.0.2",
+]
+
+[[package]]
+name = "picora-sdk"
+version = "0.1.0"
+source = "git+https://github.com/zouwei/picora-sdk?tag=rust-v0.1.0#26d155967bce842b47a8b742872e8fc537686a95"
+dependencies = [
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

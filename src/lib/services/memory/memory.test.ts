@@ -189,9 +189,9 @@ describe('store + runtime', () => {
     expect(await store.getHalfLife()).toBe('never')
   })
 
-  it('cloud config round-trips', async () => {
-    expect(await store.getCloudConfig()).toEqual({ enabled: false, targetId: null, kbId: null })
-    await store.setCloudConfig({ enabled: true, targetId: 't1', kbId: 'kb1' })
-    expect(await store.getCloudConfig()).toEqual({ enabled: true, targetId: 't1', kbId: 'kb1' })
+  it('cloud config round-trips (KB auto-discovered, not stored)', async () => {
+    expect(await store.getCloudConfig()).toEqual({ enabled: false, targetId: null })
+    await store.setCloudConfig({ enabled: true, targetId: 't1' })
+    expect(await store.getCloudConfig()).toEqual({ enabled: true, targetId: 't1' })
   })
 })

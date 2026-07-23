@@ -9,46 +9,16 @@
  * truncated to 200 chars. The endpoint URL is never echoed back to the renderer.
  */
 
+use picora_sdk::PicoraClient;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::command;
 
-const DEFAULT_TIMEOUT_SECS: u64 = 20;
-
-fn http_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS))
-        .build()
-        .map_err(|_| "Failed to initialize HTTP client".to_string())
-}
-
-fn sanitize_status(status: u16) -> String {
-    match status {
-        401 | 403 => format!("Picora authentication failed ({})", status),
-        404 => "Picora resource not found (404)".to_string(),
-        408 | 504 => format!("Picora request timed out ({})", status),
-        429 => "Picora rate limit exceeded (429)".to_string(),
-        500..=599 => format!("Picora service unavailable ({})", status),
-        _ => format!("Picora request failed ({})", status),
-    }
-}
-
-fn build_error(status: u16, body: &str, ctx: &str) -> String {
-    let cleaned: String = body
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(200)
-        .collect();
-    let cleaned = cleaned
-        .replace("sk_live_", "sk_***_")
-        .replace("Bearer ", "Bearer ***");
-    if cleaned.is_empty() {
-        format!("[{}] {}", ctx, sanitize_status(status))
-    } else {
-        format!("[{}] {} — {}", ctx, sanitize_status(status), cleaned)
-    }
+/// Build a Picora client from frontend-supplied credentials. The HTTP client +
+/// error sanitization live in the `picora-sdk` crate now; the bespoke usage/quota
+/// response parsing below stays here (null-block + `usage_v2` detection).
+fn client(api_base: &str, api_key: &str) -> Result<PicoraClient, String> {
+    PicoraClient::new(api_base, api_key).map_err(|e| e.to_string())
 }
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -82,6 +52,11 @@ pub struct UsageBlock {
     pub public_count: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub private_count: Option<i64>,
+    // v1.22.0 (server v0.74.0): docs block only — document revision-history usage.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision_bytes: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -152,34 +127,12 @@ pub async fn picora_get_quota(
     api_base: String,
     api_key: String,
 ) -> Result<PicoraQuota, String> {
-    if api_base.trim().is_empty() {
-        return Err("Picora endpoint is empty".to_string());
-    }
-    if api_key.trim().is_empty() {
-        return Err("Picora API key is empty".to_string());
-    }
-
-    let base = api_base.trim_end_matches('/');
-    let url = format!("{}/v1/user/me/usage", base);
-    let client = http_client()?;
-
-    let res = client
-        .get(&url)
-        .bearer_auth(&api_key)
-        .send()
+    let c = client(&api_base, &api_key)?;
+    let body: Value = c
+        .http()
+        .send_json(c.get("/v1/user/me/usage"), "quota")
         .await
-        .map_err(|_| "Network error contacting Picora".to_string())?;
-
-    if !res.status().is_success() {
-        let status = res.status().as_u16();
-        let body = res.text().await.unwrap_or_default();
-        return Err(build_error(status, &body, "quota"));
-    }
-
-    let body: Value = res
-        .json()
-        .await
-        .map_err(|_| "Picora returned invalid JSON".to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let data = body.get("data").unwrap_or(&body);
 
@@ -218,12 +171,6 @@ pub async fn picora_media_delete(
     media_type: String,
     id: String,
 ) -> Result<(), String> {
-    if api_base.trim().is_empty() {
-        return Err("Picora endpoint is empty".to_string());
-    }
-    if api_key.trim().is_empty() {
-        return Err("Picora API key is empty".to_string());
-    }
     let path = match media_type.as_str() {
         "image" => "images",
         "audio" => "audio",
@@ -234,24 +181,12 @@ pub async fn picora_media_delete(
         return Err("Media ID is empty".to_string());
     }
 
-    let base = api_base.trim_end_matches('/');
-    let url = format!("{}/v1/{}/{}", base, path, id.trim());
-    let client = http_client()?;
-
-    let res = client
-        .delete(&url)
-        .bearer_auth(&api_key)
-        .send()
+    let c = client(&api_base, &api_key)?;
+    c.http()
+        .send_text(c.delete(&format!("/v1/{}/{}", path, id.trim())), "media_delete")
         .await
-        .map_err(|_| "Network error contacting Picora".to_string())?;
-
-    if !res.status().is_success() {
-        let status = res.status().as_u16();
-        let body = res.text().await.unwrap_or_default();
-        return Err(build_error(status, &body, "media_delete"));
-    }
-
-    Ok(())
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────
@@ -261,31 +196,9 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    #[test]
-    fn sanitize_status_codes() {
-        assert!(sanitize_status(401).contains("authentication"));
-        assert!(sanitize_status(404).contains("not found"));
-        assert!(sanitize_status(429).contains("rate"));
-        assert!(sanitize_status(500).contains("unavailable"));
-        assert!(sanitize_status(599).contains("unavailable"));
-    }
-
-    #[test]
-    fn build_error_strips_credentials() {
-        let msg = build_error(401, "Bearer sk_live_abc invalid token", "quota");
-        assert!(!msg.contains("sk_live_abc"));
-        assert!(!msg.contains("Bearer sk"));
-        assert!(msg.contains("sk_***_"));
-        assert!(msg.contains("[quota]"));
-    }
-
-    #[test]
-    fn build_error_does_not_leak_endpoint() {
-        let msg = build_error(500, "internal error at https://api.example.com/secret", "quota");
-        // Endpoint URL fragment may pass through (it's user-supplied input echo); but
-        // we mainly want no Bearer / sk_live leakage — and the cap at 200 chars.
-        assert!(msg.len() < 350);
-    }
+    // Status sanitization + credential-stripping error building moved to the
+    // picora-sdk crate (tested there). The bespoke usage/quota parsers below
+    // (detect_usage_v2 / parse_block / parse_plan_limits) stay local.
 
     #[test]
     fn detect_usage_v2_detects_plan_limits() {

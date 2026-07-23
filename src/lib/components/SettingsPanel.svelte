@@ -20,7 +20,7 @@
   import ShortcutsPanel from './ShortcutsPanel.svelte';
   import { Select } from '$lib/components/ui';
 
-  type Tab = 'general' | 'ai' | 'image-ai' | 'mcp' | 'image' | 'publish' | 'shortcuts' | 'voice' | 'plugins' | 'knowledge-base' | 'kb-sync' | 'picora' | 'memory';
+  type Tab = 'general' | 'ai' | 'image-ai' | 'mcp' | 'image' | 'publish' | 'shortcuts' | 'voice' | 'plugins' | 'knowledge-base' | 'picora' | 'memory';
 
   let {
     onClose,
@@ -48,16 +48,18 @@
   let useSeparateDarkTheme = $state(false);
   let fontSize = $state(16);
   let autoSave = $state(true);
-  let autoSaveInterval = $state(30);
+  let autoSaveMaxMinutes = $state(10);
+  let autoSaveIdleMinutes = $state(3);
   let rememberLastFolder = $state(true);
   let rulesHistoryCount = $state(10);
+  let versionHistoryEnabled = $state(true);
+  let versionHistoryMax = $state(50);
   let currentLocale = $state<LocaleSelection>('system');
   let editorLineWidth = $state(800);
   let editorTabSize = $state(4);
   let showLineNumbers = $state(false);
 
   let knowledgeBases = $state<KnowledgeBase[]>([]);
-  let showKBManager = $state(false);
 
   function openPicoraManualImport() {
     window.dispatchEvent(new CustomEvent('moraya:picora-open-manual'));
@@ -97,9 +99,12 @@
     useSeparateDarkTheme = state.useSeparateDarkTheme;
     fontSize = state.fontSize;
     autoSave = state.autoSave;
-    autoSaveInterval = state.autoSaveInterval / 1000;
+    autoSaveMaxMinutes = state.autoSaveMaxMinutes ?? 10;
+    autoSaveIdleMinutes = state.autoSaveIdleMinutes ?? 3;
     rememberLastFolder = state.rememberLastFolder;
     rulesHistoryCount = state.rulesHistoryCount ?? 10;
+    versionHistoryEnabled = state.versionHistoryEnabled ?? true;
+    versionHistoryMax = state.versionHistoryMax ?? 50;
     currentLocale = state.localeSelection;
     editorLineWidth = state.editorLineWidth;
     editorTabSize = state.editorTabSize;
@@ -139,9 +144,14 @@
     settingsStore.update({ autoSave: checked });
   }
 
-  function handleIntervalChange(event: Event) {
-    const value = parseInt((event.target as HTMLInputElement).value);
-    settingsStore.update({ autoSaveInterval: value * 1000 });
+  function handleAutoSaveMaxChange(event: Event) {
+    const value = parseInt((event.target as HTMLInputElement).value, 10);
+    if (value >= 1 && value <= 120) settingsStore.update({ autoSaveMaxMinutes: value });
+  }
+
+  function handleAutoSaveIdleChange(event: Event) {
+    const value = parseInt((event.target as HTMLInputElement).value, 10);
+    if (value >= 1 && value <= 60) settingsStore.update({ autoSaveIdleMinutes: value });
   }
 
   function handleLineWidthChange(event: Event) {
@@ -166,6 +176,13 @@
 
   const tabGroups: { groupKey: string; items: { key: Tab; icon: string; labelKey: string }[] }[] = [
     {
+      groupKey: 'settings.groups.picora',
+      items: [
+        { key: 'picora', icon: '☁', labelKey: 'settings.tabs.picora' },
+        { key: 'knowledge-base', icon: '📚', labelKey: 'settings.tabs.knowledge_base' },
+      ],
+    },
+    {
       groupKey: 'settings.groups.general',
       items: [
         { key: 'general', icon: '⚙', labelKey: 'settings.tabs.general' },
@@ -180,19 +197,6 @@
         { key: 'voice', icon: '🎤', labelKey: 'settings.tabs.voice' },
         { key: 'mcp', icon: '⇌', labelKey: 'settings.tabs.mcp' },
         { key: 'memory', icon: '🧠', labelKey: 'memory.title' },
-      ],
-    },
-    {
-      groupKey: 'settings.groups.knowledge_base',
-      items: [
-        { key: 'knowledge-base', icon: '📚', labelKey: 'settings.tabs.knowledge_base' },
-        { key: 'kb-sync', icon: '☁', labelKey: 'settings.tabs.kb_sync' },
-      ],
-    },
-    {
-      groupKey: 'settings.groups.picora',
-      items: [
-        { key: 'picora', icon: '☁', labelKey: 'settings.tabs.picora' },
       ],
     },
     {
@@ -285,12 +289,18 @@
         </div>
         <div class="tab-pane" class:active={activeTab === 'publish'}>{#if visitedTabs['publish']}<PublishSettings />{/if}</div>
         <div class="tab-pane" class:active={activeTab === 'voice'}>{#if visitedTabs['voice']}<VoiceSettings />{/if}</div>
-        <div class="tab-pane" class:active={activeTab === 'knowledge-base'}>{#if visitedTabs['knowledge-base']}<KBIndexSettings onOpenKBManager={() => showKBManager = true} />{/if}</div>
-        <div class="tab-pane" class:active={activeTab === 'kb-sync'}>{#if visitedTabs['kb-sync']}<KbSyncSettings />{/if}</div>
+        <!-- Merged "知识库" tab: KB index/manage + KB sync (prompt assets & memory
+             bindings now live per-KB inside KbSyncSettings' "AI memory asset" panel). -->
+        <div class="tab-pane merged-kb" class:active={activeTab === 'knowledge-base'}>
+          {#if visitedTabs['knowledge-base']}
+            <KBIndexSettings />
+            <KbSyncSettings />
+          {/if}
+        </div>
         <div class="tab-pane" class:active={activeTab === 'memory'}>{#if visitedTabs['memory']}<MemorySettings />{/if}</div>
         <div class="tab-pane" class:active={activeTab === 'picora'}>
           {#if visitedTabs['picora']}
-            <PicoraSettingsTab onJumpToKbSync={() => activeTab = 'kb-sync'} />
+            <PicoraSettingsTab onJumpToKbSync={() => activeTab = 'knowledge-base'} />
           {/if}
         </div>
         <div class="tab-pane" class:active={activeTab === 'plugins'}>{#if visitedTabs['plugins']}<PluginsPanel />{/if}</div>
@@ -317,17 +327,64 @@
 
                 {#if autoSave}
                   <div class="gx-row gx-row-indent">
-                    <label class="gx-label" for="settings-autosave-interval">{$t('settings.auto_save.interval')}</label>
+                    <label class="gx-label" for="settings-autosave-max">{$t('settings.auto_save.max_interval')}</label>
                     <div class="gx-control gx-control-inline">
                       <input
-                        id="settings-autosave-interval"
-                        type="range"
-                        min="5" max="120" step="5"
-                        value={autoSaveInterval}
-                        oninput={handleIntervalChange}
-                        class="gx-range"
+                        id="settings-autosave-max"
+                        type="number"
+                        min="1" max="120"
+                        value={autoSaveMaxMinutes}
+                        oninput={handleAutoSaveMaxChange}
+                        class="gx-number"
                       />
-                      <span class="gx-value">{autoSaveInterval}s</span>
+                      <span class="gx-value">{$t('settings.auto_save.minutes_unit')}</span>
+                    </div>
+                    <p class="gx-hint gx-hint-indent">{$t('settings.auto_save.max_interval_hint')}</p>
+                  </div>
+                  <div class="gx-row gx-row-indent">
+                    <label class="gx-label" for="settings-autosave-idle">{$t('settings.auto_save.idle_interval')}</label>
+                    <div class="gx-control gx-control-inline">
+                      <input
+                        id="settings-autosave-idle"
+                        type="number"
+                        min="1" max="60"
+                        value={autoSaveIdleMinutes}
+                        oninput={handleAutoSaveIdleChange}
+                        class="gx-number"
+                      />
+                      <span class="gx-value">{$t('settings.auto_save.minutes_unit')}</span>
+                    </div>
+                    <p class="gx-hint gx-hint-indent">{$t('settings.auto_save.idle_interval_hint')}</p>
+                  </div>
+                {/if}
+
+                <div class="gx-row gx-row-check">
+                  <label class="gx-check">
+                    <input
+                      type="checkbox"
+                      checked={versionHistoryEnabled}
+                      onchange={(e: Event) => settingsStore.update({ versionHistoryEnabled: (e.target as HTMLInputElement).checked })}
+                    />
+                    <span>{$t('settings.version_history.label')}</span>
+                  </label>
+                  <p class="gx-hint gx-hint-indent">{$t('settings.version_history.hint')}</p>
+                </div>
+
+                {#if versionHistoryEnabled}
+                  <div class="gx-row gx-row-indent">
+                    <label class="gx-label" for="settings-version-history-max">{$t('settings.version_history.max')}</label>
+                    <div class="gx-control">
+                      <input
+                        id="settings-version-history-max"
+                        type="number"
+                        min="1" max="500"
+                        value={versionHistoryMax}
+                        oninput={(e: Event) => {
+                          const val = parseInt((e.target as HTMLInputElement).value, 10);
+                          if (val >= 1 && val <= 500) settingsStore.update({ versionHistoryMax: val });
+                        }}
+                        class="gx-number"
+                      />
                     </div>
                   </div>
                 {/if}
@@ -566,12 +623,6 @@
   </div><!-- settings-panel -->
 </div><!-- settings-overlay -->
 
-{#if showKBManager}
-  {#await import('./KnowledgeBaseManager.svelte') then { default: KnowledgeBaseManager }}
-    <KnowledgeBaseManager onClose={() => showKBManager = false} />
-  {/await}
-{/if}
-
 <style>
   .settings-overlay {
     position: fixed;
@@ -778,6 +829,13 @@
   }
   .tab-pane.active {
     display: contents; /* transparent wrapper — children flow directly into flex container */
+  }
+
+  /* Merged 知识库 tab stacks three feature components — add a divider between them. */
+  .merged-kb :global(.gx-tab + .gx-tab) {
+    margin-top: 0.25rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-light);
   }
 
   /* The .gx-* design system lives in src/lib/styles/settings.css (global)
