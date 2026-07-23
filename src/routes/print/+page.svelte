@@ -83,6 +83,8 @@
       li { margin: 0.25em 0; }
       .math-block { text-align: center; margin: 1em 0; overflow-x: auto; }
       .mermaid-export svg { max-width: 100%; height: auto; }
+      /* Debug status overlay must never appear in the captured PDF. */
+      .print-status { display: none !important; }
     `;
     const style = document.createElement('style');
     style.id = styleId;
@@ -165,6 +167,14 @@
   }
 
   onMount(() => {
+    // Print output is always a light page — pin the light theme up-front so no
+    // dark-mode variable (near-white text) can leak in before render() runs.
+    document.documentElement.setAttribute('data-theme', 'light');
+    // Remove the app boot splash (#moraya-splash, z-index 999999). It only
+    // fades out on the main editor's `moraya:app-ready` event, which the print
+    // route never fires — so without this it stays on top and createPDF
+    // captures the "Moraya + spinner" splash instead of the document.
+    document.getElementById('moraya-splash')?.remove();
     // Expose the API the Rust side eval()s into.
     (window as unknown as { __moraya_print: unknown }).__moraya_print = {
       async render(payload: PrintPayload) {
@@ -173,6 +183,14 @@
           if (!contentEl) {
             throw new Error('content root not mounted');
           }
+          // Force the LIGHT theme for print. The app's CSS resolves body text to
+          // var(--text-primary), which becomes near-white (#d4d4d4) whenever the
+          // system is in dark mode and data-theme isn't explicitly "light"
+          // (variables.css `:root:not([data-theme="light"])`). Without this the
+          // PDF renders white text on the forced-white page = invisible.
+          document.documentElement.setAttribute('data-theme', 'light');
+          // Belt-and-suspenders: ensure the boot splash is gone before capture.
+          document.getElementById('moraya-splash')?.remove();
           const includeStyles = false; // we inject our own print stylesheet
           let html = markdownToHtmlBody(payload.markdown);
           // markdownToHtmlBody returns body content; tear out KaTeX CDN link.

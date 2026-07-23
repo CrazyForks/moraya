@@ -48,7 +48,14 @@
   {#if picoraTargets.length === 0}
     <!-- First-time welcome -->
     <div class="welcome">
-      <div class="welcome-icon">☁</div>
+      <div class="welcome-icon">
+        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <rect width="32" height="32" rx="8" fill="#2563eb" />
+          <path d="M9.5 7.5v17" stroke="#ffffff" stroke-width="3" stroke-linecap="round" />
+          <circle cx="16" cy="14" r="6.5" stroke="#ffffff" stroke-width="3" />
+          <circle cx="16" cy="14" r="2.4" fill="#ffffff" />
+        </svg>
+      </div>
       <h3>{tr('settings.picora.welcome.title')}</h3>
       <p>{tr('settings.picora.welcome.body')}</p>
       <div class="welcome-actions">
@@ -100,6 +107,7 @@
     padding: 2rem 1.5rem; text-align: center;
   }
   .welcome-icon { font-size: 3rem; }
+  .welcome-icon svg { display: block; margin: 0 auto; }
   .welcome h3 { margin: 0; font-size: var(--font-size-lg); color: var(--text-primary); }
   .welcome p { margin: 0; font-size: var(--font-size-sm); color: var(--text-secondary); max-width: 460px; line-height: 1.5; }
   .welcome-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }

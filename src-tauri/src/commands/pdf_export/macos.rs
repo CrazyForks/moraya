@@ -19,7 +19,7 @@ use std::time::Duration;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
-use super::{paper_content_viewport_width, JobConfig, ProgressEvent};
+use super::{paper_full_viewport_width, JobConfig, ProgressEvent};
 
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
 const CREATE_PDF_TIMEOUT: Duration = Duration::from_secs(120);
@@ -31,12 +31,20 @@ pub async fn run(
 ) -> Result<(), String> {
     let label = format!("moraya-print-{}", &job.job_id);
 
-    // ---- 1. spawn hidden window at the correct content width ----
-    // Width = paper content area in CSS px (paper minus horizontal margins).
+    // ---- 1. spawn hidden window at the FULL paper width ----
+    // WKWebView `createPDF` sizes the PDF page to the frame and ignores CSS
+    // `@page`, so we render at the full paper width and inset the content with
+    // CSS padding (= margins) after render — giving real A4 page margins.
     // Height starts at 900 px; we expand after render completes (step 5).
-    let viewport_w = paper_content_viewport_width(job);
+    let viewport_w = paper_full_viewport_width(job);
+    // The window MUST be `visible(true)` — a `visible(false)` (orderedOut)
+    // NSWindow has an empty visibleRect, so WKWebView suspends layer rendering
+    // and `createPDF` captures BLANK pages (all of them). We park it far
+    // off-screen (-9999,-9999) so the user never sees it, and `focused(false)`
+    // keeps it from stealing key focus from the editor.
     let window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("print/".into()))
-        .visible(false)
+        .visible(true)
+        .focused(false)
         .inner_size(viewport_w, 900.0)
         .position(-9999.0, -9999.0)
         .decorations(false)
@@ -90,6 +98,20 @@ pub async fn run(
             return Err("render handshake timeout (30s)".to_string());
         }
     }
+
+    // ---- 4b. inset content by the configured margins ----
+    // The frame IS the PDF page (createPDF ignores @page), and the frame is now
+    // the FULL paper width, so pad the content by the margins to produce real
+    // A4 whitespace. Also hard-hides the debug status overlay from the capture.
+    // Runs BEFORE height expansion so scrollHeight already includes the padding.
+    let m = &job.options.margins;
+    let margin_style = format!(
+        "(()=>{{try{{let s=document.getElementById('__moraya_print_margins');if(!s){{s=document.createElement('style');s.id='__moraya_print_margins';document.head.appendChild(s);}}s.textContent='.print-root{{padding:{t}mm {r}mm {b}mm {l}mm !important;box-sizing:border-box}} .print-status{{display:none !important}}';}}catch(e){{}}}})()",
+        t = m.top, r = m.right, b = m.bottom, l = m.left
+    );
+    let _ = window.eval(&margin_style);
+    // Let WebKit reflow at the new padding before measuring the full height.
+    tokio::time::sleep(Duration::from_millis(50)).await;
 
     // ---- 5. expand WKWebView frame to full document height ----
     // WKWebView lays out content at the view's frame size.  createPDF uses

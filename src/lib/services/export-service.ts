@@ -10,6 +10,7 @@ import katex from 'katex';
 import 'katex/contrib/mhchem';
 import { settingsStore } from '$lib/stores/settings-store';
 import { exportProgressStore } from '$lib/stores/export-progress-store';
+import { computeBreakOffsets } from './pdf-pagination';
 import {
   exportPdfNative,
   defaultExportOptions,
@@ -338,6 +339,17 @@ const PAGE_CSS_PX_HEIGHT =
   EXPORT_CONTAINER_WIDTH * (PDF_CONTENT_HEIGHT_MM / PDF_CONTENT_WIDTH_MM);
 
 /**
+ * Light-theme variable overrides forced onto export containers. A document
+ * authored/viewed in dark mode inherits a near-white `--text-primary`, so
+ * html2canvas would paint light text on the forced-white page = an invisible
+ * PDF. Pinning the light values makes exports look right in any app theme.
+ */
+const LIGHT_THEME_VARS =
+  '--bg-primary:#ffffff;--bg-secondary:#f8f9fa;--bg-hover:#e9ecef;--bg-active:#dee2e6;' +
+  '--text-primary:#1a1a1a;--text-secondary:#6c757d;--text-muted:#adb5bd;' +
+  '--border-color:#e0e0e0;--border-light:#f0f0f0;--accent-color:#4a90d9;';
+
+/**
  * Build an offscreen container hosting the live editor clone, or null if the
  * editor isn't mounted. Caller is responsible for calling document.body.removeChild.
  */
@@ -347,7 +359,7 @@ function buildEditorContainer(): HTMLElement | null {
 
   const container = document.createElement('div');
   container.style.cssText =
-    `position:fixed;left:-9999px;top:0;width:${EXPORT_CONTAINER_WIDTH}px;background:#fff;padding:2rem 1rem;`;
+    `position:fixed;left:-9999px;top:0;width:${EXPORT_CONTAINER_WIDTH}px;background:#fff;padding:2rem 1rem;${LIGHT_THEME_VARS}`;
 
   const clone = editorEl.cloneNode(true) as HTMLElement;
   clone.removeAttribute('contenteditable');
@@ -366,7 +378,7 @@ function buildEditorContainer(): HTMLElement | null {
 function buildHtmlContainer(htmlContent: string): HTMLElement {
   const container = document.createElement('div');
   container.style.cssText =
-    `position:fixed;left:-9999px;top:0;width:${EXPORT_CONTAINER_WIDTH}px;background:#fff;padding:2rem 1rem;`;
+    `position:fixed;left:-9999px;top:0;width:${EXPORT_CONTAINER_WIDTH}px;background:#fff;padding:2rem 1rem;${LIGHT_THEME_VARS}`;
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(htmlContent, 'text/html');
@@ -454,6 +466,34 @@ async function captureContainerAsSingleCanvas(container: HTMLElement): Promise<H
  * giant canvas (root cause of the 200-page blank-PDF bug — the per-axis canvas
  * cap is hit and Chromium/WebKit silently return an empty canvas).
  */
+/**
+ * Compute vertical page-break offsets (CSS px, relative to the container top)
+ * that never slice through an "atomic" block — table rows, headings, list
+ * items, paragraphs, images, code/quote blocks. When the natural page cut lands
+ * inside such a block, the break moves UP to that block's top so it starts the
+ * next page whole (CSS `page-break-inside: avoid` semantics). A block taller
+ * than a full page is split at the natural cut as a last resort.
+ *
+ * Returns strictly-increasing integer offsets starting at 0 and ending at
+ * `totalHeight`; each adjacent pair [breaks[i], breaks[i+1]] is one page.
+ */
+function computePageBreaks(container: HTMLElement, totalHeight: number): number[] {
+  const containerTop = container.getBoundingClientRect().top;
+  // `tr` (not `table`) so tables paginate BETWEEN rows; leaf blocks otherwise.
+  const atoms = Array.from(
+    container.querySelectorAll<HTMLElement>(
+      'tr, h1, h2, h3, h4, h5, h6, p, li, pre, blockquote, img, figure',
+    ),
+  )
+    .map((el) => {
+      const r = el.getBoundingClientRect();
+      return { top: r.top - containerTop, bottom: r.bottom - containerTop };
+    })
+    .filter((a) => a.bottom > a.top + 0.5);
+
+  return computeBreakOffsets(atoms, totalHeight, PAGE_CSS_PX_HEIGHT);
+}
+
 async function captureContainerAsPages(container: HTMLElement): Promise<{
   canvases: HTMLCanvasElement[];
   scale: number;
@@ -464,16 +504,19 @@ async function captureContainerAsPages(container: HTMLElement): Promise<{
   }
 
   const scale = pickAdaptiveScale(totalHeight, 'paged');
-  const pageCount = Math.max(1, Math.ceil(totalHeight / PAGE_CSS_PX_HEIGHT));
 
-  // Sanity check: per-page output canvas dimensions.
+  // Sanity check: per-page output canvas dimensions (max page = PAGE_CSS_PX_HEIGHT).
   assertCanvasFits(EXPORT_CONTAINER_WIDTH * scale, PAGE_CSS_PX_HEIGHT * scale, 'PDF page');
+
+  // Content-aware breaks so table rows / headings / images aren't sliced.
+  const breaks = computePageBreaks(container, totalHeight);
+  const pageCount = breaks.length - 1;
 
   const canvases: HTMLCanvasElement[] = [];
   for (let i = 0; i < pageCount; i++) {
-    const y = i * PAGE_CSS_PX_HEIGHT;
-    const h = Math.min(PAGE_CSS_PX_HEIGHT, totalHeight - y);
-    if (h <= 0) break;
+    const y = breaks[i];
+    const h = breaks[i + 1] - y;
+    if (h <= 0) continue;
     const pageCanvas = await html2canvas(container, {
       backgroundColor: '#ffffff',
       scale,
@@ -603,43 +646,46 @@ function buildNativeOptions(documentTitle: string): PdfExportOptions {
 }
 
 /**
- * Top-level PDF export. Tries the native print-to-PDF path first (selectable
- * text, vector fonts, real CSS pagination); falls back to the canvas path on
- * any failure if `autoFallbackOnFailure` is enabled in settings.
+ * Top-level PDF export.
+ *
+ * Defaults to the CANVAS pipeline, which paginates the document into real A4
+ * pages (one `addPage()` per page-height slice). The native WKWebView
+ * `createPDF` path snapshots the entire document as ONE tall page ("long
+ * image") — correct only for image export, not for a paginated PDF — so it is
+ * opt-in via `exportSettings.preferNativePdf` (off by default). When native is
+ * requested but fails, we fall back to the canvas pipeline.
  */
 async function exportAsPdf(markdown: string, path: string): Promise<void> {
   exportProgressStore.start();
   const settings = get(settingsStore);
-  const documentTitle = inferDocumentTitle(markdown);
-  const opts = buildNativeOptions(documentTitle);
-  const autoFallback = settings.exportSettings?.autoFallbackOnFailure ?? true;
+  const preferNative =
+    (settings.exportSettings as { preferNativePdf?: boolean } | undefined)?.preferNativePdf ?? false;
+
+  if (preferNative) {
+    try {
+      const opts = buildNativeOptions(inferDocumentTitle(markdown));
+      await exportPdfNative(markdown, path, opts, (update) => {
+        if (update.phase) exportProgressStore.setPhase(update.phase);
+        if (update.phase === 'paginating' && update.current != null && update.total != null) {
+          exportProgressStore.setPaginating(update.current, update.total);
+        }
+      });
+      exportProgressStore.done();
+      return;
+    } catch {
+      // Native failed — fall through to the canvas pipeline.
+      exportProgressStore.fallback();
+    }
+  }
 
   try {
-    await exportPdfNative(markdown, path, opts, (update) => {
-      if (update.phase) exportProgressStore.setPhase(update.phase);
-      if (update.phase === 'paginating' && update.current != null && update.total != null) {
-        exportProgressStore.setPaginating(update.current, update.total);
-      }
-    });
+    await exportAsCanvasPdf(markdown, path);
     exportProgressStore.done();
-  } catch (nativeErr) {
-    if (!autoFallback) {
-      exportProgressStore.error(
-        nativeErr instanceof Error ? nativeErr.message : String(nativeErr),
-      );
-      throw nativeErr;
-    }
-    // Native failed — switch to canvas path and mark as fallback.
-    exportProgressStore.fallback();
-    try {
-      await exportAsCanvasPdf(markdown, path);
-      exportProgressStore.done();
-    } catch (canvasErr) {
-      exportProgressStore.error(
-        canvasErr instanceof Error ? canvasErr.message : String(canvasErr),
-      );
-      throw canvasErr;
-    }
+  } catch (canvasErr) {
+    exportProgressStore.error(
+      canvasErr instanceof Error ? canvasErr.message : String(canvasErr),
+    );
+    throw canvasErr;
   }
 }
 

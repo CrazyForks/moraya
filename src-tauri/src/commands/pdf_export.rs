@@ -193,6 +193,22 @@ pub fn paper_content_viewport_width(job: &JobConfig) -> f64 {
     (content_mm / MM_PER_INCH * CSS_PX_PER_INCH).round()
 }
 
+/// Full paper width in CSS pixels (no margin subtraction).
+///
+/// Used by the macOS `createPDF` path: WKWebView's `createPDF` sizes the PDF
+/// page to the WKWebView FRAME and ignores CSS `@page` size/margins. To produce
+/// a page with real A4 margins we make the frame the FULL paper width and inset
+/// the content with CSS padding (= the configured margins) instead.
+pub fn paper_full_viewport_width(job: &JobConfig) -> f64 {
+    let (pw_mm, ph_mm) = job.options.paper_size.dimensions_mm();
+    let paper_w_mm = if job.options.orientation == Orientation::Landscape {
+        ph_mm
+    } else {
+        pw_mm
+    };
+    (paper_w_mm / MM_PER_INCH * CSS_PX_PER_INCH).round()
+}
+
 impl Default for PdfExportOptions {
     fn default() -> Self {
         PdfExportOptions {
