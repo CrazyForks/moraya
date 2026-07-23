@@ -1174,10 +1174,10 @@
         <button class="open-btn" onclick={() => onOpenKBManager?.()}>{$t('knowledge_base.add')}</button>
       </div>
     {:else if fileTree.length === 0}
-      <!-- KB bound but directory is empty -->
-      <div class="sidebar-empty">
-        <p>{$t('sidebar.empty_dir')}</p>
-      </div>
+      <!-- KB bound but directory is empty. While the inline "new file/folder"
+           input is open, render ONLY the input (at the top). Otherwise the
+           flex-grown empty-state message fills the panel height and pushes the
+           input down to the very bottom (the reported bug). -->
       {#if inputDialog && inputDialog.mode !== 'rename' && inputDialog.targetPath === folderPath}
         <div class="inline-rename" style="padding-inline-start: {viewMode === 'list' ? '1.75rem' : '0.75rem'}">
           <span class="tree-icon file-icon">
@@ -1192,6 +1192,10 @@
             onkeydown={handleInputDialogKeydown}
             onblur={cancelInputDialog}
           />
+        </div>
+      {:else}
+        <div class="sidebar-empty">
+          <p>{$t('sidebar.empty_dir')}</p>
         </div>
       {/if}
     {:else if viewMode === 'list'}
