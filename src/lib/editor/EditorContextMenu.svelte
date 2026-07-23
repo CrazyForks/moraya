@@ -68,6 +68,15 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
+{#snippet picoraIcon()}
+  <svg class="picora-icon" width="15" height="15" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+    <rect width="32" height="32" rx="8" fill="#2563eb" />
+    <path d="M9.5 7.5v17" stroke="#ffffff" stroke-width="3" stroke-linecap="round" />
+    <circle cx="16" cy="14" r="6.5" stroke="#ffffff" stroke-width="3" />
+    <circle cx="16" cy="14" r="2.4" fill="#ffffff" />
+  </svg>
+{/snippet}
+
 <div class="menu-backdrop" onclick={onClose} oncontextmenu={(e) => { e.preventDefault(); onClose(); }}>
   <div
     bind:this={menuEl}
@@ -106,17 +115,17 @@
       <div class="menu-divider"></div>
       {#if onInsertCloudImage}
         <button class="menu-item" onclick={() => { if (onInsertCloudImage) handleAction(onInsertCloudImage); }}>
-          ☁ {$t('context_menu.insert_cloud_image')}
+          <span class="cloud-label">{@render picoraIcon()}{$t('context_menu.insert_cloud_image')}</span>
         </button>
       {/if}
       {#if onInsertCloudAudio}
         <button class="menu-item" onclick={() => { if (onInsertCloudAudio) handleAction(onInsertCloudAudio); }}>
-          ☁ {$t('context_menu.insert_cloud_audio')}
+          <span class="cloud-label">{@render picoraIcon()}{$t('context_menu.insert_cloud_audio')}</span>
         </button>
       {/if}
       {#if onInsertCloudVideo}
         <button class="menu-item" onclick={() => { if (onInsertCloudVideo) handleAction(onInsertCloudVideo); }}>
-          ☁ {$t('context_menu.insert_cloud_video')}
+          <span class="cloud-label">{@render picoraIcon()}{$t('context_menu.insert_cloud_video')}</span>
         </button>
       {/if}
     {/if}
@@ -174,6 +183,18 @@
     cursor: pointer;
     border-radius: 4px;
     text-align: left;
+  }
+
+  .cloud-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .picora-icon {
+    flex: none;
+    display: block;
+    border-radius: 4px;
   }
 
   .menu-item:hover:not(:disabled) {

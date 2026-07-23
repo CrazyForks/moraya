@@ -226,7 +226,14 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="bind-dialog" onclick={(e) => e.stopPropagation()}>
     <div class="dialog-header">
-      <span class="dialog-icon">☁</span>
+      <span class="dialog-icon">
+        <svg width="18" height="18" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <rect width="32" height="32" rx="8" fill="#2563eb" />
+          <path d="M9.5 7.5v17" stroke="#ffffff" stroke-width="3" stroke-linecap="round" />
+          <circle cx="16" cy="14" r="6.5" stroke="#ffffff" stroke-width="3" />
+          <circle cx="16" cy="14" r="2.4" fill="#ffffff" />
+        </svg>
+      </span>
       <h3>{$t('kb_sync.bind_dialog.title').replace('{name}', kb.name)}</h3>
       <button class="close-btn" onclick={onClose}>&times;</button>
     </div>
@@ -421,7 +428,8 @@
     border-bottom: 1px solid var(--border-light);
   }
 
-  .dialog-icon { font-size: 1.1rem; }
+  .dialog-icon { font-size: 1.1rem; display: inline-flex; align-items: center; }
+  .dialog-icon svg { display: block; }
 
   .dialog-header h3 {
     margin: 0;

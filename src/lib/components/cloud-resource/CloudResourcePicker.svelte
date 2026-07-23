@@ -483,7 +483,14 @@
       {:else if displayedItems.length === 0 && !loading}
         <!-- Empty state -->
         <div class="picker-empty">
-          <div class="empty-icon">☁</div>
+          <div class="empty-icon">
+            <svg width="44" height="44" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <rect width="32" height="32" rx="8" fill="#2563eb" />
+              <path d="M9.5 7.5v17" stroke="#ffffff" stroke-width="3" stroke-linecap="round" />
+              <circle cx="16" cy="14" r="6.5" stroke="#ffffff" stroke-width="3" />
+              <circle cx="16" cy="14" r="2.4" fill="#ffffff" />
+            </svg>
+          </div>
           <div class="empty-text">{$t('cloud_picker.empty_title')}</div>
           {#if hasKbBinding && kbScope === 'this-kb'}
             <!-- Most common cause: legacy uploads aren't tagged with the
@@ -985,6 +992,7 @@
   }
 
   .empty-icon { font-size: 2.5rem; }
+  .empty-icon svg { display: block; margin: 0 auto; }
   .empty-text { font-size: var(--font-size-base); color: var(--text-secondary); }
   .empty-sub, .stale-hint { font-size: var(--font-size-sm); }
   .retry-btn {
