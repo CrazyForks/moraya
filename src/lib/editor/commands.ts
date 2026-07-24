@@ -84,7 +84,31 @@ export function setHeading(level: number): Command {
     if ($from.parent.type === schema.nodes.heading && $from.parent.attrs.level === level) {
       return setBlockType(schema.nodes.paragraph)(state, dispatch, view);
     }
-    return setBlockType(schema.nodes.heading, { level })(state, dispatch, view);
+    const headingType = schema.nodes.heading;
+    // Fast path: works for ordinary (non-list) blocks.
+    if (setBlockType(headingType, { level })(state, dispatch, view)) return true;
+
+    // Inside a list, `list_item` content is `paragraph block*` — a heading can't
+    // be the first child, so `setBlockType` fails outright. Lift the item out of
+    // the list first, then set the heading, as ONE transaction (single undo).
+    const listItemType = schema.nodes.list_item;
+    if (!listItemType) return false;
+    const tr = state.tr;
+    let lifted = false;
+    liftListItem(listItemType)(state, (liftTr) => {
+      liftTr.steps.forEach((s) => tr.step(s));
+      lifted = true;
+    }, view);
+    if (!lifted) return false;
+    const afterLift = state.apply(tr);
+    let headed = false;
+    setBlockType(headingType, { level })(afterLift, (headTr) => {
+      headTr.steps.forEach((s) => tr.step(s));
+      headed = true;
+    });
+    if (!headed) return false;
+    if (dispatch) dispatch(tr.scrollIntoView());
+    return true;
   };
 }
 
